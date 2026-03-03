@@ -2602,7 +2602,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       <div className="step-nav">
         <div />
         <button className="btn btn-primary" onClick={onNext} disabled={!canProceed}>
-          Next: Gymnast Details →
+          Save Competition →
         </button>
       </div>
 
@@ -4066,9 +4066,9 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
       )}
 
       <div className="step-nav">
-        <button className="btn btn-secondary" onClick={onBack}>← Back</button>
-        <button className="btn btn-primary" onClick={onNext} disabled={data.length === 0}>
-          Phase 2: Competition Day →
+        <button className="btn btn-secondary" onClick={onBack}>← Dashboard</button>
+        <button className="btn btn-primary" onClick={onNext}>
+          Done — Back to Dashboard →
         </button>
       </div>
 
@@ -5544,8 +5544,16 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   );
 }
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts }) {
   const [showId, setShowId] = useState(false);
+  const [submLinkCopied, setSubmLinkCopied] = useState(false);
+
+  const copySubmitLink = async () => {
+    const url = `${typeof window !== "undefined" ? window.location.origin : ""}/submit.html?comp=${compId}`;
+    try { await navigator.clipboard.writeText(url); } catch {}
+    setSubmLinkCopied(true);
+    setTimeout(() => setSubmLinkCopied(false), 2500);
+  };
   const totalGymnasts = gymnasts.length;
   const clubs = [...new Set(gymnasts.map(g => g.club))].filter(Boolean);
   const hasGymnasts = gymnasts.length > 0;
@@ -5606,12 +5614,47 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         </div>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 32 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: hasGymnasts ? 8 : 24 }}>
           {statCard("Gymnasts", totalGymnasts, "var(--accent)")}
           {statCard("Clubs", clubs.length)}
           {statCard("Levels", compData.levels.length)}
           {statCard("Apparatus", compData.apparatus.length)}
         </div>
+
+        {/* ── MANAGE GYMNASTS LINK (when gymnasts exist) ─────────── */}
+        {hasGymnasts && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={onManageGymnasts}>
+              + Manage Gymnasts ({totalGymnasts})
+            </button>
+          </div>
+        )}
+
+        {/* ── EMPTY STATE ────────────────────────────────────────── */}
+        {!hasGymnasts && (
+          <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 44, marginBottom: 14 }}>🤸</div>
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No gymnasts added yet</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
+              You need to add gymnasts before the competition can start. Add them manually or share the submission link so clubs can send their own lists.
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#000" }}
+                onClick={onManageGymnasts}>
+                + Add Gymnasts Manually
+              </button>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <button className="btn btn-secondary" style={{ fontSize: 14, padding: "12px 24px" }}
+                  onClick={copySubmitLink}>
+                  {submLinkCopied ? "✅ Link copied!" : "Share Submission Link with Clubs"}
+                </button>
+                {!compData.allowSubmissions && (
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>Enable club submissions in Setup first</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── PRE-COMPETITION DOCUMENTS ─────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
@@ -5664,14 +5707,22 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         )}
 
         {/* ── START CTA ─────────────────────────────────────────── */}
-        <div style={{ background: `${colour}12`, border: `1px solid ${colour}33`, borderRadius: "var(--radius)", padding: "28px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
+        <div style={{ background: hasGymnasts ? `${colour}12` : "var(--surface)", border: `1px solid ${hasGymnasts ? colour + "33" : "var(--border)"}`, borderRadius: "var(--radius)", padding: "28px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Ready to begin?</div>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>Opens the scoring interface — you can return here any time via "← Dashboard"</div>
+            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
+              {hasGymnasts ? "Ready to begin?" : "Almost ready"}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>
+              {hasGymnasts
+                ? "Opens the scoring interface — you can return here any time via \"← Dashboard\""
+                : "Add at least one gymnast above before starting the competition."}
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-            <button className="btn btn-primary" style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: colour, color: "#000" }}
-              onClick={onStartComp}>
+            <button className="btn btn-primary"
+              style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: hasGymnasts ? colour : "var(--surface2)", color: hasGymnasts ? "#000" : "var(--muted)", opacity: hasGymnasts ? 1 : 0.55 }}
+              onClick={onStartComp}
+              disabled={!hasGymnasts}>
               Start Competition →
             </button>
             <button className="btn btn-ghost btn-sm" onClick={onEditSetup} style={{ fontSize: 11 }}>
@@ -6990,10 +7041,6 @@ export default function App() {
     setTimeout(() => setShowShareToast(false), 4000);
   };
 
-  const phase1Steps = [
-    { label: "Competition Details", done: !!(compData.name && compData.date) },
-    { label: "Gymnast Details", done: gymnasts.length > 0 },
-  ];
   const phase2Steps = [
     { label: "Score Input", done: Object.keys(scores).length > 0 },
     { label: "Results", done: false },
@@ -7163,6 +7210,10 @@ export default function App() {
               <button className="btn btn-secondary btn-sm" onClick={() => { setPhase(1); setStep(1); }}>
                 ← Edit Setup
               </button>
+            ) : phase === "gymnasts" ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => setPhase("dashboard")}>
+                ← Dashboard
+              </button>
             ) : (
               <div style={{ width: 80 }} />
             )}
@@ -7189,6 +7240,7 @@ export default function App() {
             compId={compId} compPin={compPin}
             onStartComp={() => { setPhase(2); setStep(1); }}
             onEditSetup={() => { setPhase(1); setStep(1); }}
+            onManageGymnasts={() => setPhase("gymnasts")}
             onAcceptSubmissions={(newGymnasts) => {
               setGymnastsWithSync(prev => [...prev, ...newGymnasts]);
             }}
@@ -7198,20 +7250,18 @@ export default function App() {
         {/* SETUP phase 1 */}
         {phase === 1 && (
           <div className="main">
-            <aside className="sidebar">
-              {phase1Steps.map((s, i) => (
-                <div key={i}
-                  className={`sidebar-step ${step === i+1 ? "active" : ""} ${s.done && step !== i+1 ? "done" : ""}`}
-                  onClick={() => setStep(i+1)}>
-                  <div className="step-num">{s.done && step !== i+1 ? "✓" : i+1}</div>
-                  <span>{s.label}</span>
-                </div>
-              ))}
-            </aside>
             <main className="content">
-              {step === 1 && <Step1_CompDetails data={compData} setData={setCompData} onNext={() => setStep(2)} />}
-              {step === 2 && <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
-                onNext={() => setPhase("dashboard")} onBack={() => setStep(1)} />}
+              <Step1_CompDetails data={compData} setData={setCompData} onNext={() => setPhase("dashboard")} />
+            </main>
+          </div>
+        )}
+
+        {/* GYMNAST MANAGEMENT */}
+        {phase === "gymnasts" && (
+          <div className="main">
+            <main className="content">
+              <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
+                onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
             </main>
           </div>
         )}
