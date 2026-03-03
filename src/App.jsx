@@ -114,6 +114,18 @@ const supabase = {
     const rows = await res.json();
     return { data: rows[0] || null, error: null };
   },
+  // Delete a competition row — requires session JWT (RLS: auth.uid() = user_id)
+  async deleteCompetition(compId, token) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/competitions?id=eq.${compId}`, {
+      method: "DELETE",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) { const err = await res.text(); return { error: err }; }
+    return { error: null };
+  },
   // Upsert a user's profile row — requires session JWT
   async upsertProfile(profile, token) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
@@ -5214,9 +5226,18 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
     setDeleteConfirm(ev);
   };
 
-  const confirmDelete = () => {
-    events.remove(deleteConfirm.id);
+  const confirmDelete = async () => {
+    const ev = deleteConfirm;
     setDeleteConfirm(null);
+    // Delete from Supabase first (so it doesn't resurface on other devices)
+    if (ev.compId) {
+      const { data: { session } } = await supabaseAuth.auth.getSession();
+      if (session) {
+        const { error } = await supabase.deleteCompetition(ev.compId, session.access_token);
+        if (error) console.error("[confirmDelete] Supabase DELETE failed:", error);
+      }
+    }
+    events.remove(ev.id);
     reload();
   };
 
