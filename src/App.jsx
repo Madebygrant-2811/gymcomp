@@ -6258,6 +6258,76 @@ function HomeScreen({ onNew, onResume }) {
 }
 
 // ============================================================
+// JUDGE PIN SCREEN — competition ID + PIN entry only
+// ============================================================
+function JudgePinScreen({ onResume, onBack }) {
+  const [resumeId, setResumeId] = useState("");
+  const [resumePin, setResumePin] = useState("");
+  const [resumeError, setResumeError] = useState("");
+  const [resuming, setResuming] = useState(false);
+
+  const handleOpen = async () => {
+    const id = resumeId.trim();
+    if (!id) return;
+    setResumeError("");
+    setResuming(true);
+    const { data, error } = await supabase.fetchOne("competitions", id);
+    setResuming(false);
+    if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
+    const pin = data.data?.pin;
+    if (pin && pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
+    onResume(id, data.data);
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, minHeight: "calc(100vh - 65px)" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 56, letterSpacing: 3, lineHeight: 1, color: "var(--accent)", marginBottom: 10 }}>GYMCOMP</div>
+          <div style={{ color: "var(--muted)", fontSize: 14 }}>Judge access — enter your competition details below</div>
+        </div>
+
+        <div className="card" style={{ padding: "28px 32px" }}>
+          <div className="card-title" style={{ marginBottom: 16 }}>Open Competition</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              className="input"
+              placeholder="Competition ID"
+              value={resumeId}
+              onChange={e => setResumeId(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleOpen()}
+              autoFocus
+            />
+            <input
+              className="input"
+              placeholder="PIN (if set)"
+              type="password"
+              maxLength={4}
+              value={resumePin}
+              onChange={e => setResumePin(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleOpen()}
+            />
+            {resumeError && <div className="error-box">{resumeError}</div>}
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={handleOpen}
+              disabled={resuming || !resumeId.trim()}
+            >
+              {resuming ? "Loading…" : "Open Competition →"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back to Sign In</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // PIN SETUP MODAL
 // ============================================================
 function PinSetupModal({ onSet, onSkip }) {
@@ -6645,7 +6715,7 @@ export default function App() {
   const [currentUser,    setCurrentUser]    = useState(null);  // supabase user object
   const [currentProfile, setCurrentProfile] = useState(null);  // row from profiles table
   const [authLoading,    setAuthLoading]    = useState(true);
-  // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "home" | "new-pin" | "active"
+  // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "judge-pin" | "new-pin" | "active"
   const [screen, setScreen] = useState("loading");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   // Current event record (from events store) — links comp to account
@@ -6955,7 +7025,7 @@ export default function App() {
             <div />
             <div />
           </nav>
-          <AuthScreen onJudgePath={() => setScreen("home")} />
+          <AuthScreen onJudgePath={() => setScreen("judge-pin")} />
         </div>
       </>
     );
@@ -7012,8 +7082,8 @@ export default function App() {
     );
   }
 
-  // ---- HOME (no-account / judge path) ----
-  if (screen === "home") {
+  // ---- JUDGE PIN ENTRY ----
+  if (screen === "judge-pin") {
     return (
       <>
         <style>{css}</style>
@@ -7023,7 +7093,7 @@ export default function App() {
             <div />
             <button className="btn btn-ghost btn-sm" onClick={() => setScreen("auth-login")}>Sign In</button>
           </nav>
-          <HomeScreen onNew={handleNew} onResume={handleResume} />
+          <JudgePinScreen onResume={handleResume} onBack={() => setScreen("auth-login")} />
         </div>
       </>
     );
@@ -7050,7 +7120,7 @@ export default function App() {
         <nav className="nav">
           <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => {
             if (currentAccount) setScreen("org-dashboard");
-            else setScreen("home");
+            else setScreen("auth-login");
           }}>GYMCOMP<span>.</span></div>
 
           <div className="nav-centre" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
