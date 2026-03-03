@@ -1,10 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 // ============================================================
 // SUPABASE — lightweight REST client (no external imports)
 // ============================================================
 const SUPABASE_URL = "https://xjuwbgitqsvrmoejvzwb.supabase.co";
 const SUPABASE_KEY = "sb_publishable_7jhhejhXAH8hlX-gnsElnA_1ih0G-2f";
+
+// ── Supabase Auth client (official SDK — auth only; data ops use the hand-rolled client below) ──
+const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const supabase = {
   async upsert(table, record) {
@@ -73,6 +77,33 @@ const supabase = {
     if (!res.ok) { const err = await res.text(); return { error: err }; }
     return { error: null };
   },
+  // Fetch a user's profile row — requires session JWT
+  async fetchProfile(userId, token) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`, {
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) return { data: null, error: await res.text() };
+    const rows = await res.json();
+    return { data: rows[0] || null, error: null };
+  },
+  // Upsert a user's profile row — requires session JWT
+  async upsertProfile(profile, token) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(profile),
+    });
+    if (!res.ok) { const err = await res.text(); return { error: err }; }
+    return { error: null };
+  },
 };
 
 // ============================================================
@@ -81,11 +112,13 @@ const supabase = {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // ============================================================
-// AUTH HELPERS — localStorage-based account management
+// AUTH HELPERS
+// [OLD localStorage auth replaced by Supabase Auth — kept for rollback]
 // ============================================================
+
+/* ── OLD AUTH CODE — commented out; replaced by Supabase Auth ──────────────
 const AUTH_KEY = "gymcomp_accounts";
 const SESSION_KEY = "gymcomp_session";
-const EVENTS_KEY = "gymcomp_events";
 
 // Simple hash (not cryptographic — fine for demo/prototype)
 const hashPassword = (pwd) => {
@@ -145,6 +178,9 @@ const auth = {
   setSession: (account) => localStorage.setItem(SESSION_KEY, JSON.stringify(account)),
   clearSession: () => localStorage.removeItem(SESSION_KEY),
 };
+── END OLD AUTH CODE ──────────────────────────────────────────────────── */
+
+const EVENTS_KEY = "gymcomp_events";
 
 const events = {
   getAll: () => {
@@ -4732,9 +4768,130 @@ function Phase2_Step2({ compData, gymnasts, scores }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
+
 // ============================================================
-// AUTH SCREENS — Login, Register
+// AUTH SCREEN — Google OAuth + Magic Link (replaces LoginScreen + RegisterScreen)
 // ============================================================
+function AuthScreen({ onJudgePath }) {
+  const [email, setEmail]     = useState("");
+  const [sent, setSent]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const handleGoogle = async () => {
+    setError("");
+    setLoading(true);
+    const { error: err } = await supabaseAuth.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+    if (err) { setError(err.message); setLoading(false); }
+    // On success the browser redirects — no further action needed here
+  };
+
+  const handleMagicLink = async () => {
+    setError("");
+    const trimmed = email.trim();
+    if (!trimmed) { setError("Please enter your email address."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setError("Please enter a valid email address."); return; }
+    setLoading(true);
+    const { error: err } = await supabaseAuth.auth.signInWithOtp({
+      email: trimmed,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setLoading(false);
+    if (err) { setError(err.message); return; }
+    setSent(true);
+  };
+
+  if (sent) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, minHeight: "calc(100vh - 65px)" }}>
+        <div style={{ textAlign: "center", maxWidth: 420 }}>
+          <div style={{ fontSize: 52, marginBottom: 20 }}>📬</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 36, letterSpacing: 2, color: "var(--accent)", marginBottom: 14 }}>
+            Check your inbox
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.8, marginBottom: 28 }}>
+            We sent a sign-in link to{" "}
+            <strong style={{ color: "var(--text)" }}>{email}</strong>.<br />
+            Click it to continue — no password needed.
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setSent(false); setLoading(false); }}>
+            ← Use a different email
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, minHeight: "calc(100vh - 65px)" }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 56, letterSpacing: 3, lineHeight: 1, color: "var(--accent)", marginBottom: 10 }}>GYMCOMP</div>
+          <div style={{ color: "var(--muted)", fontSize: 14 }}>Competition management for gymnastics</div>
+        </div>
+
+        <div className="card" style={{ padding: "28px 32px" }}>
+          {/* Google OAuth */}
+          <button
+            className="btn btn-secondary"
+            style={{ width: "100%", justifyContent: "center", gap: 10, padding: "12px 20px", fontSize: 14, marginBottom: 20 }}
+            onClick={handleGoogle}
+            disabled={loading}
+          >
+            <svg width="16" height="16" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Continue with Google
+          </button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>or sign in with email</span>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+
+          {/* Magic link */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input
+              className="input"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleMagicLink()}
+              autoFocus
+            />
+            {error && <div className="error-box">{error}</div>}
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={handleMagicLink}
+              disabled={loading}
+            >
+              {loading ? "Sending…" : "Send sign-in link →"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 20, padding: "14px 20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>Entering scores as a judge?</div>
+          <button className="btn btn-ghost btn-sm" onClick={onJudgePath}>
+            Enter as Judge — PIN access →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── OLD LoginScreen + RegisterScreen — replaced by AuthScreen + Supabase Auth ──
+   Kept for rollback reference only.
 function LoginScreen({ onLogin, onGoRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -4892,6 +5049,7 @@ function RegisterScreen({ onRegister, onGoLogin }) {
     </div>
   );
 }
+── END OLD LoginScreen + RegisterScreen ──────────────────────────────────── */
 
 // ============================================================
 // ORGANISER DASHBOARD — list of events for logged-in account
@@ -5071,48 +5229,31 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
 // ============================================================
 // ACCOUNT SETTINGS MODAL
 // ============================================================
-function AccountSettingsModal({ account, onSave, onDelete, onClose }) {
-  const [name, setName] = useState(account.name || "");
-  const [clubName, setClubName] = useState(account.clubName || "");
-  const [oldPwd, setOldPwd] = useState("");
-  const [newPwd, setNewPwd] = useState("");
-  const [confirmPwd, setConfirmPwd] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [showDelete, setShowDelete] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+function AccountSettingsModal({ account, profile, onSave, onLogout, onClose }) {
+  const [fullName, setFullName] = useState(profile?.full_name || "");
+  const [clubName, setClubName] = useState(profile?.club_name || "");
+  const [location, setLocation] = useState(profile?.location || "");
+  const [saving,  setSaving]   = useState(false);
+  const [error,   setError]    = useState("");
+  const [success, setSuccess]  = useState("");
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setError(""); setSuccess("");
-    if (!name.trim()) { setError("Name cannot be empty."); return; }
-
-    let updates = { name: name.trim(), clubName: clubName.trim() };
-
-    if (oldPwd || newPwd || confirmPwd) {
-      if (hashPassword(oldPwd) !== account.passwordHash) { setError("Current password is incorrect."); return; }
-      if (newPwd.length < 6) { setError("New password must be at least 6 characters."); return; }
-      if (newPwd !== confirmPwd) { setError("New passwords don't match."); return; }
-      updates.passwordHash = hashPassword(newPwd);
-    }
-
-    const { account: updated, error: err } = auth.updateAccount(account.email, updates);
-    if (err) { setError(err); return; }
-    auth.setSession(updated);
+    if (!fullName.trim()) { setError("Name cannot be empty."); return; }
+    setSaving(true);
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const token = session?.access_token ?? SUPABASE_KEY;
+    const updated = { id: account.id, full_name: fullName.trim(), club_name: clubName.trim(), location: location.trim() };
+    const { error: err } = await supabase.upsertProfile(updated, token);
+    setSaving(false);
+    if (err) { setError("Couldn't save changes — please try again."); return; }
     setSuccess("Changes saved.");
-    setOldPwd(""); setNewPwd(""); setConfirmPwd("");
-    onSave(updated);
-  };
-
-  const handleDelete = () => {
-    if (deleteConfirmText !== "DELETE") { setError("Type DELETE to confirm."); return; }
-    auth.deleteAccount(account.email);
-    auth.clearSession();
-    onDelete();
+    onSave({ ...(profile || {}), ...updated });
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32, width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32, width: "100%", maxWidth: 440 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 1 }}>Account Settings</div>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
@@ -5120,48 +5261,163 @@ function AccountSettingsModal({ account, onSave, onDelete, onClose }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
+            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Email</label>
+            <div style={{ fontSize: 14, color: "var(--muted)", padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+              {account.email}
+            </div>
+          </div>
+          <div>
             <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Name</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} />
+            <input className="input" value={fullName} onChange={e => setFullName(e.target.value)} />
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Club / Organisation</label>
             <input className="input" value={clubName} onChange={e => setClubName(e.target.value)} />
           </div>
-
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 14 }}>Change Password</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input className="input" type="password" placeholder="Current password" value={oldPwd} onChange={e => setOldPwd(e.target.value)} />
-              <input className="input" type="password" placeholder="New password (min 6 chars)" value={newPwd} onChange={e => setNewPwd(e.target.value)} />
-              <input className="input" type="password" placeholder="Confirm new password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} />
-            </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Location</label>
+            <input className="input" value={location} onChange={e => setLocation(e.target.value)} />
           </div>
 
-          {error && <div className="error-box">{error}</div>}
-          {success && <div style={{ color: "var(--success)", fontSize: 13, padding: "10px 14px", background: "rgba(100,220,130,0.1)", borderRadius: 6, border: "1px solid var(--success)" }}>{success}</div>}
+          {error   && <div className="error-box">{error}</div>}
+          {success && <div style={{ color: "var(--success)", fontSize: 13, padding: "10px 14px", background: "rgba(58,245,160,0.08)", borderRadius: 6, border: "1px solid rgba(58,245,160,0.3)" }}>{success}</div>}
 
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSave}>
-            Save Changes
+          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save Changes"}
           </button>
 
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            {!showDelete ? (
-              <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => setShowDelete(true)}>
-                Delete Account…
-              </button>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ fontSize: 13, color: "var(--danger)" }}>This will permanently delete your account and all event records. Type <strong>DELETE</strong> to confirm.</div>
-                <input className="input" placeholder="Type DELETE" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setShowDelete(false); setDeleteConfirmText(""); setError(""); }}>Cancel</button>
-                  <button className="btn btn-sm" style={{ background: "var(--danger)", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: "pointer" }} onClick={handleDelete}>
-                    Delete Account
-                  </button>
-                </div>
-              </div>
-            )}
+            <button className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }} onClick={onLogout}>
+              Sign Out
+            </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PROFILE ONBOARDING — shown once on first login
+// ============================================================
+function ProfileOnboardingScreen({ user, onComplete }) {
+  const [fullName, setFullName] = useState(
+    user?.user_metadata?.full_name || user?.user_metadata?.name || ""
+  );
+  const [clubName,  setClubName]  = useState("");
+  const [location,  setLocation]  = useState("");
+  const [role,      setRole]      = useState("");
+  const [referral,  setReferral]  = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
+
+  const handleSave = async () => {
+    setError("");
+    if (!fullName.trim()) { setError("Please enter your name."); return; }
+    if (!role)            { setError("Please select your role."); return; }
+    setSaving(true);
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const token = session?.access_token ?? SUPABASE_KEY;
+    const profile = {
+      id:        user.id,
+      full_name: fullName.trim(),
+      club_name: clubName.trim(),
+      location:  location.trim(),
+      role,
+      referral,
+    };
+    const { error: err } = await supabase.upsertProfile(profile, token);
+    setSaving(false);
+    if (err) { setError("Couldn't save your profile — please try again."); return; }
+    onComplete(profile);
+  };
+
+  const lbl = (text) => (
+    <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 7 }}>
+      {text}
+    </label>
+  );
+
+  return (
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px", minHeight: "100vh" }}>
+      <div style={{ width: "100%", maxWidth: 500 }}>
+
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 52, letterSpacing: 3, color: "var(--accent)", lineHeight: 1, marginBottom: 14 }}>
+            GYMCOMP
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>
+            Welcome — let's get you set up
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.7, maxWidth: 360, margin: "0 auto" }}>
+            Just a few quick details and you'll be ready to run your first competition.
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: "32px 36px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* Name */}
+            <div>
+              {lbl("Your name *")}
+              <input className="input" placeholder="Jane Smith" value={fullName}
+                onChange={e => setFullName(e.target.value)} autoFocus />
+            </div>
+
+            {/* Club + Location */}
+            <div className="grid-2">
+              <div>
+                {lbl("Club / Organisation")}
+                <input className="input" placeholder="Springers GC" value={clubName}
+                  onChange={e => setClubName(e.target.value)} />
+              </div>
+              <div>
+                {lbl("Location")}
+                <input className="input" placeholder="Manchester" value={location}
+                  onChange={e => setLocation(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Role */}
+            <div>
+              {lbl("Your role *")}
+              <select className="select" value={role} onChange={e => setRole(e.target.value)}>
+                <option value="">Select your role…</option>
+                <option value="Organiser">Organiser</option>
+                <option value="Club Secretary">Club Secretary</option>
+                <option value="Coach">Coach</option>
+              </select>
+            </div>
+
+            {/* Referral */}
+            <div>
+              {lbl("How did you hear about us?")}
+              <select className="select" value={referral} onChange={e => setReferral(e.target.value)}>
+                <option value="">Select an option…</option>
+                <option value="Google">Google</option>
+                <option value="Social Media">Social Media</option>
+                <option value="Word of Mouth">Word of Mouth</option>
+                <option value="British Gymnastics">British Gymnastics</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            {error && <div className="error-box">{error}</div>}
+
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 15, marginTop: 4 }}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Let's go →"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: "var(--muted)" }}>
+          Signed in as <strong style={{ color: "var(--text)" }}>{user?.email}</strong>
         </div>
       </div>
     </div>
@@ -6385,16 +6641,23 @@ function LiveViewPanel({ compId, compData }) {
 // APP ROOT
 // ============================================================
 export default function App() {
-  // Auth state
-  const [currentAccount, setCurrentAccount] = useState(() => auth.getSession());
-  // "auth-login" | "auth-register" | "org-dashboard" | "home" | "new-pin" | "active"
-  const [screen, setScreen] = useState(() => {
-    const session = auth.getSession();
-    return session ? "org-dashboard" : "auth-login";
-  });
+  // ── Auth state (Supabase Auth) ──────────────────────────────────────────
+  const [currentUser,    setCurrentUser]    = useState(null);  // supabase user object
+  const [currentProfile, setCurrentProfile] = useState(null);  // row from profiles table
+  const [authLoading,    setAuthLoading]    = useState(true);
+  // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "home" | "new-pin" | "active"
+  const [screen, setScreen] = useState("loading");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   // Current event record (from events store) — links comp to account
   const [currentEventId, setCurrentEventId] = useState(null);
+
+  // Derived account shape — keeps all downstream component code unchanged
+  const currentAccount = currentUser ? {
+    id:       currentUser.id,
+    email:    currentUser.email,
+    name:     currentProfile?.full_name || currentUser.email?.split("@")[0] || "",
+    clubName: currentProfile?.club_name || "",
+  } : null;
 
   const [phase, setPhase] = useState(1);
   const [step, setStep] = useState(1);
@@ -6422,20 +6685,68 @@ export default function App() {
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
+  // ── Auth initialisation ──────────────────────────────────────────────────
+  const loadUserProfile = async (user) => {
+    try {
+      const { data: { session } } = await supabaseAuth.auth.getSession();
+      const token = session?.access_token ?? SUPABASE_KEY;
+      const { data: profile } = await supabase.fetchProfile(user.id, token);
+      setCurrentProfile(profile || null);
+      setAuthLoading(false);
+      // Show onboarding if the profile doesn't have a name yet
+      setScreen(profile?.full_name ? "org-dashboard" : "profile-onboarding");
+    } catch (e) {
+      console.error("Profile load error:", e);
+      setAuthLoading(false);
+      setScreen("auth-login");
+    }
+  };
+
+  useEffect(() => {
+    // Resolve any existing session on page load (also handles magic-link / OAuth redirect tokens)
+    supabaseAuth.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        loadUserProfile(session.user);
+      } else {
+        setAuthLoading(false);
+        setScreen("auth-login");
+      }
+    });
+
+    const { data: { subscription } } = supabaseAuth.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        setCurrentUser(session.user);
+        loadUserProfile(session.user);
+      } else if (event === "SIGNED_OUT") {
+        setCurrentUser(null);
+        setCurrentProfile(null);
+        setAuthLoading(false);
+        setScreen("auth-login");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---- Supabase sync ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     setSyncStatus("saving");
     try {
       const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
-      const { error } = await supabase.upsert("competitions", { id: compId, data: payload });
+      const { error } = await supabase.upsert("competitions", {
+        id: compId,
+        data: payload,
+        ...(currentUser ? { user_id: currentUser.id } : {}),
+      });
       if (error) throw new Error(error);
       setSyncStatus("saved");
     } catch (e) {
       console.error("Supabase sync failed:", e.message);
       setSyncStatus("error");
     }
-  }, [compId, compPin, inSandbox]);
+  }, [compId, compPin, inSandbox, currentUser]);
 
   const scheduleSync = useCallback((cd, g, s) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
@@ -6488,20 +6799,20 @@ export default function App() {
   };
 
   // ---- Auth actions ----
+  /* OLD handleLogin — navigation now driven by onAuthStateChange
   const handleLogin = (account) => {
     setCurrentAccount(account);
     setScreen("org-dashboard");
   };
+  */
 
-  const handleLogout = () => {
-    auth.clearSession();
-    setCurrentAccount(null);
-    setCurrentEventId(null);
-    setScreen("auth-login");
+  const handleLogout = async () => {
+    await supabaseAuth.auth.signOut();
+    // setCurrentUser(null) + setScreen("auth-login") handled by onAuthStateChange
   };
 
-  const handleAccountSave = (updated) => {
-    setCurrentAccount(updated);
+  const handleAccountSave = (updatedProfile) => {
+    setCurrentProfile(updatedProfile);
   };
 
   // ---- New competition flow ----
@@ -6623,7 +6934,17 @@ export default function App() {
   const syncDot = { idle:null, saving:"🟡", saved:"🟢", error:"🔴", sandbox:"⚪" }[syncStatus];
   const syncLabel = { idle:"", saving:"Saving…", saved:"Saved ✓", error:"Sync error", sandbox:"Preview mode" }[syncStatus];
 
-  // ---- AUTH SCREENS ----
+  // ---- LOADING — blank dark screen while session resolves ----
+  if (authLoading) {
+    return (
+      <>
+        <style>{css}</style>
+        <div className="app" style={{ background: "var(--bg)", minHeight: "100vh" }} />
+      </>
+    );
+  }
+
+  // ---- AUTH SCREEN (Google OAuth + Magic Link) ----
   if (screen === "auth-login") {
     return (
       <>
@@ -6634,28 +6955,24 @@ export default function App() {
             <div />
             <div />
           </nav>
-          <LoginScreen
-            onLogin={handleLogin}
-            onGoRegister={() => setScreen("auth-register")}
-          />
+          <AuthScreen onJudgePath={() => setScreen("home")} />
         </div>
       </>
     );
   }
 
-  if (screen === "auth-register") {
+  // ---- PROFILE ONBOARDING (first login only) ----
+  if (screen === "profile-onboarding") {
     return (
       <>
         <style>{css}</style>
         <div className="app">
-          <nav className="nav">
-            <div className="nav-logo">GYMCOMP<span>.</span></div>
-            <div />
-            <div />
-          </nav>
-          <RegisterScreen
-            onRegister={handleLogin}
-            onGoLogin={() => setScreen("auth-login")}
+          <ProfileOnboardingScreen
+            user={currentUser}
+            onComplete={(profile) => {
+              setCurrentProfile(profile);
+              setScreen("org-dashboard");
+            }}
           />
         </div>
       </>
@@ -6684,8 +7001,9 @@ export default function App() {
           {showAccountSettings && (
             <AccountSettingsModal
               account={currentAccount}
+              profile={currentProfile}
               onSave={handleAccountSave}
-              onDelete={handleLogout}
+              onLogout={handleLogout}
               onClose={() => setShowAccountSettings(false)}
             />
           )}
