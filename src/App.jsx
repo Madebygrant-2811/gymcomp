@@ -11,13 +11,13 @@ const SUPABASE_KEY = "sb_publishable_7jhhejhXAH8hlX-gnsElnA_1ih0G-2f";
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const supabase = {
-  async upsert(table, record) {
+  async upsert(table, record, token = SUPABASE_KEY) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Authorization": `Bearer ${token}`,
         "Prefer": "resolution=merge-duplicates,return=minimal",
       },
       body: JSON.stringify(record),
@@ -36,6 +36,14 @@ const supabase = {
   async fetchList(table, limit = 20) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=id,data->compData->>name,data->compData->>date,data->compData->>location,created_at&order=created_at.desc&limit=${limit}`, {
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!res.ok) return { data: [], error: await res.text() };
+    return { data: await res.json(), error: null };
+  },
+  // Fetch all competitions belonging to the authenticated user (RLS filters by auth.uid())
+  async fetchListForUser(token) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/competitions?select=id,data,created_at&order=created_at.desc`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` },
     });
     if (!res.ok) return { data: [], error: await res.text() };
     return { data: await res.json(), error: null };
@@ -5162,7 +5170,34 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
 
   const reload = () => setMyEvents(events.getForAccount(account.id).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
 
-  useEffect(() => { reload(); }, [account.id]);
+  useEffect(() => {
+    reload();
+    // Sync competitions from Supabase so they appear on any device after login
+    supabaseAuth.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      supabase.fetchListForUser(session.access_token).then(({ data: supabaseComps, error }) => {
+        if (error || !supabaseComps?.length) return;
+        const all = events.getAll();
+        let changed = false;
+        supabaseComps.forEach(comp => {
+          const existing = all.find(e => e.compId === comp.id && e.accountId === account.id);
+          const snapshot = comp.data
+            ? { compData: comp.data.compData, gymnasts: comp.data.gymnasts, scores: comp.data.scores }
+            : undefined;
+          if (!existing) {
+            all.push({ id: generateId(), accountId: account.id, compId: comp.id, status: "active", createdAt: comp.created_at, updatedAt: comp.created_at, snapshot });
+            changed = true;
+          } else if (snapshot) {
+            // Update snapshot with latest Supabase data without overwriting local status
+            const idx = all.indexOf(existing);
+            all[idx] = { ...existing, snapshot };
+            changed = true;
+          }
+        });
+        if (changed) { events.save(all); reload(); }
+      });
+    });
+  }, [account.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStatusChange = (eventId, newStatus) => {
     events.update(eventId, { status: newStatus });
@@ -7026,12 +7061,14 @@ export default function App() {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     setSyncStatus("saving");
     try {
+      const { data: { session } } = await supabaseAuth.auth.getSession();
+      const token = session?.access_token || SUPABASE_KEY;
       const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
       const { error } = await supabase.upsert("competitions", {
         id: compId,
         data: payload,
         ...(currentUser ? { user_id: currentUser.id } : {}),
-      });
+      }, token);
       if (error) throw new Error(error);
       setSyncStatus("saved");
     } catch (e) {
