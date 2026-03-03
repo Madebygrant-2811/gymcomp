@@ -42,11 +42,20 @@ const supabase = {
   },
   // Fetch submissions for a competition
   async fetchSubmissions(compId) {
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const token = session?.access_token || SUPABASE_KEY;
+    console.log("[fetchSubmissions] compId:", compId, "| auth:", session ? "user JWT" : "anon key");
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions?comp_id=eq.${compId}&order=submitted_at.desc&select=*`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` },
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` },
     });
-    if (!res.ok) return { data: [], error: await res.text() };
-    return { data: await res.json(), error: null };
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("[fetchSubmissions] HTTP", res.status, err);
+      return { data: [], error: err };
+    }
+    const data = await res.json();
+    console.log("[fetchSubmissions] rows returned:", data.length, data);
+    return { data, error: null };
   },
   // Insert a new club submission
   async insertSubmission(submission) {
@@ -65,16 +74,24 @@ const supabase = {
   },
   // Update a submission status
   async updateSubmission(id, patch) {
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const token = session?.access_token || SUPABASE_KEY;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions?id=eq.${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Authorization": `Bearer ${token}`,
+        "Prefer": "return=representation",
       },
       body: JSON.stringify(patch),
     });
-    if (!res.ok) { const err = await res.text(); return { error: err }; }
+    if (!res.ok) { const err = await res.text(); console.error("[updateSubmission] HTTP error:", err); return { error: err }; }
+    const rows = await res.json();
+    if (!rows.length) {
+      console.error("[updateSubmission] 0 rows updated for id:", id, "— check Supabase RLS policies allow UPDATE on submissions");
+      return { error: "No rows updated — the status could not be saved. Check Supabase RLS policies." };
+    }
     return { error: null };
   },
   // Fetch a user's profile row — requires session JWT
@@ -5480,14 +5497,23 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const handleAccept = (newGymnasts) => {
-    onAcceptGymnasts(newGymnasts);
-    // Refresh count
+  const refreshCount = () => {
     if (!inSandbox) {
       supabase.fetchSubmissions(compId).then(({ data }) => {
         if (data) setPendingCount(data.filter(s => s.status === "pending").length);
       });
+    } else {
+      setPendingCount(c => Math.max(0, (c || 1) - 1));
     }
+  };
+
+  const handleAccept = (newGymnasts) => {
+    onAcceptGymnasts(newGymnasts);
+    refreshCount();
+  };
+
+  const handleDecline = () => {
+    refreshCount();
   };
 
   return (
@@ -5537,6 +5563,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
           compData={compData}
           gymnasts={gymnasts}
           onAccept={handleAccept}
+          onDecline={handleDecline}
           onClose={() => setShowReview(false)}
         />
       )}
@@ -5623,10 +5650,41 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
 
         {/* ── MANAGE GYMNASTS LINK (when gymnasts exist) ─────────── */}
         {hasGymnasts && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={onManageGymnasts}>
               + Manage Gymnasts ({totalGymnasts})
             </button>
+          </div>
+        )}
+
+        {/* ── GYMNAST LIST ────────────────────────────────────────── */}
+        {hasGymnasts && (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14 }}>
+              Registered Gymnasts
+            </div>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, borderBottom: "1px solid var(--border)", padding: "8px 16px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--muted)" }}>
+                <div>#</div>
+                <div>Name</div>
+                <div>Club</div>
+                <div>Level</div>
+                <div>Round</div>
+              </div>
+              {[...gymnasts].sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)).map((g, i) => {
+                const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level || "—";
+                const roundName = compData.rounds.find(r => r.id === g.round)?.name || g.round || "—";
+                return (
+                  <div key={g.id} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: i < gymnasts.length - 1 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                    <div style={{ color: "var(--muted)", fontSize: 11 }}>{g.number || i + 1}</div>
+                    <div style={{ fontWeight: 600 }}>{g.name}</div>
+                    <div style={{ color: "var(--muted)" }}>{g.club || "—"}</div>
+                    <div style={{ color: "var(--muted)" }}>{levelName}</div>
+                    <div style={{ color: "var(--muted)" }}>{roundName}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -5779,6 +5837,7 @@ function ClubSubmissionScreen({ compId }) {
 
   const [clubName, setClubName] = useState("");
   const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [gymnasts, setGymnasts] = useState([
     { id: generateId(), name: "", level: "", ageCategory: "" }
   ]);
@@ -5821,6 +5880,7 @@ function ClubSubmissionScreen({ compId }) {
       comp_id: compId,
       club_name: clubName.trim(),
       contact_name: contactName.trim(),
+      contact_email: contactEmail.trim(),
       gymnasts: filled.map(g => ({ id: generateId(), name: g.name.trim(), level: g.level, ageCategory: g.ageCategory })),
       submitted_at: new Date().toISOString(),
       status: "pending",
@@ -5913,6 +5973,18 @@ function ClubSubmissionScreen({ compId }) {
                 placeholder="Your name"
                 value={contactName}
                 onChange={e => setContactName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                Contact Email <span style={{ color: "#555", fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                type="email"
+                style={{ width: "100%", padding: "10px 14px", background: "#1e1e1e", border: "1px solid #333", borderRadius: 8, color: "#fff", fontSize: 14, boxSizing: "border-box" }}
+                placeholder="coach@example.com"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
               />
             </div>
           </div>
@@ -6014,7 +6086,7 @@ function ClubSubmissionScreen({ compId }) {
 // ============================================================
 // SUBMISSIONS REVIEW PANEL — organiser reviews pending submissions
 // ============================================================
-function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose }) {
+function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDecline, onClose }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
@@ -6044,7 +6116,8 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose 
       setLoading(false);
       return;
     }
-    const { data } = await supabase.fetchSubmissions(compId);
+    const { data, error } = await supabase.fetchSubmissions(compId);
+    if (error) console.error("[SubmissionsReviewPanel] load error:", error);
     setSubmissions(data || []);
     setLoading(false);
   };
@@ -6062,6 +6135,17 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose 
 
   const acceptSubmission = async (sub) => {
     setProcessing(sub.id);
+
+    if (!inSandbox) {
+      const { error } = await supabase.updateSubmission(sub.id, { status: "accepted" });
+      if (error) {
+        console.error("[acceptSubmission] Supabase update failed:", error);
+        alert("Could not save acceptance to Supabase — please check your RLS policies on the submissions table, then try again.\n\n" + error);
+        setProcessing(null);
+        return;
+      }
+    }
+
     let num = nextNumber();
     const newGymnasts = sub.gymnasts.map(g => ({
       id: generateId(),
@@ -6076,10 +6160,6 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose 
     }));
 
     onAccept(newGymnasts);
-
-    if (!inSandbox) {
-      await supabase.updateSubmission(sub.id, { status: "accepted" });
-    }
     setSubmissions(s => s.map(x => x.id === sub.id ? { ...x, status: "accepted" } : x));
     setProcessing(null);
   };
@@ -6087,10 +6167,16 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose 
   const declineSubmission = async (sub) => {
     setProcessing(sub.id);
     if (!inSandbox) {
-      await supabase.updateSubmission(sub.id, { status: "declined" });
+      const { error } = await supabase.updateSubmission(sub.id, { status: "declined" });
+      if (error) {
+        console.error("[declineSubmission] Supabase update failed:", error);
+        setProcessing(null);
+        return;
+      }
     }
     setSubmissions(s => s.map(x => x.id === sub.id ? { ...x, status: "declined" } : x));
     setProcessing(null);
+    onDecline?.();
   };
 
   const colour = compData.brandColour || "#c8f53a";
@@ -6147,6 +6233,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onClose 
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{sub.club_name}</div>
                         <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
                           {sub.contact_name && <span>{sub.contact_name} · </span>}
+                          {sub.contact_email && <><a href={`mailto:${sub.contact_email}`} style={{ color: "var(--muted)", textDecoration: "underline" }}>{sub.contact_email}</a>{" · "}</>}
                           {new Date(sub.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} at {new Date(sub.submitted_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           · {sub.gymnasts.length} gymnast{sub.gymnasts.length !== 1 ? "s" : ""}
                         </div>

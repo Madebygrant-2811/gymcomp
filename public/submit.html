@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GYMCOMP — Club Submission</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --surface2: #1a1a24;
+      --border: #252533;
+      --text: #f0f0f5;
+      --muted: #6b6b85;
+      --accent: #c8f53a;
+      --accent2: #7c5af5;
+      --danger: #ef4444;
+      --radius: 12px;
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'DM Sans', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .comp-header {
+      padding: 0 20px;
+      border-bottom: 3px solid var(--accent);
+      background: var(--surface);
+    }
+    .comp-header-inner {
+      max-width: 640px;
+      margin: 0 auto;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .comp-logo {
+      height: 44px;
+      object-fit: contain;
+      border-radius: 6px;
+    }
+    .comp-name {
+      font-weight: 800;
+      font-size: 20px;
+      line-height: 1.2;
+      flex: 1;
+    }
+    .comp-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .header-badge {
+      flex-shrink: 0;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    /* ── Page content ────────────────────────────────────────── */
+    .page {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+
+    /* ── Card ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+
+    /* ── Field ───────────────────────────────────────────────── */
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    label .req { color: var(--accent); margin-left: 2px; }
+    label .opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: 10px; }
+
+    input, select {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      transition: border-color 0.15s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    input::placeholder { color: var(--muted); }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b85' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+    select option { background: #1a1a24; }
+
+    /* ── Gymnast row ─────────────────────────────────────────── */
+    .gymnast-list { display: flex; flex-direction: column; gap: 12px; }
+    .gymnast-row {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .gymnast-row-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .gymnast-num-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .gymnast-name-input {
+      flex: 1;
+    }
+    .remove-btn {
+      width: 30px;
+      height: 30px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .remove-btn:hover { border-color: var(--danger); color: var(--danger); }
+    .gymnast-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 480px) {
+      .gymnast-fields { grid-template-columns: 1fr; }
+    }
+
+    /* ── Add gymnast btn ─────────────────────────────────────── */
+    .add-btn {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .add-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Error / submit states ───────────────────────────────── */
+    .error-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #f87171;
+      margin-bottom: 16px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-family: var(--font-body);
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      letter-spacing: 0.3px;
+    }
+    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .submit-btn:not(:disabled):hover { opacity: 0.9; }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 16px;
+    }
+    .footer-note a { color: var(--muted); }
+
+    /* ── State pages ─────────────────────────────────────────── */
+    .state-full {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 70vh;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .state-icon { font-size: 56px; margin-bottom: 8px; }
+    .state-title { font-size: 22px; font-weight: 700; }
+    .state-sub { color: var(--muted); font-size: 14px; max-width: 380px; line-height: 1.7; }
+    .state-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      text-align: left;
+      max-width: 400px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .state-card strong { color: var(--text); display: block; margin-bottom: 4px; }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <div class="state-full">
+    <div class="spinner"></div>
+    <div class="state-title">Loading…</div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://xjuwbgitqsvrmoejvzwb.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_7jhhejhXAH8hlX-gnsElnA_1ih0G-2f";
+
+  const params = new URLSearchParams(location.search);
+  const compId = params.get("comp");
+
+  let compConfig = null;
+  let gymnasts = [{ id: genId(), name: "", level: "", ageCategory: "" }];
+  let existingAgeOptions = [];
+  let clubName = "";
+  let contactName = "";
+  let contactEmail = "";
+  let formError = null;
+  let submitting = false;
+  let submitted = false;
+  let submittedCount = 0;
+
+  function genId() {
+    return Math.random().toString(36).slice(2, 11);
+  }
+
+  function escHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function showError(msg) {
+    document.getElementById("app").innerHTML = `
+      <div class="state-full">
+        <div class="state-icon">⚠️</div>
+        <div class="state-title">Unable to load</div>
+        <div class="state-sub">${escHtml(msg)}</div>
+      </div>
+    `;
+  }
+
+  function showNoId() {
+    document.getElementById("app").innerHTML = `
+      <div class="state-full">
+        <div class="state-icon">🔗</div>
+        <div class="state-title">No competition ID</div>
+        <div class="state-sub">Please open this link from the competition dashboard. The URL should include <code>?comp=…</code></div>
+      </div>
+    `;
+  }
+
+  function showSubmitted(colour, compName, compDate, count, club) {
+    const dateStr = compDate
+      ? new Date(compDate + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+      : "";
+    document.getElementById("app").innerHTML = `
+      <div class="state-full">
+        <div class="state-icon">🎉</div>
+        <div class="state-title" style="color:${escHtml(colour)}">Submitted!</div>
+        <div class="state-sub">Your gymnast list has been sent to the organiser for review. You will be contacted if any details need to be confirmed.</div>
+        <div class="state-card">
+          <strong>${escHtml(compName)}</strong>
+          ${dateStr ? `<span style="color:var(--muted);font-size:12px">${dateStr}</span>` : ""}
+          <span style="color:${escHtml(colour)};font-weight:700;font-size:14px;display:block;margin-top:10px">
+            ${count} gymnast${count !== 1 ? "s" : ""} submitted from ${escHtml(club)}
+          </span>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Build level options ──
+  function buildLevelOptions(selectedLevel) {
+    const levels = compConfig.levels || [];
+    return levels.map(l =>
+      `<option value="${escHtml(l.name)}" ${l.name === selectedLevel ? "selected" : ""}>${escHtml(l.name)}</option>`
+    ).join("");
+  }
+
+  // ── Build club name field (dropdown if clubs configured, else free text) ──
+  function buildClubNameField() {
+    const clubs = compConfig.clubs || [];
+    if (clubs.length > 0) {
+      return `<select id="clubNameSelect" onchange="clubName = this.value">
+        <option value="">Select your club…</option>
+        ${clubs.map(c => `<option value="${escHtml(c.name)}" ${c.name === clubName ? "selected" : ""}>${escHtml(c.name)}</option>`).join("")}
+      </select>`;
+    }
+    return `<input type="text" id="clubNameInput" placeholder="e.g. Westfield Gymnastics Club"
+      value="${escHtml(clubName)}" oninput="clubName = this.value" />`;
+  }
+
+  // ── Render form ──
+  function renderForm() {
+    const colour = compConfig.brandColour || "#c8f53a";
+    const levels = compConfig.levels || [];
+    const compDate = compConfig.date
+      ? new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+      : "";
+    const venue = compConfig.venue || compConfig.location || "";
+    const agePlaceholder = existingAgeOptions.length ? "Select or type a new category…" : "e.g. Under 9, Junior";
+
+    const gymnastRows = gymnasts.map((g, idx) => {
+      return `
+        <div class="gymnast-row" id="gr-${g.id}">
+          <div class="gymnast-row-header">
+            <div class="gymnast-num-badge">${idx + 1}</div>
+            <div class="gymnast-name-input" style="flex:1">
+              <input
+                type="text"
+                placeholder="Full name"
+                value="${escHtml(g.name)}"
+                oninput="updateGymnast('${g.id}', 'name', this.value)"
+              />
+            </div>
+            ${gymnasts.length > 1 ? `<button class="remove-btn" onclick="removeGymnast('${g.id}')" title="Remove gymnast">×</button>` : ""}
+          </div>
+          <div class="gymnast-fields">
+            <div>
+              <label style="color:var(--muted)">Level <span class="req">*</span></label>
+              <select onchange="updateGymnast('${g.id}', 'level', this.value)">
+                <option value="">Select level…</option>
+                ${buildLevelOptions(g.level)}
+              </select>
+            </div>
+            <div>
+              <label style="color:var(--muted)">Age Category <span class="opt">(optional)</span></label>
+              <input type="text" list="age-datalist"
+                value="${escHtml(g.ageCategory)}"
+                placeholder="${agePlaceholder}"
+                oninput="updateGymnast('${g.id}', 'ageCategory', this.value)"
+              />
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    const errorHtml = formError
+      ? `<div class="error-box">⚠ ${escHtml(formError)}</div>`
+      : "";
+
+    document.getElementById("app").innerHTML = `
+      <header class="comp-header">
+        <div class="comp-header-inner">
+          ${compConfig.logo ? `<img class="comp-logo" src="${escHtml(compConfig.logo)}" alt="Logo" />` : ""}
+          <div style="flex:1">
+            <div class="comp-name" style="color:${colour}">${escHtml(compConfig.name || "Competition")}</div>
+            <div class="comp-sub">
+              ${compDate ? `<span>📅 ${compDate}</span>` : ""}
+              ${venue ? `<span>📍 ${escHtml(venue)}</span>` : ""}
+            </div>
+          </div>
+          <div class="header-badge" style="background:${colour}22;border:1px solid ${colour}44;color:${colour}">
+            Submission
+          </div>
+        </div>
+      </header>
+
+      <div class="page">
+
+        <div class="card">
+          <div class="card-title" style="color:${colour}">Club Details</div>
+          <div class="field">
+            <label>Club Name <span class="req">*</span></label>
+            ${buildClubNameField()}
+          </div>
+          <div class="field">
+            <label>Contact Name <span class="opt">(optional)</span></label>
+            <input
+              type="text"
+              id="contactNameInput"
+              placeholder="Your name"
+              value="${escHtml(contactName)}"
+              oninput="contactName = this.value"
+            />
+          </div>
+          <div class="field">
+            <label>Contact Email <span class="opt">(optional)</span></label>
+            <input
+              type="email"
+              id="contactEmailInput"
+              placeholder="coach@example.com"
+              value="${escHtml(contactEmail)}"
+              oninput="contactEmail = this.value"
+            />
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <div class="card-title" style="color:${colour};margin-bottom:0">
+              Gymnasts
+              <span style="font-size:12px;font-weight:400;color:var(--muted)"> (${gymnasts.filter(g => g.name.trim()).length} entered)</span>
+            </div>
+            <button onclick="addGymnast()" style="padding:7px 14px;background:${colour};color:#000;border:none;border-radius:7px;font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer">
+              + Add gymnast
+            </button>
+          </div>
+          <datalist id="age-datalist">
+            ${existingAgeOptions.map(a => `<option value="${escHtml(a)}"></option>`).join("")}
+          </datalist>
+          <div class="gymnast-list" id="gymnast-list">
+            ${gymnastRows}
+          </div>
+        </div>
+
+        ${errorHtml}
+
+        <button class="submit-btn" onclick="handleSubmit()" ${submitting ? "disabled" : ""}>
+          ${submitting ? "Submitting…" : "Submit Gymnast List"}
+        </button>
+
+        <div class="footer-note">
+          Powered by <strong>GYMCOMP</strong> · Your details will only be used for this competition
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Gymnast management ──
+  function addGymnast() {
+    gymnasts = [...gymnasts, { id: genId(), name: "", level: "", ageCategory: "" }];
+    renderForm();
+  }
+
+  function removeGymnast(id) {
+    gymnasts = gymnasts.filter(g => g.id !== id);
+    renderForm();
+  }
+
+  function updateGymnast(id, field, value) {
+    gymnasts = gymnasts.map(g => g.id === id ? { ...g, [field]: value } : g);
+    // Don't re-render on every keystroke — just update the local state
+  }
+
+  // ── Submit ──
+  async function handleSubmit() {
+    formError = null;
+    const clubEl = document.getElementById("clubNameSelect") || document.getElementById("clubNameInput");
+    if (clubEl) clubName = clubEl.value;
+
+    if (!clubName.trim()) {
+      formError = "Please enter your club name.";
+      renderForm();
+      return;
+    }
+
+    const filled = gymnasts.filter(g => g.name.trim());
+    if (!filled.length) {
+      formError = "Please add at least one gymnast with a name.";
+      renderForm();
+      return;
+    }
+
+    const incomplete = filled.find(g => !g.level);
+    if (incomplete) {
+      formError = `Please select a level for "${incomplete.name}".`;
+      renderForm();
+      return;
+    }
+
+    submitting = true;
+    renderForm();
+
+    const submission = {
+      id: genId(),
+      comp_id: compId,
+      club_name: clubName.trim(),
+      contact_name: contactName.trim(),
+      contact_email: contactEmail.trim(),
+      gymnasts: filled.map(g => ({
+        id: genId(),
+        name: g.name.trim(),
+        level: g.level,
+        ageCategory: g.ageCategory || ""
+      })),
+      submitted_at: new Date().toISOString(),
+      status: "pending"
+    };
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify(submission)
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err);
+      }
+
+      const colour = compConfig.brandColour || "#c8f53a";
+      showSubmitted(colour, compConfig.name || "", compConfig.date || "", filled.length, clubName.trim());
+
+    } catch (e) {
+      submitting = false;
+      formError = "Submission failed — please try again or contact the organiser.";
+      renderForm();
+    }
+  }
+
+  // ── Init ──
+  async function init() {
+    if (!compId) { showNoId(); return; }
+
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/competitions?id=eq.${encodeURIComponent(compId)}&select=*`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+
+    if (!res.ok) { showError("Failed to load competition details."); return; }
+
+    const rows = await res.json();
+    const row = rows[0];
+
+    if (!row || !row.data) { showError("Competition not found. Please check your link."); return; }
+
+    const cd = row.data.compData;
+    if (!cd) { showError("Competition data is missing. Please contact the organiser."); return; }
+
+    if (!cd.allowSubmissions) {
+      document.getElementById("app").innerHTML = `
+        <div class="state-full">
+          <div class="state-icon">🔒</div>
+          <div class="state-title">Submissions closed</div>
+          <div class="state-sub">This competition is not currently accepting gymnast submissions. Please contact the organiser.</div>
+        </div>
+      `;
+      return;
+    }
+
+    if (!cd.levels || !cd.levels.length) {
+      document.getElementById("app").innerHTML = `
+        <div class="state-full">
+          <div class="state-icon">⚙️</div>
+          <div class="state-title">Not ready yet</div>
+          <div class="state-sub">The competition hasn't been fully configured yet. Please check back later or contact the organiser.</div>
+        </div>
+      `;
+      return;
+    }
+
+    compConfig = cd;
+    document.title = `${cd.name || "Competition"} — Gymnast Submission`;
+
+    // Build age category options from level config + existing submissions
+    const fromLevels = (cd.levels || []).flatMap(l => l.ageCategories || []);
+    try {
+      const subRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/submissions?comp_id=eq.${encodeURIComponent(compId)}&status=in.(pending,accepted)&select=gymnasts`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      if (subRes.ok) {
+        const subs = await subRes.json();
+        const fromSubs = subs.flatMap(s => (s.gymnasts || []).map(g => g.ageCategory)).filter(Boolean);
+        existingAgeOptions = [...new Set([...fromLevels, ...fromSubs])];
+      } else {
+        existingAgeOptions = [...new Set(fromLevels)];
+      }
+    } catch (e) {
+      existingAgeOptions = [...new Set(fromLevels)];
+    }
+
+    renderForm();
+  }
+
+  init();
+</script>
+</body>
+</html>
