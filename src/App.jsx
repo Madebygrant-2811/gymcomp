@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import GymCompLogo from "./assets/GymComp-Logo.svg";
 
 // ============================================================
 // SUPABASE — lightweight REST client (no external imports)
@@ -4823,7 +4824,6 @@ function AuthScreen({ onJudgePath }) {
       options: { redirectTo: window.location.origin },
     });
     if (err) { setError(err.message); setLoading(false); }
-    // On success the browser redirects — no further action needed here
   };
 
   const handleMagicLink = async () => {
@@ -4841,173 +4841,184 @@ function AuthScreen({ onJudgePath }) {
     setSent(true);
   };
 
-  const authPageStyle = {
-    position: "fixed", inset: 0, background: "#3a6ff5",
-    display: "flex", flexDirection: "column", overflow: "auto",
-    fontFamily: "'DM Sans', sans-serif",
-  };
+  const googleIconUrl = "https://www.figma.com/api/mcp/asset/ecdc4d55-f8d8-4a06-ae78-791219f31494";
+  const heroImageUrl = "https://www.figma.com/api/mcp/asset/b18be7e3-debb-469e-9172-cfaab137a9c8";
 
-  const navStyle = {
-    position: "relative", zIndex: 10, height: 75, flexShrink: 0,
-    background: "#fff", display: "flex", alignItems: "center",
-    justifyContent: "center", boxShadow: "0 6px 16.5px rgba(0,0,0,0.05)",
-  };
-
-  const logoStyle = {
-    fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 2,
-    color: "#111", lineHeight: 1,
-  };
-
-  const tmStyle = {
-    fontSize: 9, verticalAlign: "super", letterSpacing: 0, fontFamily: "'DM Sans', sans-serif",
-    fontWeight: 400,
-  };
-
-  // Decorative SVG background — large subtle geometric shapes
-  const bgPattern = (
-    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
-      viewBox="0 0 1504 928" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="rgba(255,255,255,0.13)" fill="none" strokeWidth="1.5">
-        <line x1="180" y1="-60" x2="680" y2="600" />
-        <line x1="320" y1="-60" x2="820" y2="600" />
-        <circle cx="1240" cy="464" r="340" />
-        <circle cx="260" cy="720" r="300" />
-        <path d="M-80 500 Q400 200 900 700" />
-      </g>
-    </svg>
+  /* ── Shared form elements ── */
+  const googleBtn = (
+    <button
+      onClick={handleGoogle}
+      disabled={loading}
+      style={{
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+        gap: 10, padding: 16, border: "1px solid var(--brand-01)", borderRadius: 72,
+        background: "#fff", cursor: loading ? "not-allowed" : "pointer",
+        fontFamily: "'Saans', sans-serif", fontWeight: 600, fontSize: 16,
+        color: "#050505", letterSpacing: "0.3px",
+      }}
+    >
+      <img src={googleIconUrl} alt="" width={16} height={16} style={{ flexShrink: 0 }} />
+      Continue with Google
+    </button>
   );
 
+  const divider = (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+      <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>or sign in with email</span>
+      <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+    </div>
+  );
+
+  const emailInput = (
+    <input
+      type="email"
+      placeholder="your@email.com"
+      value={email}
+      onChange={e => setEmail(e.target.value)}
+      onKeyDown={e => e.key === "Enter" && handleMagicLink()}
+      autoFocus
+      style={{
+        width: "100%", boxSizing: "border-box", background: "#fff",
+        border: "1px solid var(--border)", borderRadius: 72, padding: "16px 24px",
+        fontFamily: "var(--font-body)", fontSize: 16, color: "var(--text-primary)",
+        outline: "none",
+      }}
+    />
+  );
+
+  const sendBtn = (
+    <button
+      onClick={handleMagicLink}
+      disabled={loading}
+      style={{
+        width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
+        padding: 16, fontFamily: "var(--font-body)", fontWeight: 400,
+        fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
+        letterSpacing: "0.3px", cursor: loading ? "not-allowed" : "pointer",
+        opacity: loading ? 0.7 : 1,
+      }}
+    >
+      {loading ? "Sending…" : "Send sign-in link →"}
+    </button>
+  );
+
+  const judgeCard = (
+    <div style={{
+      width: "100%", maxWidth: 397, border: "1px solid var(--border)", borderRadius: 16,
+      padding: "16px 24px", display: "flex", flexDirection: "column", gap: 8, boxSizing: "border-box",
+    }}>
+      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
+        Entering Scores?
+      </div>
+      <div
+        onClick={onJudgePath}
+        style={{
+          fontFamily: "var(--font-body)", fontSize: 14, color: "var(--brand-02)",
+          cursor: "pointer", letterSpacing: "0.3px",
+        }}
+      >
+        Enter as Scorer or Judge — PIN access →
+      </div>
+    </div>
+  );
+
+  const footer = (
+    <div style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-tertiary)" }}>
+      All Rights Reserved 2026 GymComp©
+    </div>
+  );
+
+  /* ── "Check your inbox" state ── */
   if (sent) {
     return (
-      <div style={authPageStyle}>
-        <div style={navStyle}>
-          <span style={logoStyle}>GYMCOMP<span style={tmStyle}>™</span></span>
-        </div>
-        <div style={{ position: "relative", zIndex: 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          {bgPattern}
-          <div style={{ textAlign: "center", maxWidth: 420 }}>
-            <div style={{ fontSize: 48, marginBottom: 20 }}>📬</div>
-            <div style={{ fontWeight: 700, fontSize: 22, color: "#fff", marginBottom: 12 }}>
-              Check your inbox
-            </div>
-            <div style={{ fontSize: 14, color: "rgba(255,255,255,0.85)", lineHeight: 1.8, marginBottom: 28 }}>
-              We sent a sign-in link to{" "}
-              <strong style={{ color: "#fff" }}>{email}</strong>.<br />
-              Click it to continue — no password needed.
-            </div>
-            <button
-              onClick={() => { setSent(false); setLoading(false); }}
-              style={{ fontWeight: 600, fontSize: 13, color: "#3a6ff5", background: "#fff", border: "none", padding: "10px 20px", borderRadius: 8, cursor: "pointer", letterSpacing: "0.3px" }}
-            >
-              ← Use a different email
-            </button>
+      <div style={{ position: "fixed", inset: 0, background: "var(--background-light)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Saans', sans-serif" }}>
+        <div style={{ textAlign: "center", maxWidth: 420, padding: 24 }}>
+          <div style={{ fontSize: 48, marginBottom: 20 }}>📬</div>
+          <div style={{ fontFamily: "'Saans', sans-serif", fontWeight: 700, fontSize: 22, color: "var(--text-primary)", marginBottom: 12 }}>
+            Check your inbox
           </div>
+          <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 28 }}>
+            We sent a sign-in link to{" "}
+            <strong style={{ color: "var(--text-primary)" }}>{email}</strong>.<br />
+            Click it to continue — no password needed.
+          </div>
+          <button
+            onClick={() => { setSent(false); setLoading(false); }}
+            style={{ fontFamily: "'Saans', sans-serif", fontWeight: 600, fontSize: 13, color: "var(--brand-01)", background: "var(--background-neutral)", border: "none", padding: "10px 20px", borderRadius: 72, cursor: "pointer", letterSpacing: "0.3px" }}
+          >
+            ← Use a different email
+          </button>
         </div>
       </div>
     );
   }
 
+  /* ── DESKTOP (≥768px): two-column split ── */
+  /* ── MOBILE (<768px): single column ── */
   return (
-    <div style={authPageStyle}>
-      <div style={navStyle}>
-        <span style={logoStyle}>GYMCOMP<span style={tmStyle}>™</span></span>
-      </div>
+    <>
+      <style>{`
+        .auth-wrapper { position:fixed;inset:0;display:flex;font-family:'Saans',sans-serif;background:var(--background-light);--font-display:'Saans',sans-serif;--font-body:'Saans',sans-serif;--border:#ddd;--background-neutral:#efefef; }
+        .auth-left { width:550px;flex-shrink:0;padding:48px;display:flex;flex-direction:column;justify-content:space-between;background:var(--background-light);box-sizing:border-box; }
+        .auth-left-logo img { height:25px; }
+        .auth-left-middle { display:flex;flex-direction:column;align-items:center;justify-content:space-between;height:586px;padding:0 40px; }
+        .auth-left-form { width:100%;display:flex;flex-direction:column;gap:32px; }
+        .auth-right { flex:1;padding:24px;min-width:0;height:100%;box-sizing:border-box; }
+        .auth-right-inner { background:#000dff;border-radius:32px;overflow:hidden;height:100%;width:100%;position:relative; }
+        .auth-right-inner img { position:absolute;width:200%;height:200%;top:-80%;left:-25%;max-width:none;pointer-events:none;object-fit:cover; }
 
-      {/* Blue body */}
-      <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: "40px 24px" }}>
-        {bgPattern}
-
-        {/* Heading */}
-        <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 484, textAlign: "center" }}>
-          <div style={{ fontSize: 56, lineHeight: 1.1, color: "#fff", marginBottom: 10 }}>
-            <span style={{ fontWeight: 700 }}>Welcome to </span>
-            <span style={{ fontWeight: 400 }}>GymComp</span>
-          </div>
-          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>
-            The UK's go-to Competition management for gymnastics
-          </div>
-        </div>
-
-        {/* Main sign-in card */}
-        <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 484, background: "#fff", borderRadius: 8, boxShadow: "0 12px 28px rgba(0,0,0,0.08)", padding: 32 }}>
-          {/* Google button */}
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            style={{
-              width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 10, padding: "13px 21px", border: "1px solid #3a6ff5", borderRadius: 8,
-              background: "#fff", cursor: loading ? "not-allowed" : "pointer",
-              fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14,
-              color: "#050505", letterSpacing: "0.3px",
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          {/* Divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "#cfcfcf" }} />
-            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#6b6b85", whiteSpace: "nowrap" }}>or sign in with email</span>
-            <div style={{ flex: 1, height: 1, background: "#cfcfcf" }} />
+        @media(max-width:767px) {
+          .auth-wrapper { flex-direction:column; }
+          .auth-left { width:100%;flex-shrink:initial;padding:40px 16px;align-items:center;gap:64px;justify-content:flex-start; }
+          .auth-left-middle { height:auto;gap:32px;padding:0; }
+          .auth-left-form { width:100%;max-width:396px; }
+          .auth-right { display:none; }
+          .auth-left-footer { text-align:center; }
+        }
+      `}</style>
+      <div className="auth-wrapper">
+        {/* ── Left Panel ── */}
+        <div className="auth-left">
+          <div className="auth-left-logo">
+            <img src={GymCompLogo} alt="GymComp" />
           </div>
 
-          {/* Email + send */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <input
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleMagicLink()}
-              autoFocus
-              style={{
-                width: "100%", boxSizing: "border-box", background: "#efefef",
-                border: "1px solid #ddd", borderRadius: 8, padding: "10px 14px",
-                fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "#050505",
-                outline: "none",
-              }}
-            />
-            {error && <div style={{ fontSize: 13, color: "#e53e3e" }}>{error}</div>}
-            <button
-              onClick={handleMagicLink}
-              disabled={loading}
-              style={{
-                width: "100%", background: "#3b89ff", border: "none", borderRadius: 8,
-                padding: "10px 20px", fontFamily: "'DM Sans', sans-serif", fontWeight: 600,
-                fontSize: 13, color: "#fff", textAlign: "center", letterSpacing: "0.3px",
-                cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? "Sending…" : "Send sign-in link →"}
-            </button>
+          <div className="auth-left-middle">
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 32, color: "var(--text-primary)", lineHeight: 1.1, textAlign: "center", width: "100%" }}>
+              Welcome to GymComp
+            </div>
+            <div style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-secondary)", textAlign: "center", lineHeight: "18px", maxWidth: 200 }}>
+              Sign in or sign up for free<br />with your email
+            </div>
+            <div className="auth-left-form">
+              {googleBtn}
+              {divider}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {emailInput}
+                {error && <div style={{ fontSize: 13, color: "#e53e3e", paddingLeft: 24 }}>{error}</div>}
+                {sendBtn}
+              </div>
+            </div>
+            <div style={{ fontFamily: "var(--font-body)", fontSize: 10, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.4, maxWidth: 246 }}>
+              By signing up to a free account you agree to the GymComp Privacy Policy, Terms and Cookie Notice.
+            </div>
+            {judgeCard}
+          </div>
+
+          <div className="auth-left-footer">
+            {footer}
           </div>
         </div>
 
-        {/* Judge card */}
-        <div style={{ position: "relative", zIndex: 1, background: "#fff", borderRadius: 8, boxShadow: "0 12px 28px rgba(0,0,0,0.08)", padding: "24px 32px", textAlign: "center" }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: "#2e2e2e", marginBottom: 16, whiteSpace: "nowrap" }}>
-            Entering scores as a judge?
+        {/* ── Right Panel (hero image) ── */}
+        <div className="auth-right">
+          <div className="auth-right-inner">
+            <img src={heroImageUrl} alt="" />
           </div>
-          <button
-            onClick={onJudgePath}
-            style={{
-              fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 12,
-              color: "#3b89ff", background: "none", border: "none",
-              cursor: "pointer", letterSpacing: "0.3px", whiteSpace: "nowrap",
-            }}
-          >
-            Enter as Judge — PIN access →
-          </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Saans';
+  src: url('./fonts/SaansVF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -11,6 +19,18 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --font-display: 'Saans', sans-serif;
+  --font-body: 'Saans', sans-serif;
+  --background-light: #ffffff;
+  --text-primary: #2e2e2e;
+  --text-secondary: #575757;
+  --text-tertiary: #909090;
+  --text-alternate: #ffffff;
+  --brand-01: #000dff;
+  --brand-02: #3b45ff;
+  --border: #dddddd;
+  --background-neutral: #efefef;
 }
 
 a {
