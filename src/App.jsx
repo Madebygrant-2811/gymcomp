@@ -225,6 +225,7 @@ const events = {
     try { return JSON.parse(localStorage.getItem(EVENTS_KEY) || "[]"); } catch { return []; }
   },
   save: (allEvents) => localStorage.setItem(EVENTS_KEY, JSON.stringify(allEvents)),
+  clear: () => localStorage.removeItem(EVENTS_KEY),
 
   getForAccount: (accountId) => events.getAll().filter(e => e.accountId === accountId),
 
@@ -5198,7 +5199,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
     // Sync competitions from Supabase so they appear on any device after login
     supabaseAuth.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
-      supabase.fetchListForUser(session.access_token, account.id).then(({ data: supabaseComps, error }) => {
+      supabase.fetchListForUser(session.access_token, session.user.id).then(({ data: supabaseComps, error }) => {
         if (error) return;
         const all = events.getAll();
         let changed = false;
@@ -7179,6 +7180,7 @@ export default function App() {
   */
 
   const handleLogout = async () => {
+    events.clear(); // Wipe local events so stale data never leaks to the next session
     await supabaseAuth.auth.signOut();
     // setCurrentUser(null) + setScreen("auth-login") handled by onAuthStateChange
   };
