@@ -2029,7 +2029,7 @@ const css = `
   .setup-topbar-sync.saved { color: var(--success); }
   .setup-topbar-sync.error { color: var(--danger); }
   @media (max-width: 768px) {
-    .setup-topbar { margin-bottom: 20px; padding: 12px 16px; }
+    .setup-topbar { margin-bottom: 16px; padding: 10px 12px; }
     .setup-topbar-name { max-width: 180px; font-size: 13px; }
   }
 
@@ -2142,15 +2142,16 @@ const css = `
   @media (max-width: 768px) {
     /* Prevent iOS Safari auto-zoom on focus — all interactive elements must be ≥16px */
     .input, .select, textarea, input, select, .btn, .club-edit-input, .score-input { font-size: 16px !important; }
+    .input, .select, input, select, textarea { padding: 10px 14px; box-sizing: border-box; max-width: 100%; }
 
     .nav { padding: 12px 16px; gap: 10px; }
     .nav-logo { font-size: 22px; }
 
     .main { flex-direction: column; }
 
-    .content { padding: 20px 16px; }
+    .content { padding: 16px 12px; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .card { padding: 16px; }
+    .card { padding: 14px 12px; overflow: hidden; }
 
     .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .dash-hero-title { font-size: 40px !important; }
@@ -2180,8 +2181,8 @@ const css = `
     .dash-hero-title { font-size: 32px !important; }
 
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .content { padding: 16px 12px; }
-    .card { padding: 14px 12px; }
+    .content { padding: 12px 8px; }
+    .card { padding: 12px 10px; }
 
     .home-logo { font-size: 44px !important; letter-spacing: 2px !important; }
     .home-wrap { padding: 20px 16px !important; }
@@ -5608,6 +5609,10 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
         .od-empty-box-btn:hover{opacity:0.92;}
         .od-section-title{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:16px;}
         .od-empty-msg{text-align:center;padding:40px 24px;color:var(--text-tertiary);font-size:14px;width:100%;}
+        .od-active-filter{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:48px;background:var(--background-light);color:var(--text-primary);font-family:var(--font-display);font-size:13px;font-weight:600;border:1px solid var(--border);cursor:pointer;align-self:flex-start;margin-bottom:-14px;}
+        .od-active-filter:hover{background:#f5f5f5;}
+        .od-active-filter-x{display:flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,0.08);font-size:11px;line-height:1;}
+        @media(max-width:768px){.od-active-filter{display:none;}}
         .od-mobile-filters{display:none;}
         @media(max-width:768px){
           .od-main{padding:24px 16px;}
@@ -5648,8 +5653,13 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
 
         {/* Cards area */}
         <div className="od-content">
-          {/* Active filter pill */}
-          {/* Active filter dismiss pill — mobile only (desktop uses sidebar) */}
+          {/* Desktop active filter pill — shows current filter with dismiss */}
+          {statusFilter !== "all" && (
+            <button className="od-active-filter" onClick={() => setStatusFilter("all")}>
+              {sidebarFilters.find(f => f.value === statusFilter)?.label || statusFilter}
+              <span className="od-active-filter-x">✕</span>
+            </button>
+          )}
 
           {/* Empty state — no events at all */}
           {myEvents.length === 0 ? (
