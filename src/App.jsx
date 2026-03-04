@@ -41,9 +41,9 @@ const supabase = {
     if (!res.ok) return { data: [], error: await res.text() };
     return { data: await res.json(), error: null };
   },
-  // Fetch all competitions belonging to the authenticated user (RLS filters by auth.uid())
-  async fetchListForUser(token) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/competitions?select=id,data,created_at&order=created_at.desc`, {
+  // Fetch all competitions belonging to the authenticated user
+  async fetchListForUser(token, userId) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/competitions?user_id=eq.${userId}&select=id,data,created_at&order=created_at.desc`, {
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` },
     });
     if (!res.ok) return { data: [], error: await res.text() };
@@ -5198,7 +5198,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
     // Sync competitions from Supabase so they appear on any device after login
     supabaseAuth.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
-      supabase.fetchListForUser(session.access_token).then(({ data: supabaseComps, error }) => {
+      supabase.fetchListForUser(session.access_token, account.id).then(({ data: supabaseComps, error }) => {
         if (error) return;
         const all = events.getAll();
         let changed = false;
