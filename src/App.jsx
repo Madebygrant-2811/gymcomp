@@ -28,6 +28,20 @@ const supabase = {
     if (!res.ok) { const err = await res.text(); return { error: err }; }
     return { error: null };
   },
+  async patch(table, id, fields, token = SUPABASE_KEY) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+        "Prefer": "return=minimal",
+      },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) { const err = await res.text(); return { error: err }; }
+    return { error: null };
+  },
   async fetchOne(table, id) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}&select=*`, {
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` },
@@ -5350,7 +5364,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
     try {
       const { data: { session } } = await supabaseAuth.auth.getSession();
       if (!session) { console.error("[pushStatusToSupabase] no session"); return; }
-      const { error } = await supabase.upsert("competitions", { id: cid, status: newStatus, user_id: session.user.id }, session.access_token);
+      const { error } = await supabase.patch("competitions", cid, { status: newStatus }, session.access_token);
       if (error) console.error("[pushStatusToSupabase] failed:", error);
     } catch (e) { console.error("[pushStatusToSupabase] error:", e); }
   };
@@ -8063,7 +8077,7 @@ export default function App() {
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
         supabaseAuth.auth.getSession().then(({ data: { session } }) => {
-          if (session) supabase.upsert("competitions", { id: ev.compId, status: "live", user_id: session.user.id }, session.access_token);
+          if (session) supabase.patch("competitions", ev.compId, { status: "live" }, session.access_token);
         });
       }
     }
