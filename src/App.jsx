@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import GymCompLogo from "./assets/GymComp-Logo.svg";
+import GymCompLogotype from "./assets/Logotype.svg";
+import GymCompLogomark from "./assets/Logomark.svg";
 
 // ============================================================
 // SUPABASE — lightweight REST client (no external imports)
@@ -1864,13 +1866,12 @@ function ConfirmModal({ message, confirmLabel = "Yes, remove", onConfirm, onCanc
 // CSS
 // ============================================================
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0a0a0f; --surface: #111118; --surface2: #1a1a24; --border: #2a2a3a;
-    --accent: #c8f53a; --accent2: #7c5af5; --text: #f0f0f8; --muted: #6b6b85;
-    --danger: #f53a5a; --success: #3af5a0; --warn: #f5b43a;
-    --radius: 8px; --font-display: 'Saans', sans-serif; --font-body: 'Saans', sans-serif;
+    --bg: #f5f5f5; --surface: #ffffff; --surface2: #efefef; --border: #e4e4e4;
+    --accent: #000dff; --accent2: #7178f4; --text: #2e2e2e; --muted: #909090;
+    --danger: #e53e3e; --success: #22c55e; --warn: #f59e0b;
+    --radius: 16px; --font-display: 'Saans', sans-serif; --font-body: 'Saans', sans-serif;
   }
   body { background: var(--bg); color: var(--text); font-family: var(--font-body); }
   .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -1880,70 +1881,122 @@ const css = `
   .nav-logo span { color: var(--text); }
 
   .main { flex: 1; display: flex; }
-  .sidebar { width: 220px; min-height: calc(100vh - 65px); background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
-  .sidebar-step { display: flex; align-items: center; gap: 12px; padding: 12px 24px; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
-  .sidebar-step.active { color: var(--text); border-left-color: var(--accent); background: rgba(200,245,58,0.05); }
-  .sidebar-step.done { color: var(--success); }
-  .step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-  .sidebar-step.active .step-num { background: var(--accent); color: #000; border-color: var(--accent); }
-  .sidebar-step.done .step-num { background: var(--success); color: #000; border-color: var(--success); }
+
+  /* ── App Shell (persistent sidebar layout) ── */
+  .app-shell { position: fixed; inset: 0; display: flex; gap: 24px; padding: 24px; background: #f5f5f5; font-family: var(--font-display); box-sizing: border-box; }
+  .app-sidebar { width: 266px; flex-shrink: 0; background: var(--background-light); border-radius: 16px; display: flex; flex-direction: column; justify-content: space-between; overflow: visible; padding: 15px 13px; transition: width 0.2s ease; position: relative; }
+  .app-sidebar.collapsed { width: 60px; padding: 10px 6px; }
+  .app-sidebar.collapsed .as-label,
+  .app-sidebar.collapsed .as-account-label,
+  .app-sidebar.collapsed .as-logo-text { opacity: 0; width: 0; overflow: hidden; white-space: nowrap; pointer-events: none; position: absolute; }
+  .app-sidebar.collapsed .as-section-title { display: none; }
+  .app-sidebar.collapsed .as-header { justify-content: center; }
+  .app-sidebar.collapsed .as-logo { justify-content: center; flex: none; }
+  .app-sidebar.collapsed .as-logo-logotype { display: none; }
+  .app-sidebar.collapsed .as-logo-logomark { margin-left: 0; }
+  .app-sidebar.collapsed .as-nav-item { justify-content: center; padding: 10px 0; }
+  .app-sidebar.collapsed .as-count { display: none; }
+  .app-sidebar.collapsed .as-divider { margin: 4px 0; }
+  .app-sidebar.collapsed .as-bottom { align-items: center; }
+  .app-sidebar.collapsed .as-account { justify-content: center; padding: 8px 0; }
+  .app-sidebar.collapsed .as-signout { font-size: 0; padding: 10px 0; justify-content: center; }
+  .app-sidebar.collapsed .as-signout svg { margin: 0; }
+  .app-sidebar.collapsed .as-signout .as-label { display: none; }
+  .as-top { display: flex; flex-direction: column; gap: 24px; flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+  .as-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 0; }
+  .as-logo { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .as-logo-logotype { height: 18px; flex-shrink: 1; min-width: 0; }
+  .as-logo-logomark { height: 24px; flex-shrink: 0; margin-left: auto; }
+  .as-toggle { position: absolute; top: 20px; right: -20px; width: 20px; height: 16px; border: none; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); padding: 0; border-radius: 0 8px 8px 0; z-index: 2; box-shadow: 2px 0 4px rgba(0,0,0,0.04); }
+  .as-toggle:hover { color: var(--text-primary); }
+  .as-nav { display: flex; flex-direction: column; gap: 2px; }
+  .as-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 56px; cursor: pointer; border: none; background: none; font-family: var(--font-display); font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all 0.15s; text-align: left; width: 100%; }
+  .as-nav-item:hover { background: var(--background-neutral); color: var(--text-primary); }
+  .as-nav-item.active { background: rgba(0,13,255,0.06); color: var(--brand-01); font-weight: 600; }
+  .as-nav-item.done { color: var(--success); }
+  .as-nav-item svg { flex-shrink: 0; }
+  .as-label { transition: opacity 0.2s, width 0.2s; white-space: nowrap; }
+  .as-divider { height: 1px; background: var(--border); margin: 8px 4px; }
+  .as-section-title { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-tertiary); padding: 8px 12px 2px; transition: opacity 0.2s; }
+  .as-count { min-width: 18px; height: 18px; border-radius: 36px; background: var(--background-neutral); color: var(--text-tertiary); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; margin-left: auto; }
+  .as-bottom { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .as-account { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 56px; border: none; background: none; cursor: pointer; font-family: var(--font-display); width: 100%; text-align: left; }
+  .as-account:hover { background: var(--background-neutral); }
+  .as-account-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand-01); color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .as-account-label { font-size: 13px; font-weight: 600; color: var(--text-primary); transition: opacity 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .as-signout { width: 100%; height: 40px; border: 1px solid var(--border); border-radius: 56px; display: flex; align-items: center; justify-content: center; gap: 6px; background: none; cursor: pointer; font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--text-secondary); transition: all 0.15s; }
+  .as-signout:hover { background: var(--background-neutral); border-color: var(--text-tertiary); }
+  .app-main { flex: 1; overflow-y: auto; min-width: 0; border-radius: 16px; }
+
+  /* ── Mobile Tab Bar ── */
+  .mobile-tab-bar { display: none; }
+
+  @media (max-width: 768px) {
+    .app-shell { padding: 0; gap: 0; }
+    .app-sidebar { display: none; }
+    .app-main { border-radius: 0; padding-bottom: 64px; }
+    .mobile-tab-bar { display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 56px; background: var(--background-light); border-top: 1px solid var(--border); z-index: 200; align-items: stretch; }
+    .mtb-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: none; background: none; cursor: pointer; font-family: var(--font-display); font-size: 10px; font-weight: 600; color: var(--text-tertiary); padding: 4px 2px; transition: color 0.15s; }
+    .mtb-tab.active { color: var(--brand-01); }
+    .mtb-tab svg { flex-shrink: 0; }
+  }
 
   .content { flex: 1; padding: 40px; max-width: 1200px; }
-  .page-header { margin-bottom: 36px; }
-  .page-title { font-family: var(--font-display); font-size: 48px; letter-spacing: 2px; line-height: 1; }
+  .page-header { margin-bottom: 32px; }
+  .page-title { font-family: var(--font-display); font-size: 32px; font-weight: 600; color: var(--text); line-height: 1.2; letter-spacing: 0; }
   .page-title span { color: var(--accent); }
-  .page-sub { color: var(--muted); margin-top: 8px; font-size: 14px; }
+  .page-sub { color: var(--muted); margin-top: 6px; font-size: 14px; line-height: 1.4; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
-  .card-title { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
+  .card-title { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
-  .field { margin-bottom: 16px; }
-  .label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
-  .input, .select { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 10px 14px; transition: border-color 0.2s; outline: none; }
-  .input:focus, .select:focus { border-color: var(--accent); }
+  .field { margin-bottom: 18px; }
+  .label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
+  .input, .select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 11px 20px; transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
+  .input:focus, .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,13,255,0.08); }
   .input::placeholder { color: var(--muted); }
   .input.error { border-color: var(--danger); }
-  .select option { background: var(--surface2); }
-  .field-error { font-size: 11px; color: var(--danger); margin-top: 4px; }
+  .select option { background: var(--surface); }
+  .field-error { font-size: 11px; color: var(--danger); margin-top: 6px; }
 
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
 
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: var(--radius); border: none; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px; white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 11px 22px; border-radius: 56px; border: none; font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px; white-space: nowrap; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-primary { background: var(--accent); color: #000; }
-  .btn-primary:hover:not(:disabled) { background: #d8ff4a; transform: translateY(-1px); }
-  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #1a2aff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,13,255,0.2); }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-danger { background: rgba(245,58,90,0.12); color: var(--danger); border: 1px solid rgba(245,58,90,0.3); }
-  .btn-danger:hover { background: rgba(245,58,90,0.22); }
-  .btn-warn { background: rgba(245,180,58,0.12); color: var(--warn); border: 1px solid rgba(245,180,58,0.3); }
+  .btn-danger { background: rgba(229,62,62,0.08); color: var(--danger); border: 1px solid rgba(229,62,62,0.25); }
+  .btn-danger:hover { background: rgba(229,62,62,0.15); }
+  .btn-warn { background: rgba(245,158,11,0.08); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
   .btn-ghost { background: transparent; color: var(--muted); border: none; }
   .btn-ghost:hover { color: var(--text); }
-  .btn-sm { padding: 5px 11px; font-size: 12px; }
-  .btn-icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; transition: all 0.2s; font-size: 15px; line-height: 1; }
-  .btn-icon:hover { color: var(--danger); border-color: var(--danger); background: rgba(245,58,90,0.08); }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+  .btn-icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 56px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; transition: all 0.2s; font-size: 15px; line-height: 1; }
+  .btn-icon:hover { color: var(--danger); border-color: var(--danger); background: rgba(229,62,62,0.06); }
 
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; font-size: 13px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; font-size: 13px; font-weight: 500; }
   .chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
   .chip button:hover { color: var(--danger); }
 
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
-  .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: -1px; }
+  .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: -1px; border-radius: 0; }
   .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-  .list-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
+  .list-item { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; margin-bottom: 6px; }
   .list-item-content { flex: 1; font-size: 14px; }
 
-  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
-  td { padding: 9px 14px; border-bottom: 1px solid rgba(42,42,58,0.5); color: var(--text); vertical-align: middle; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(255,255,255,0.02); }
+  tr:hover td { background: rgba(0,0,0,0.02); }
 
-  .score-input { width: 76px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--font-body); font-size: 13px; padding: 6px 8px; outline: none; text-align: center; }
-  .score-input:focus { border-color: var(--accent); }
+  .score-input { width: 76px; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; color: var(--text); font-family: var(--font-body); font-size: 13px; padding: 7px 10px; outline: none; text-align: center; transition: border-color 0.2s; }
+  .score-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,13,255,0.08); }
   .score-input.de { width: 58px; }
 
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
@@ -1958,41 +2011,41 @@ const css = `
   .group-line { flex: 1; height: 1px; background: var(--border); }
   .sub-group-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin: 10px 0 6px; }
 
-  .badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-  .badge-gold { background: rgba(255,200,0,0.15); color: #ffc800; }
-  .badge-silver { background: rgba(180,180,200,0.15); color: #b4b4c8; }
-  .badge-bronze { background: rgba(180,100,40,0.15); color: #c87028; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 56px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+  .badge-gold { background: rgba(255,200,0,0.12); color: #b8860b; }
+  .badge-silver { background: rgba(140,140,160,0.12); color: #6b6b85; }
+  .badge-bronze { background: rgba(180,100,40,0.12); color: #a0522d; }
   .badge-rank { background: var(--surface2); color: var(--muted); }
 
-  .summary-box { background: rgba(200,245,58,0.05); border: 1px solid rgba(200,245,58,0.2); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; color: var(--accent); }
-  .warn-box { background: rgba(245,180,58,0.08); border: 1px solid rgba(245,180,58,0.25); border-radius: var(--radius); padding: 12px 16px; font-size: 13px; color: var(--warn); margin-bottom: 12px; }
-  .error-box { background: rgba(245,58,90,0.08); border: 1px solid rgba(245,58,90,0.25); border-radius: var(--radius); padding: 12px 16px; font-size: 13px; color: var(--danger); margin-bottom: 12px; }
+  .summary-box { background: rgba(0,13,255,0.04); border: 1px solid rgba(0,13,255,0.15); border-radius: 12px; padding: 12px 18px; font-size: 13px; color: var(--accent); }
+  .warn-box { background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 12px 18px; font-size: 13px; color: var(--warn); margin-bottom: 12px; }
+  .error-box { background: rgba(229,62,62,0.06); border: 1px solid rgba(229,62,62,0.2); border-radius: 12px; padding: 12px 18px; font-size: 13px; color: var(--danger); margin-bottom: 12px; }
 
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 999; }
-  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 460px; width: 90%; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
+  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 460px; width: 90%; }
 
-  .pc-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 4px; overflow: hidden; }
+  .pc-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-top: 4px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
   .pc-option { padding: 8px 14px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; color: var(--text); line-height: 1.3; }
   .pc-option:last-child { border-bottom: none; }
-  .pc-option:hover { background: var(--surface); color: var(--accent); }
+  .pc-option:hover { background: var(--surface2); color: var(--accent); }
 
   .step-nav { display: flex; justify-content: space-between; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
 
   .inline-row { display: flex; gap: 8px; align-items: flex-end; }
   .inline-row .field { margin-bottom: 0; }
 
-  .club-edit-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; color: var(--text); font-family: var(--font-body); font-size: 13px; padding: 3px 8px; outline: none; min-width: 120px; }
+  .club-edit-input { background: var(--surface); border: 1px solid var(--accent); border-radius: 56px; color: var(--text); font-family: var(--font-body); font-size: 13px; padding: 5px 14px; outline: none; min-width: 120px; }
 
-  .csv-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .csv-zone { border: 2px dashed var(--border); border-radius: 16px; padding: 24px; text-align: center; color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.2s; }
   .csv-zone:hover { border-color: var(--accent); color: var(--accent); }
 
   .empty { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
 
-  .apparatus-section { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .apparatus-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
   .apparatus-section-header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-bottom: 1px solid var(--border); }
   .apparatus-section-body { padding: 12px 16px; }
 
-  .results-level-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+  .results-level-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
   .results-level-header { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
   .results-level-header span { color: var(--accent); }
 
@@ -2005,17 +2058,6 @@ const css = `
     .nav-logo { font-size: 22px; }
 
     .main { flex-direction: column; }
-    .sidebar {
-      width: 100%; min-height: unset; border-right: none;
-      border-bottom: 1px solid var(--border);
-      display: flex; padding: 0; overflow-x: auto;
-    }
-    .sidebar-step {
-      flex-direction: row; padding: 12px 16px;
-      border-left: none; border-bottom: 3px solid transparent;
-      white-space: nowrap; flex-shrink: 0;
-    }
-    .sidebar-step.active { border-left-color: transparent; border-bottom-color: var(--accent); background: rgba(200,245,58,0.05); }
 
     .content { padding: 20px 16px; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
@@ -2068,7 +2110,7 @@ const css = `
 // ============================================================
 // PHASE 1 STEP 1
 // ============================================================
-function Step1_CompDetails({ data, setData, onNext }) {
+function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [editingClubId, setEditingClubId] = useState(null);
   const [editingClubVal, setEditingClubVal] = useState("");
@@ -2184,13 +2226,20 @@ function Step1_CompDetails({ data, setData, onNext }) {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-title">Competition <span>Details</span></div>
-        <div className="page-sub">Set up the core details of your competition</div>
+      <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <div className="page-title">Competition <span>Details</span></div>
+          <div className="page-sub">Set up the core details of your competition</div>
+        </div>
+        {onSave && (
+          <button className="btn btn-secondary btn-sm" onClick={onSave} style={{ flexShrink: 0, fontSize: 12, padding: "8px 16px" }}>
+            {syncStatus === "saving" ? "Saving…" : syncStatus === "saved" ? "Saved ✓" : "Save"}
+          </button>
+        )}
       </div>
 
       {/* Basic Info */}
-      <div className="card">
+      <div className="card" id="setup-basic">
         <div className="card-title">Basic Information</div>
         <div className="grid-2">
           <div className="field">
@@ -2223,7 +2272,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Branding */}
-      <div className="card">
+      <div className="card" id="setup-branding">
         <div className="card-title">Organiser Branding</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>
           Used on all printed documents — agenda, judge sheets, attendance list and results.
@@ -2239,17 +2288,17 @@ function Step1_CompDetails({ data, setData, onNext }) {
           <div className="field" style={{ margin: 0 }}>
             <label className="label">Brand Colour</label>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input type="color" value={data.brandColour || "#c8f53a"}
+              <input type="color" value={data.brandColour || "#000dff"}
                 onChange={e => setData(d => ({ ...d, brandColour: e.target.value }))}
-                style={{ width: 44, height: 44, border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", padding: 2, background: "var(--bg)" }} />
-              <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{data.brandColour || "#c8f53a"}</span>
+                style={{ width: 44, height: 44, border: "1px solid var(--border)", borderRadius: 12, cursor: "pointer", padding: 2, background: "var(--bg)" }} />
+              <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{data.brandColour || "#000dff"}</span>
             </div>
           </div>
           <div className="field" style={{ margin: 0, flex: 1, minWidth: 200 }}>
             <label className="label">Club Logo</label>
             {data.logo ? (
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <img src={data.logo} alt="Logo" style={{ height: 52, maxWidth: 160, objectFit: "contain", borderRadius: 6, border: "1px solid var(--border)", padding: 4, background: "#fff" }} />
+                <img src={data.logo} alt="Logo" style={{ height: 52, maxWidth: 160, objectFit: "contain", borderRadius: 12, border: "1px solid var(--border)", padding: 4, background: "#fff" }} />
                 <button className="btn btn-sm btn-ghost" style={{ color: "var(--danger)" }}
                   onClick={() => setData(d => ({ ...d, logo: "" }))}>Remove</button>
               </div>
@@ -2275,7 +2324,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
 
-      <div className="card">
+      <div className="card" id="setup-clubs">
         <div className="card-title">Participating Clubs</div>
         <div className="inline-row" style={{ marginBottom: 14 }}>
           <ClubSearch
@@ -2312,7 +2361,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Rounds */}
-      <div className="card">
+      <div className="card" id="setup-rounds">
         <div className="card-title">Rounds &amp; Times</div>
         <div className="field" style={{ maxWidth: 200 }}>
           <label className="label">Number of Rounds</label>
@@ -2348,7 +2397,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Apparatus */}
-      <div className="card">
+      <div className="card" id="setup-apparatus">
         <div className="card-title">Apparatus</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {APPARATUS_OPTIONS.map(a => {
@@ -2356,7 +2405,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
             return (
               <label key={a} style={{
                 display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
-                background: checked ? "rgba(200,245,58,0.06)" : "var(--bg)",
+                background: checked ? "rgba(0,13,255,0.04)" : "var(--bg)",
                 border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
                 borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
                 color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
@@ -2370,7 +2419,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Skill Levels */}
-      <div className="card">
+      <div className="card" id="setup-levels">
         <div className="card-title">Skill Levels</div>
         <div style={{ marginBottom: 14 }}>
           <label className="label">Add from UK Gymnastics list</label>
@@ -2417,15 +2466,15 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Scoring Settings */}
-      <div className="card">
+      <div className="card" id="setup-scoring">
         <div className="card-title">Scoring Format</div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
 
           {/* Simple option */}
           <div onClick={() => setData(d => ({ ...d, useDEScoring: false }))}
-            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 10, padding: "14px 16px",
+            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 16, padding: "14px 16px",
               border: `2px solid ${!data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-              background: !data.useDEScoring ? "rgba(200,245,58,0.06)" : "var(--surface2)",
+              background: !data.useDEScoring ? "rgba(0,13,255,0.04)" : "var(--surface2)",
               transition: "all 0.15s" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
               <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${!data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
@@ -2441,9 +2490,9 @@ function Step1_CompDetails({ data, setData, onNext }) {
 
           {/* FIG option */}
           <div onClick={() => setData(d => ({ ...d, useDEScoring: true }))}
-            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 10, padding: "14px 16px",
+            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 16, padding: "14px 16px",
               border: `2px solid ${data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-              background: data.useDEScoring ? "rgba(200,245,58,0.06)" : "var(--surface2)",
+              background: data.useDEScoring ? "rgba(0,13,255,0.04)" : "var(--surface2)",
               transition: "all 0.15s" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
               <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
@@ -2457,8 +2506,8 @@ function Step1_CompDetails({ data, setData, onNext }) {
               diagnostic reports with quadrant analysis and component breakdown.
             </div>
             {data.useDEScoring && (
-              <div style={{ marginTop: 10, marginLeft: 26, padding: "7px 10px", borderRadius: 6,
-                background: "rgba(200,245,58,0.08)", border: "1px solid rgba(200,245,58,0.2)",
+              <div style={{ marginTop: 10, marginLeft: 26, padding: "7px 10px", borderRadius: 12,
+                background: "rgba(0,13,255,0.05)", border: "1px solid rgba(0,13,255,0.12)",
                 fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
                 DV (0–10) · Bonus · E scores per judge (raw, 0–10) · Time fault · OOB · Fall · Neutral deduction
               </div>
@@ -2469,13 +2518,13 @@ function Step1_CompDetails({ data, setData, onNext }) {
       </div>
 
       {/* Club Submissions */}
-      <div className="card">
+      <div className="card" id="setup-submissions">
         <div className="card-title">Club Submissions <span style={{ fontSize: 11, fontWeight: 400, color: "var(--accent)", marginLeft: 8 }}>Optional</span></div>
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
           Allow clubs to submit their gymnast lists online before the competition. You review and approve each submission — nothing is added automatically.
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px",
-          background: "var(--surface2)", borderRadius: 8, border: `1px solid ${data.allowSubmissions ? "rgba(200,245,58,0.4)" : "var(--border)"}` }}>
+          background: "var(--surface2)", borderRadius: 16, border: `1px solid ${data.allowSubmissions ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 13 }}>
               {data.allowSubmissions ? "Submissions open" : "Submissions closed"}
@@ -2502,8 +2551,8 @@ function Step1_CompDetails({ data, setData, onNext }) {
           </button>
         </div>
         {data.allowSubmissions && (
-          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 6,
-            background: "rgba(200,245,58,0.06)", border: "1px solid rgba(200,245,58,0.2)",
+          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12,
+            background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)",
             fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
             Clubs will see your competition name, date and venue on their submission form. They select from your configured levels and age categories. You assign round and gymnast numbers during review.
           </div>
@@ -2512,7 +2561,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
 
       {/* Judges — per apparatus */}
       {data.apparatus.length > 0 && (
-        <div className="card">
+        <div className="card" id="setup-judges">
           <div className="card-title">
             Judges
             {data.useDEScoring && (
@@ -2592,7 +2641,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
                   {isAdding ? (
                     <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
                       {data.useDEScoring && (
-                        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+                        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 56, overflow: "hidden", flexShrink: 0 }}>
                           {["D", "E"].map(role => (
                             <button key={role} onClick={() => setNewJudge(j => ({ ...j, role }))}
                               style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
@@ -2628,7 +2677,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
 
           {/* FIG validation warning */}
           {data.useDEScoring && data.apparatus.some(app => data.judges.filter(j => j.apparatus === app && (j.role === "E" || !j.role)).length === 0) && (
-            <div style={{ margin: "10px 0 0", padding: "10px 14px", borderRadius: 8,
+            <div style={{ margin: "10px 0 0", padding: "10px 14px", borderRadius: 12,
               background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
               fontSize: 12, color: "#c8862a" }}>
               ⚠ FIG scoring is enabled — each apparatus needs at least one E judge before scores can be entered.
@@ -2641,7 +2690,7 @@ function Step1_CompDetails({ data, setData, onNext }) {
       <div className="step-nav">
         <div />
         <button className="btn btn-primary" onClick={onNext} disabled={!canProceed}>
-          Save Competition →
+          Save & Continue →
         </button>
       </div>
 
@@ -2680,7 +2729,7 @@ function formatTime(t) {
 }
 
 function getPrintHeader(compData, subtitle) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   return `
     <div class="print-header">
       <div class="print-header-top" style="border-bottom: 3px solid ${colour};">
@@ -2738,7 +2787,7 @@ function printDocument(htmlContent) {
 
 // Build agenda content
 function buildAgendaHTML(compData, gymnasts, compId) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const rounds = compData.rounds || [];
   const apparatus = compData.apparatus || [];
 
@@ -2871,7 +2920,7 @@ function buildAgendaHTML(compData, gymnasts, compId) {
 
 // Build judge sheets
 function buildJudgeSheetsHTML(compData, gymnasts) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
   const fig = !!compData.useDEScoring;
@@ -3013,7 +3062,7 @@ function buildJudgeSheetsHTML(compData, gymnasts) {
 
 // Build attendance list
 function buildAttendanceHTML(compData, gymnasts) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const sorted = [...gymnasts].sort((a, b) => (a.number || 0) - (b.number || 0));
 
   // Group by club
@@ -3109,7 +3158,7 @@ function buildAttendanceHTML(compData, gymnasts) {
 // PHASE 2 STEP 3 — EXPORTS & DOCUMENTS
 // ============================================================
 function Phase2_Exports({ compData, gymnasts, scores }) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const hasGymnasts = gymnasts.length > 0;
   const hasScores = Object.keys(scores).length > 0;
 
@@ -3218,7 +3267,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
             {doc.available && !doc.coming ? (
               <button
                 className="btn btn-primary"
-                style={{ width: "100%", background: colour, color: "#000" }}
+                style={{ width: "100%", background: colour, color: "#fff" }}
                 onClick={doc.action}>
                 ⬇ Generate PDF
               </button>
@@ -3235,7 +3284,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
         ))}
       </div>
 
-      <div className="card" style={{ marginTop: 16, background: "rgba(200,245,58,0.04)", borderColor: "rgba(200,245,58,0.2)" }}>
+      <div className="card" style={{ marginTop: 16, background: "rgba(0,13,255,0.03)", borderColor: "rgba(0,13,255,0.12)" }}>
         <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
           <strong style={{ color: "var(--text)" }}>How it works:</strong> Documents open in a new tab formatted for printing.
           Use your browser's <strong>Print</strong> menu (Ctrl+P / ⌘P) and choose <strong>"Save as PDF"</strong> as the destination.
@@ -3250,7 +3299,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
 // GYMNAST DIAGNOSTIC REPORT PDF
 // ============================================================
 function buildDiagnosticHTML(compData, gymnasts, scores) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
 
@@ -3575,7 +3624,7 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
 
 // Build results sheet PDF
 function buildResultsHTML(compData, gymnasts, scores) {
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
 
@@ -4363,7 +4412,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
       )}
 
       {fig && (
-        <div style={{ background: "rgba(200,245,58,0.06)", border: "1px solid rgba(200,245,58,0.2)",
+        <div style={{ background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)",
           borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 12,
           color: "var(--muted)", lineHeight: 1.7 }}>
           <strong style={{ color: "var(--text)" }}>FIG Artistic Scoring</strong>
@@ -4472,10 +4521,10 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
                                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                                       <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--accent)", fontWeight: 700 }}>Total</span>
                                       <div style={{ width: 64, height: 30, display: "flex", alignItems: "center",
-                                        justifyContent: "center", background: appTotal > 0 ? "rgba(200,245,58,0.1)" : "var(--surface2)",
+                                        justifyContent: "center", background: appTotal > 0 ? "rgba(0,13,255,0.06)" : "var(--surface2)",
                                         borderRadius: 5, fontSize: 13, fontWeight: 800,
                                         color: appTotal > 0 ? "var(--accent)" : "var(--muted)",
-                                        border: `1px solid ${appTotal > 0 ? "rgba(200,245,58,0.4)" : "var(--border)"}` }}>
+                                        border: `1px solid ${appTotal > 0 ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
                                         {appTotal > 0 ? appTotal.toFixed(3) : "—"}
                                       </div>
                                     </div>
@@ -4597,8 +4646,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
 
       {/* Query Modal */}
       {queryModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 28, width: "100%", maxWidth: 420 }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 28, width: "100%", maxWidth: 420 }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Flag Coach Query</div>
             <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
               {gymnasts.find(g => g.id === queryModal.gid)?.name} · {queryModal.app}
@@ -5197,32 +5246,38 @@ function RegisterScreen({ onRegister, onGoLogin }) {
 // ============================================================
 // ORGANISER DASHBOARD — list of events for logged-in account
 // ============================================================
-function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onSettings }) {
+function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange }) {
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
 
-  const reload = () => setMyEvents(events.getForAccount(account.id).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+  const reload = () => {
+    const all = events.getForAccount(account.id).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    setMyEvents(all);
+    if (onFilterCountsChange) {
+      onFilterCountsChange({
+        draft: all.filter(e => e.status === "draft").length,
+        active: all.filter(e => e.status === "active").length,
+        completed: all.filter(e => e.status === "completed").length,
+        archived: all.filter(e => e.status === "archived").length,
+      });
+    }
+  };
 
   useEffect(() => {
     reload();
-    // Sync competitions from Supabase so they appear on any device after login
     supabaseAuth.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
       supabase.fetchListForUser(session.access_token, session.user.id).then(({ data: supabaseComps, error }) => {
         if (error) return;
         const all = events.getAll();
         let changed = false;
-        // Build set of competition IDs that actually belong to this user in Supabase
         const ownedCompIds = new Set((supabaseComps || []).map(c => c.id));
-        // Remove any local events for this account that are NOT in Supabase
-        // (they were leaked from another account or deleted server-side)
         const toRemove = all.filter(e => e.accountId === account.id && e.compId && !ownedCompIds.has(e.compId));
         if (toRemove.length > 0) {
           toRemove.forEach(e => { const idx = all.indexOf(e); if (idx !== -1) all.splice(idx, 1); });
           changed = true;
         }
-        // Merge in competitions from Supabase
         (supabaseComps || []).forEach(comp => {
           const existing = all.find(e => e.compId === comp.id && e.accountId === account.id);
           const snapshot = comp.data
@@ -5249,9 +5304,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
 
   const handleDelete = (ev) => {
     if (ev.status !== "archived") {
-      // First archive it
-      events.update(ev.id, { status: "archived" });
-      reload();
+      setArchiveConfirm(ev);
       return;
     }
     setDeleteConfirm(ev);
@@ -5260,7 +5313,6 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
   const confirmDelete = async () => {
     const ev = deleteConfirm;
     setDeleteConfirm(null);
-    // Delete from Supabase first (so it doesn't resurface on other devices)
     if (ev.compId) {
       const { data: { session } } = await supabaseAuth.auth.getSession();
       if (session) {
@@ -5277,130 +5329,228 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
   const copyLink = async (ev) => {
     const link = getPublicLink(ev);
     try { await navigator.clipboard.writeText(link); } catch {}
-    // Show brief feedback
     setMyEvents(prev => prev.map(e => e.id === ev.id ? { ...e, _copied: true } : e));
     setTimeout(() => setMyEvents(prev => prev.map(e => e.id === ev.id ? { ...e, _copied: false } : e)), 1800);
   };
 
-  const filtered = statusFilter === "all" ? myEvents : myEvents.filter(e => e.status === statusFilter);
+  const filtered = statusFilter === "all"
+    ? myEvents.filter(e => e.status !== "archived")
+    : myEvents.filter(e => e.status === statusFilter);
+  const currentEvents = filtered.filter(e => e.status === "draft" || e.status === "active" || e.status === "live");
+  const completedEvents = filtered.filter(e => e.status === "completed");
 
-  return (
-    <div style={{ flex: 1, padding: "32px 40px", maxWidth: 900, margin: "0 auto", width: "100%" }}>
+  const firstName = (account.name || account.email?.split("@")[0] || "").split(" ")[0];
 
-      {/* Header row */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
-        <div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 32, letterSpacing: 2, lineHeight: 1, marginBottom: 6 }}>
-            My Competitions
+  // Left border + dot colours per status
+  const statusConfig = {
+    draft:     { border: "#f59e0b", dot: "#f59e0b" },
+    active:    { border: "var(--brand-01)", dot: "var(--brand-01)" },
+    live:      { border: "#56ca3a", dot: "#22c55e" },
+    completed: { border: "#56ca3a", dot: "var(--text-tertiary)" },
+    archived:  { border: "#acacac", dot: "#acacac" },
+  };
+
+  const sidebarFilters = [
+    { value: "draft", label: "Draft" },
+    { value: "active", label: "Active" },
+    { value: "completed", label: "Complete" },
+    { value: "archived", label: "Archived" },
+  ];
+
+  const countFor = (status) => myEvents.filter(e => e.status === status).length;
+
+  const renderCard = (ev) => {
+    const cd = ev.snapshot?.compData || {};
+    const sc = statusConfig[ev.status] || statusConfig.draft;
+    const gymnasts = ev.snapshot?.gymnasts || [];
+    const clubs = cd.clubs || [];
+    const isCompleted = ev.status === "completed" || ev.status === "archived";
+
+    const isArchived = ev.status === "archived";
+
+    return (
+      <div key={ev.id} className="od-card-wrap">
+        <div className="od-card" style={{ borderLeftColor: sc.border, position: "relative" }}>
+          {/* Delete button — top right (hidden for archived since CTA handles it) */}
+          {!isArchived && (
+            <button onClick={() => handleDelete(ev)}
+              style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font-display)", padding: "4px 8px" }}>
+              Archive
+            </button>
+          )}
+          <div className="od-card-top">
+            <div className="od-card-status-pill">
+              <span className="od-card-status-dot" style={{ background: sc.dot }} />
+              <span style={{ fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
+                {statusMeta(ev.status).label}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="od-card-title">{cd.name || "Untitled Competition"}</div>
+              <div className="od-card-meta">
+                {cd.date && (
+                  <div className="od-card-meta-row">
+                    <span className="od-card-meta-icon">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg>
+                    </span>
+                    {new Date(cd.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                )}
+                {cd.location && (
+                  <div className="od-card-meta-row">
+                    <span className="od-card-meta-icon">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="8" cy="7" r="2"/><path d="M8 15S3 10 3 7a5 5 0 0110 0c0 3-5 8-5 8z"/></svg>
+                    </span>
+                    {cd.location}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="od-card-divider" />
+            <div>
+              <div className="od-card-clubs-title">Clubs Details</div>
+              <div className="od-card-clubs-row">
+                <div className="od-card-clubs-item">
+                  <span className="od-card-clubs-badge" style={clubs.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{clubs.length}</span>
+                  Clubs Registered
+                </div>
+                <div className="od-card-clubs-item">
+                  <span className="od-card-clubs-badge" style={gymnasts.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{gymnasts.length}</span>
+                  Gymnasts Registered
+                </div>
+              </div>
+            </div>
           </div>
-          <div style={{ color: "var(--muted)", fontSize: 13 }}>
-            {account.name}{account.clubName ? ` · ${account.clubName}` : ""}
+          <div className="od-card-actions">
+            <button className={`od-card-btn-open${ev.status === "draft" ? " outlined" : ""}`} onClick={() => isArchived ? handleDelete(ev) : onOpen(ev)}
+              style={isArchived ? { background: "#e53e3e" } : undefined}>
+              {ev.status === "draft" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>}
+              {{ draft: "Edit Comp", active: "Open Comp", completed: "View Results", archived: "Delete Event" }[ev.status] || "Open Comp"}
+              {ev.status !== "draft" && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(-90deg)" }}><path d="M4 6l4 4 4-4" stroke={ev.status === "archived" ? "white" : "white"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              {ev.status === "active" && (
+                <button className="od-card-btn-icon" onClick={() => onEdit(ev)} title="Edit Comp">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                </button>
+              )}
+              <button className="od-card-btn-icon" onClick={() => onDuplicate(ev)} title="Duplicate">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3.5A.5.5 0 013.5 3H11"/></svg>
+              </button>
+            </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button className="btn btn-ghost btn-sm" onClick={onSettings}>⚙ Account</button>
-          <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign Out</button>
-          <button className="btn btn-primary" onClick={onNew} style={{ letterSpacing: 0.5 }}>+ New Competition</button>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <style>{`
+        .od-main{flex:1;display:flex;flex-direction:column;gap:22px;padding:40px;overflow-y:auto;min-width:0;}
+        .od-header{display:flex;flex-direction:column;gap:8px;max-width:434px;}
+        .od-greeting{font-size:38px;font-weight:600;color:var(--text-primary);line-height:1.2;}
+        .od-subtitle{font-size:14px;color:var(--text-tertiary);line-height:1.4;}
+        .od-content{display:flex;flex-direction:column;gap:30px;flex:1;min-height:0;}
+        .od-filter-pill{display:inline-flex;align-items:center;justify-content:center;padding:4px 16px;border-radius:48px;background:var(--background-light);font-size:14px;color:var(--text-primary);font-family:var(--font-display);border:none;cursor:pointer;align-self:flex-start;}
+        .od-cards-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;max-width:1200px;}
+        .od-card-wrap{display:flex;}
+        .od-card{flex:1;background:var(--background-light);border-radius:8px;overflow:hidden;padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between;border-left:6px solid transparent;}
+        .od-card-top{display:flex;flex-direction:column;gap:24px;}
+        .od-card-status-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 16px;border-radius:48px;background:var(--background-neutral);font-size:12px;color:var(--text-primary);font-family:var(--font-display);align-self:flex-start;}
+        .od-card-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+        .od-card-title{font-size:20px;font-weight:600;color:var(--text-primary);line-height:1.2;max-height:48px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-overflow:ellipsis;}
+        .od-card-meta{display:flex;flex-direction:column;gap:8px;}
+        .od-card-meta-row{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-tertiary);font-family:var(--font-display);}
+        .od-card-meta-icon{width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);flex-shrink:0;}
+        .od-card-divider{height:1px;background:#f5f5f5;}
+        .od-card-clubs-title{font-size:12px;font-weight:600;color:var(--text-primary);line-height:1.1;margin-bottom:8px;}
+        .od-card-clubs-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;}
+        .od-card-clubs-item{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-tertiary);font-family:var(--font-display);}
+        .od-card-clubs-badge{width:16px;height:16px;border-radius:36px;background:var(--brand-03);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;color:var(--text-alternate);flex-shrink:0;}
+        .od-card-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:40px;}
+        .od-card-btn-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:5px 11px;border-radius:80px;background:var(--brand-01);border:none;cursor:pointer;font-family:var(--font-display);font-size:12px;font-weight:600;color:white;letter-spacing:0.3px;}
+        .od-card-btn-open:hover{opacity:0.9;}
+        .od-card-btn-open.outlined{background:none;border:1.5px solid var(--brand-01);color:var(--brand-01);}
+        .od-card-btn-open.outlined:hover{background:rgba(0,13,255,0.06);}
+        .od-card-btn-icon{width:30px;height:30px;border-radius:80px;border:none;background:#efefef;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;}
+        .od-card-btn-icon:hover{background:var(--background-neutral);}
+        .od-card-btn-icon.danger{border:1px solid red;background:none;}
+        .od-card-btn-icon.danger:hover{background:#fee;}
+        .od-empty-box{flex:1;min-height:322px;border:1px dashed #080808;background:#f2f2f2;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:16px 18px;}
+        .od-empty-box-btn{padding:16px 32px;border-radius:56px;background:var(--brand-01);border:none;cursor:pointer;font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--text-alternate);}
+        .od-empty-box-btn:hover{opacity:0.92;}
+        .od-section-title{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:16px;}
+        .od-empty-msg{text-align:center;padding:40px 24px;color:var(--text-tertiary);font-size:14px;width:100%;}
+        @media(max-width:768px){
+          .od-main{padding:24px 16px;}
+          .od-cards-row{flex-direction:column;}
+          .od-card-wrap{min-width:0;}
+        }
+      `}</style>
+      <div className="od-main">
+        <div className="od-header">
+          <div className="od-greeting">{`Hello ${firstName}  👋`}</div>
+          <div className="od-subtitle">
+            This is your Organiser Vault - within here are all of your competitions - you can filter these on your toolbar into the different status of competitions you currently have.
+          </div>
+        </div>
+
+        {/* Cards area */}
+        <div className="od-content">
+          {/* Active filter pill */}
+          {statusFilter !== "all" && (
+            <button className="od-filter-pill" onClick={() => setStatusFilter("all")}>
+              {sidebarFilters.find(f => f.value === statusFilter)?.label || statusFilter} <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.5 }}>✕</span>
+            </button>
+          )}
+
+          {/* Empty state — no events at all */}
+          {myEvents.length === 0 ? (
+            <div className="od-empty-box">
+              <button className="od-empty-box-btn" onClick={onNew}>+ New Competition</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="od-empty-msg">No {sidebarFilters.find(f => f.value === statusFilter)?.label?.toLowerCase() || statusFilter} competitions</div>
+          ) : statusFilter !== "all" ? (
+            /* Filtered view — flat list */
+            <div className="od-cards-row">
+              {filtered.map(ev => renderCard(ev))}
+            </div>
+          ) : (
+            /* Default view — sectioned */
+            <>
+              {currentEvents.length > 0 && (
+                <div>
+                  <div className="od-section-title">Current Events</div>
+                  <div className="od-cards-row">
+                    {currentEvents.map(ev => renderCard(ev))}
+                  </div>
+                </div>
+              )}
+              {completedEvents.length > 0 && (
+                <div>
+                  <div className="od-section-title">Completed Events</div>
+                  <div className="od-cards-row">
+                    {completedEvents.map(ev => renderCard(ev))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Status filter tabs */}
-      {myEvents.length > 0 && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-          {[{ value: "all", label: `All (${myEvents.length})` }, ...EVENT_STATUSES.map(s => ({ value: s.value, label: `${s.label} (${myEvents.filter(e => e.status === s.value).length})` }))].map(tab => (
-            <button key={tab.value}
-              className={`btn btn-sm ${statusFilter === tab.value ? "btn-secondary" : "btn-ghost"}`}
-              onClick={() => setStatusFilter(tab.value)}
-              style={{ fontSize: 12 }}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Events list */}
-      {myEvents.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "60px 40px" }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 48, color: "var(--muted)", marginBottom: 16 }}>🏅</div>
-          <div style={{ color: "var(--text)", fontSize: 16, marginBottom: 8 }}>No competitions yet</div>
-          <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 24 }}>Create your first competition to get started</div>
-          <button className="btn btn-primary" onClick={onNew}>+ New Competition</button>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px 24px", color: "var(--muted)" }}>
-          No {statusFilter} competitions
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {filtered.map(ev => {
-            const cd = ev.snapshot?.compData || {};
-            const sm = statusMeta(ev.status);
-            const gymnasts = ev.snapshot?.gymnasts || [];
-            const isCompleted = ev.status === "completed" || ev.status === "archived";
-            return (
-              <div key={ev.id} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
-                  {/* Status stripe */}
-                  <div style={{ width: 5, background: sm.color, flexShrink: 0, borderRadius: "var(--radius) 0 0 var(--radius)" }} />
-
-                  {/* Main content */}
-                  <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3 }}>
-                          {cd.name || "Untitled Competition"}
-                        </div>
-                        <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", gap: 14, flexWrap: "wrap" }}>
-                          {cd.date && <span>📅 {new Date(cd.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
-                          {cd.location && <span>📍 {cd.location}</span>}
-                          {gymnasts.length > 0 && <span>👤 {gymnasts.length} gymnast{gymnasts.length !== 1 ? "s" : ""}</span>}
-                        </div>
-                      </div>
-
-                      {/* Status selector */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: sm.color, flexShrink: 0 }} />
-                        <select
-                          value={ev.status}
-                          onChange={e => handleStatusChange(ev.id, e.target.value)}
-                          style={{ border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer" }}>
-                          {EVENT_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Action row */}
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-                      {!isCompleted && (
-                        <button className="btn btn-primary btn-sm" onClick={() => onOpen(ev)}>
-                          {ev.status === "active" ? "Continue →" : "Open →"}
-                        </button>
-                      )}
-                      {isCompleted && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => onOpen(ev)}>
-                          View Results →
-                        </button>
-                      )}
-                      <button className="btn btn-ghost btn-sm" onClick={() => onDuplicate(ev)} title="Duplicate as new competition">
-                        ⧉ Duplicate
-                      </button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => copyLink(ev)} title="Copy public results link">
-                        {ev._copied ? "✅ Copied!" : "🔗 Share Link"}
-                      </button>
-                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto", color: ev.status === "archived" ? "var(--danger)" : "var(--muted)" }}
-                        onClick={() => handleDelete(ev)} title={ev.status === "archived" ? "Delete permanently" : "Archive"}>
-                        {ev.status === "archived" ? "🗑 Delete" : "Archive"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Delete confirmation modal */}
+      {archiveConfirm && (
+        <ConfirmModal
+          message={<>Are you sure you want to archive this event?<br/><span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 400 }}>By archiving this event you can still access it within your Archive filter on your sidebar.</span></>}
+          confirmLabel="Archive"
+          isDanger={false}
+          onConfirm={() => { events.update(archiveConfirm.id, { status: "archived" }); setArchiveConfirm(null); reload(); }}
+          onCancel={() => setArchiveConfirm(null)}
+        />
+      )}
       {deleteConfirm && (
         <ConfirmModal
           message={`Permanently delete "${deleteConfirm.snapshot?.compData?.name || "this competition"}"? This cannot be undone.`}
@@ -5410,7 +5560,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
           onCancel={() => setDeleteConfirm(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -5440,48 +5590,70 @@ function AccountSettingsModal({ account, profile, onSave, onLogout, onClose }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32, width: "100%", maxWidth: 440 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 1 }}>Account Settings</div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+    <>
+    <style>{`
+      .acct-label{font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);display:block;margin-bottom:8px;}
+      .acct-input{width:100%;padding:12px 16px;border-radius:56px;border:1px solid #e4e4e4;background:var(--background-light);font-family:var(--font-display);font-size:14px;color:var(--text-primary);outline:none;box-sizing:border-box;transition:border-color 0.15s;}
+      .acct-input:focus{border-color:var(--brand-01);}
+      .acct-input-disabled{width:100%;padding:12px 16px;border-radius:56px;border:1px solid #e4e4e4;background:var(--background-neutral);font-family:var(--font-display);font-size:14px;color:var(--text-tertiary);box-sizing:border-box;cursor:default;}
+    `}</style>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--background-light)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, fontFamily: "var(--font-display)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)" }}>Your Account</div>
+          <button
+            onClick={onClose}
+            style={{ width: 30, height: 30, borderRadius: 80, background: "#efefef", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "var(--text-tertiary)" }}
+          >✕</button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Email</label>
-            <div style={{ fontSize: 14, color: "var(--muted)", padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
-              {account.email}
-            </div>
+            <label className="acct-label">Email</label>
+            <div className="acct-input-disabled">{account.email}</div>
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Name</label>
-            <input className="input" value={fullName} onChange={e => setFullName(e.target.value)} />
+            <label className="acct-label">Name</label>
+            <input className="acct-input" value={fullName} onChange={e => setFullName(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Club / Organisation</label>
-            <input className="input" value={clubName} onChange={e => setClubName(e.target.value)} />
+            <label className="acct-label">Club / Organisation</label>
+            <input className="acct-input" value={clubName} onChange={e => setClubName(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Location</label>
-            <input className="input" value={location} onChange={e => setLocation(e.target.value)} />
+            <label className="acct-label">Location</label>
+            <input className="acct-input" value={location} onChange={e => setLocation(e.target.value)} />
           </div>
 
-          {error   && <div className="error-box">{error}</div>}
-          {success && <div style={{ color: "var(--success)", fontSize: 13, padding: "10px 14px", background: "rgba(58,245,160,0.08)", borderRadius: 6, border: "1px solid rgba(58,245,160,0.3)" }}>{success}</div>}
+          {error && <div style={{ fontSize: 13, color: "#e53e3e", padding: "10px 16px", background: "#fff5f5", borderRadius: 8 }}>{error}</div>}
+          {success && <div style={{ fontSize: 13, color: "#22c55e", padding: "10px 16px", background: "#f0fdf4", borderRadius: 8 }}>{success}</div>}
 
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleSave} disabled={saving}>
+          <button
+            onClick={handleSave} disabled={saving}
+            style={{
+              width: "100%", padding: "14px", borderRadius: 56, background: "var(--brand-01)", border: "none",
+              cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1,
+              fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 600, color: "var(--text-alternate)",
+            }}
+          >
             {saving ? "Saving…" : "Save Changes"}
           </button>
 
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <button className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }} onClick={onLogout}>
-              Sign Out
-            </button>
-          </div>
+          <div style={{ height: 1, background: "#f5f5f5" }} />
+
+          <button
+            onClick={onLogout}
+            style={{
+              width: "100%", height: 46, borderRadius: 56, border: "1px solid var(--brand-01)", background: "none",
+              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-primary)",
+            }}
+          >
+            Sign Out
+          </button>
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -5722,7 +5894,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
               )}
             </div>
             <button onClick={() => setShowReview(true)} className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
-              Review Submissions {pendingCount > 0 && <span style={{ marginLeft: 6, background: "var(--accent)", color: "#000", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 800 }}>{pendingCount}</span>}
+              Review Submissions {pendingCount > 0 && <span style={{ marginLeft: 6, background: "var(--accent)", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 800 }}>{pendingCount}</span>}
             </button>
           </div>
         </div>
@@ -5742,7 +5914,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   );
 }
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
 
@@ -5756,7 +5928,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const clubs = [...new Set(gymnasts.map(g => g.club))].filter(Boolean);
   const hasGymnasts = gymnasts.length > 0;
   const hasApparatus = (compData.apparatus || []).length > 0;
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
   const coachUrl = `${origin}/coach.html?comp=${compId}`;
@@ -5785,7 +5957,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
       </div>
       {available ? (
         <button className="btn btn-primary btn-sm"
-          style={{ background: colour, color: "#000", flexShrink: 0 }}
+          style={{ background: colour, color: "#fff", flexShrink: 0 }}
           onClick={action}>
           ⬇ PDF
         </button>
@@ -5846,7 +6018,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                 const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level || "—";
                 const roundName = compData.rounds.find(r => r.id === g.round)?.name || g.round || "—";
                 return (
-                  <div key={g.id} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: i < gymnasts.length - 1 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                  <div key={g.id} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: i < gymnasts.length - 1 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
                     <div style={{ color: "var(--muted)", fontSize: 11 }}>{g.number || i + 1}</div>
                     <div style={{ fontWeight: 600 }}>{g.name}</div>
                     <div style={{ color: "var(--muted)" }}>{g.club || "—"}</div>
@@ -5868,7 +6040,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               You need to add gymnasts before the competition can start. Add them manually or share the submission link so clubs can send their own lists.
             </div>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#000" }}
+              <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#fff" }}
                 onClick={onManageGymnasts}>
                 + Add Gymnasts Manually
               </button>
@@ -5949,7 +6121,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
             <button className="btn btn-primary"
-              style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: hasGymnasts ? colour : "var(--surface2)", color: hasGymnasts ? "#000" : "var(--muted)", opacity: hasGymnasts ? 1 : 0.55 }}
+              style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: hasGymnasts ? colour : "var(--surface2)", color: hasGymnasts ? "#fff" : "var(--muted)", opacity: hasGymnasts ? 1 : 0.55 }}
               onClick={onStartComp}
               disabled={!hasGymnasts}>
               Start Competition →
@@ -5978,9 +6150,14 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch" }} />
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>PIN Protection</div>
-              <div style={{ fontSize: 13, color: compPin ? "var(--success)" : "var(--muted)" }}>
+              <div style={{ fontSize: 13, color: compPin ? "var(--success)" : "var(--muted)", marginBottom: 6 }}>
                 {compPin ? "🔒 PIN set" : "🔓 No PIN"}
               </div>
+              {onSetPin && (
+                <button className="btn btn-ghost btn-sm" style={{ fontSize: 10 }} onClick={onSetPin}>
+                  {compPin ? "Change PIN" : "Set PIN"}
+                </button>
+              )}
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", width: "100%" }}>
               Save your Competition ID to resume this session from any device
@@ -6063,7 +6240,7 @@ function ClubSubmissionScreen({ compId }) {
     setSubmitted(true);
   };
 
-  const colour = compConfig?.brandColour || "#c8f53a";
+  const colour = compConfig?.brandColour || "#000dff";
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a0a0a", color: "#fff" }}>
@@ -6168,7 +6345,7 @@ function ClubSubmissionScreen({ compId }) {
               Gymnasts <span style={{ fontSize: 13, fontWeight: 400, color: "#666" }}>({gymnasts.filter(g => g.name.trim()).length} entered)</span>
             </div>
             <button onClick={addGymnast}
-              style={{ padding: "7px 14px", background: colour, color: "#000", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              style={{ padding: "7px 14px", background: colour, color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               + Add gymnast
             </button>
           </div>
@@ -6241,7 +6418,7 @@ function ClubSubmissionScreen({ compId }) {
         )}
 
         <button onClick={handleSubmit} disabled={submitting}
-          style={{ width: "100%", padding: "16px", background: colour, color: "#000", border: "none", borderRadius: 10,
+          style={{ width: "100%", padding: "16px", background: colour, color: "#fff", border: "none", borderRadius: 10,
             fontWeight: 800, fontSize: 16, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
           {submitting ? "Submitting…" : "Submit Gymnast List"}
         </button>
@@ -6350,11 +6527,11 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
     onDecline?.();
   };
 
-  const colour = compData.brandColour || "#c8f53a";
+  const colour = compData.brandColour || "#000dff";
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 200,
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200,
       display: "flex", alignItems: "flex-start", justifyContent: "flex-end"
     }}>
       <div style={{
@@ -6374,7 +6551,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
         </div>
 
         {inSandbox && (
-          <div style={{ margin: "12px 24px 0", padding: "8px 12px", background: "rgba(200,245,58,0.08)", border: "1px solid rgba(200,245,58,0.2)", borderRadius: 6, fontSize: 11, color: "var(--muted)" }}>
+          <div style={{ margin: "12px 24px 0", padding: "8px 12px", background: "rgba(0,13,255,0.05)", border: "1px solid rgba(0,13,255,0.12)", borderRadius: 6, fontSize: 11, color: "var(--muted)" }}>
             ⚪ Preview mode — showing demo submissions. Real submissions load when deployed.
           </div>
         )}
@@ -6444,7 +6621,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
                       </button>
                       <button onClick={() => acceptSubmission(sub)} disabled={!!processing}
                         className="btn btn-primary btn-sm"
-                        style={{ fontSize: 12, background: colour, color: "#000" }}>
+                        style={{ fontSize: 12, background: colour, color: "#fff" }}>
                         {processing === sub.id ? "Accepting…" : "Accept All →"}
                       </button>
                     </div>
@@ -6460,7 +6637,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
                 Accepted ({accepted.length})
               </div>
               {accepted.map(sub => (
-                <div key={sub.id} style={{ padding: "10px 14px", background: "rgba(200,245,58,0.05)", border: "1px solid rgba(200,245,58,0.2)", borderRadius: 8, marginBottom: 8, fontSize: 13 }}>
+                <div key={sub.id} style={{ padding: "10px 14px", background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)", borderRadius: 8, marginBottom: 8, fontSize: 13 }}>
                   <span style={{ color: "var(--accent)", fontWeight: 700 }}>✓</span> {sub.club_name} · {sub.gymnasts.length} gymnast{sub.gymnasts.length !== 1 ? "s" : ""}
                 </div>
               ))}
@@ -6479,6 +6656,9 @@ function HomeScreen({ onNew, onResume }) {
   const [resumePin, setResumePin] = useState("");
   const [resumeError, setResumeError] = useState("");
   const [resuming, setResuming] = useState(false);
+  const [compChecked, setCompChecked] = useState(false);
+  const [compHasPin, setCompHasPin] = useState(false);
+  const [fetchedData, setFetchedData] = useState(null);
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
@@ -6491,7 +6671,12 @@ function HomeScreen({ onNew, onResume }) {
     });
   }, []);
 
-  const handleResume = async () => {
+  const handleIdChange = (val) => {
+    setResumeId(val);
+    if (compChecked) { setCompChecked(false); setCompHasPin(false); setFetchedData(null); setResumePin(""); setResumeError(""); }
+  };
+
+  const handleCheck = async () => {
     const id = resumeId.trim();
     if (!id) return;
     setResumeError("");
@@ -6500,9 +6685,22 @@ function HomeScreen({ onNew, onResume }) {
     setResuming(false);
     if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
     const pin = data.data?.pin;
-    if (pin && pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
-    onResume(id, data.data);
+    setFetchedData(data.data);
+    if (pin) {
+      setCompHasPin(true);
+      setCompChecked(true);
+    } else {
+      onResume(id, data.data);
+    }
   };
+
+  const handlePinSubmit = () => {
+    if (!fetchedData) return;
+    if (fetchedData.pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
+    onResume(resumeId.trim(), fetchedData);
+  };
+
+  const handleResume = compChecked ? handlePinSubmit : handleCheck;
 
   return (
     <div className="home-wrap" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, minHeight: "calc(100vh - 65px)" }}>
@@ -6522,14 +6720,16 @@ function HomeScreen({ onNew, onResume }) {
           <div className="card-title">Resume Existing Competition</div>
           <div className="home-resume-row" style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
             <input className="input" placeholder="Competition ID" style={{ flex: 2, minWidth: 160 }}
-              value={resumeId} onChange={e => setResumeId(e.target.value)}
+              value={resumeId} onChange={e => handleIdChange(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleResume()} />
-            <input className="input" placeholder="PIN (if set)" style={{ flex: 1, minWidth: 100 }}
-              type="password" maxLength={4}
-              value={resumePin} onChange={e => setResumePin(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleResume()} />
-            <button className="btn btn-secondary" onClick={handleResume} disabled={resuming || !resumeId.trim()}>
-              {resuming ? "Loading…" : "Open →"}
+            {compChecked && compHasPin && (
+              <input className="input" placeholder="Enter PIN" style={{ flex: 1, minWidth: 100 }}
+                type="password" maxLength={4} autoFocus
+                value={resumePin} onChange={e => { setResumePin(e.target.value); setResumeError(""); }}
+                onKeyDown={e => e.key === "Enter" && handlePinSubmit()} />
+            )}
+            <button className="btn btn-secondary" onClick={handleResume} disabled={resuming || !resumeId.trim() || (compChecked && compHasPin && !resumePin.trim())}>
+              {resuming ? "Checking…" : compChecked && compHasPin ? "Enter →" : "Continue →"}
             </button>
           </div>
           {resumeError && <div className="error-box" style={{ marginTop: 8 }}>{resumeError}</div>}
@@ -6573,26 +6773,64 @@ function JudgePinModal({ onResume, onClose }) {
   const [resumeId, setResumeId] = useState("");
   const [resumePin, setResumePin] = useState("");
   const [resumeError, setResumeError] = useState("");
-  const [resuming, setResuming] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [compChecked, setCompChecked] = useState(false);
+  const [compHasPin, setCompHasPin] = useState(false);
+  const [fetchedData, setFetchedData] = useState(null);
 
-  const handleOpen = async () => {
+  // Reset to step 1 if ID changes after check
+  const handleIdChange = (e) => {
+    setResumeId(e.target.value);
+    if (compChecked) { setCompChecked(false); setCompHasPin(false); setFetchedData(null); setResumePin(""); setResumeError(""); }
+  };
+
+  // Step 1: check competition ID
+  const handleCheck = async () => {
     const id = resumeId.trim();
     if (!id) return;
     setResumeError("");
-    setResuming(true);
+    setChecking(true);
     const { data, error } = await supabase.fetchOne("competitions", id);
-    setResuming(false);
+    setChecking(false);
     if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
     const pin = data.data?.pin;
-    if (pin && pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
-    onResume(id, data.data);
+    setFetchedData(data.data);
+    if (pin) {
+      setCompHasPin(true);
+      setCompChecked(true);
+    } else {
+      // No PIN — proceed directly
+      onResume(id, data.data);
+    }
   };
+
+  // Step 2: verify PIN
+  const handlePinSubmit = () => {
+    if (!fetchedData) return;
+    const pin = fetchedData.pin;
+    if (pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
+    onResume(resumeId.trim(), fetchedData);
+  };
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
+    borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
+    fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
+  };
+
+  const btnStyle = (disabled) => ({
+    width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
+    padding: 16, fontFamily: "inherit", fontWeight: 400,
+    fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
+    letterSpacing: "0.3px", cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.7 : 1,
+  });
 
   return (
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, background: "rgba(4,4,4,0.7)",
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
         display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
       }}
     >
@@ -6625,7 +6863,9 @@ function JudgePinModal({ onResume, onClose }) {
             Enter Competition
           </div>
           <div style={{ fontFamily: "inherit", fontSize: 10, color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-            If you are a Judge or someone entering the Scores please enter the Competition ID and PIN (if set) — if you are unsure please contact your Competition Organiser.
+            {compChecked && compHasPin
+              ? "This competition requires a PIN. Please enter the PIN provided by the organiser."
+              : "If you are a Judge or someone entering the Scores please enter the Competition ID — if you are unsure please contact your Competition Organiser."}
           </div>
         </div>
 
@@ -6634,42 +6874,41 @@ function JudgePinModal({ onResume, onClose }) {
           <input
             placeholder="Competition ID"
             value={resumeId}
-            onChange={e => setResumeId(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleOpen()}
-            autoFocus
-            style={{
-              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
-              borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
-              fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
-            }}
+            onChange={handleIdChange}
+            onKeyDown={e => e.key === "Enter" && (!compChecked ? handleCheck() : handlePinSubmit())}
+            autoFocus={!compChecked}
+            style={inputStyle}
           />
-          <input
-            placeholder="PIN (if set)"
-            type="password"
-            maxLength={4}
-            value={resumePin}
-            onChange={e => setResumePin(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleOpen()}
-            style={{
-              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
-              borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
-              fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
-            }}
-          />
+          {compChecked && compHasPin && (
+            <input
+              placeholder="Enter PIN"
+              type="password"
+              maxLength={4}
+              value={resumePin}
+              onChange={e => { setResumePin(e.target.value); setResumeError(""); }}
+              onKeyDown={e => e.key === "Enter" && handlePinSubmit()}
+              autoFocus
+              style={inputStyle}
+            />
+          )}
           {resumeError && <div style={{ fontSize: 13, color: "#e53e3e", paddingLeft: 24 }}>{resumeError}</div>}
-          <button
-            onClick={handleOpen}
-            disabled={resuming || !resumeId.trim()}
-            style={{
-              width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
-              padding: 16, fontFamily: "inherit", fontWeight: 400,
-              fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
-              letterSpacing: "0.3px", cursor: resuming || !resumeId.trim() ? "not-allowed" : "pointer",
-              opacity: resuming ? 0.7 : 1,
-            }}
-          >
-            {resuming ? "Loading…" : "Enter Competition →"}
-          </button>
+          {!compChecked ? (
+            <button
+              onClick={handleCheck}
+              disabled={checking || !resumeId.trim()}
+              style={btnStyle(checking || !resumeId.trim())}
+            >
+              {checking ? "Checking…" : "Continue →"}
+            </button>
+          ) : (
+            <button
+              onClick={handlePinSubmit}
+              disabled={!resumePin.trim()}
+              style={btnStyle(!resumePin.trim())}
+            >
+              Enter Competition →
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -6691,31 +6930,53 @@ function PinSetupModal({ onSet, onSkip }) {
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-box" style={{ maxWidth: 400 }}>
+    <>
+    <style>{`
+      .pin-input{width:100%;padding:12px 16px;border-radius:56px;border:1px solid #e4e4e4;background:var(--background-light);font-family:var(--font-display);font-size:14px;color:var(--text-primary);outline:none;box-sizing:border-box;transition:border-color 0.15s;}
+      .pin-input:focus{border-color:var(--brand-01);}
+      .pin-input::placeholder{color:var(--text-tertiary);}
+      .pin-label{font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);display:block;margin-bottom:8px;}
+    `}</style>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--background-light)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 400, fontFamily: "var(--font-display)" }}>
         <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 24, marginBottom: 8 }}>Set a PIN</div>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>Set a PIN</div>
+        <div style={{ fontSize: 14, color: "var(--text-tertiary)", marginBottom: 24, lineHeight: 1.5 }}>
           Protect this competition with a 4-digit PIN. Anyone resuming it will need the PIN to make changes. The public results page is always open.
         </div>
-        <div className="field">
-          <label className="label">PIN (4 digits)</label>
-          <input className="input" type="password" inputMode="numeric" maxLength={4} placeholder="e.g. 1234"
-            value={pin} onChange={e => setPin(e.target.value.replace(/\D/g,""))} />
-        </div>
-        <div className="field">
-          <label className="label">Confirm PIN</label>
-          <input className="input" type="password" inputMode="numeric" maxLength={4} placeholder="Repeat PIN"
-            value={confirm} onChange={e => setConfirm(e.target.value.replace(/\D/g,""))}
-            onKeyDown={e => e.key === "Enter" && handleSet()} />
-        </div>
-        {err && <div className="field-error" style={{ marginBottom: 12 }}>{err}</div>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-primary" onClick={handleSet}>Set PIN</button>
-          <button className="btn btn-ghost" onClick={onSkip}>Skip — no PIN</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div>
+            <label className="pin-label">PIN (4 digits)</label>
+            <input className="pin-input" type="password" inputMode="numeric" maxLength={4} placeholder="e.g. 1234"
+              value={pin} onChange={e => setPin(e.target.value.replace(/\D/g,""))} />
+          </div>
+          <div>
+            <label className="pin-label">Confirm PIN</label>
+            <input className="pin-input" type="password" inputMode="numeric" maxLength={4} placeholder="Repeat PIN"
+              value={confirm} onChange={e => setConfirm(e.target.value.replace(/\D/g,""))}
+              onKeyDown={e => e.key === "Enter" && handleSet()} />
+          </div>
+          {err && <div style={{ fontSize: 13, color: "#e53e3e", padding: "10px 16px", background: "#fff5f5", borderRadius: 8 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={handleSet}
+              style={{
+                flex: 1, padding: "14px", borderRadius: 56, background: "var(--brand-01)", border: "none",
+                cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-alternate)",
+              }}
+            >Set PIN</button>
+            <button
+              onClick={onSkip}
+              style={{
+                flex: 1, padding: "14px", borderRadius: 56, background: "none", border: "1px solid #e4e4e4",
+                cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-primary)",
+              }}
+            >Skip — no PIN</button>
+          </div>
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -7057,6 +7318,223 @@ function LiveViewPanel({ compId, compData }) {
 }
 
 // ============================================================
+// APP SIDEBAR (persistent, context-aware)
+// ============================================================
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout }) {
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // SVG icon helpers (16x16)
+  const icons = {
+    plus: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>,
+    back: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4"/></svg>,
+    edit: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>,
+    users: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 14c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M12 9.5c1.5.3 2.5 1.5 2.5 3"/></svg>,
+    play: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>,
+    score: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 2v12"/></svg>,
+    trophy: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2h6v5a3 3 0 01-6 0V2zM8 10v3M5 13h6"/><path d="M5 4H3a1 1 0 00-1 1v1a2 2 0 002 2h1M11 4h2a1 1 0 011 1v1a2 2 0 01-2 2h-1"/></svg>,
+    doc: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z"/><path d="M9 2v4h4"/></svg>,
+    mic: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="6" height="8" rx="3"/><path d="M3 8a5 5 0 0010 0M8 13v2"/></svg>,
+    account: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>,
+    logout: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M11 11l3-3-3-3M6 8h8"/></svg>,
+    info: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5v0"/></svg>,
+    palette: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="10" cy="6" r="1" fill="currentColor"/><circle cx="5" cy="9" r="1" fill="currentColor"/></svg>,
+    club: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 14l2-8h8l2 8M5 2a3 3 0 016 0"/></svg>,
+    clock: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>,
+    bars: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>,
+    layers: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L2 5.5 8 9l6-3.5L8 2zM2 10.5L8 14l6-3.5M2 8l6 3.5L14 8"/></svg>,
+    gauge: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 14A6 6 0 118 2a6 6 0 010 12zM8 5v3l2 1"/></svg>,
+    send: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2L7 9M14 2l-4 12-3-5-5-3 12-4z"/></svg>,
+    grid: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>,
+    collapse: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4L7 8l4 4"/><path d="M7 4L3 8l4 4"/></svg>,
+    expand: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4-4-4-4"/><path d="M9 12l4-4-4-4"/></svg>,
+    judge: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14V3a1 1 0 00-1-1H5a1 1 0 00-1 1v11M6 5h4M6 8h4M6 11h2"/></svg>,
+    home: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
+  };
+
+  const NavItem = ({ icon, label, active, done, onClick, count, title: tip }) => (
+    <button className={`as-nav-item${active ? " active" : ""}${done ? " done" : ""}`} onClick={onClick} title={collapsed ? (tip || label) : undefined}>
+      {icon}
+      <span className="as-label">{label}</span>
+      {count !== undefined && count > 0 && <span className="as-count">{count}</span>}
+    </button>
+  );
+
+  const sidebarFilters = [
+    { value: "draft", label: "Draft", color: "#f59e0b",
+      icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg> },
+    { value: "active", label: "Active", color: "var(--brand-01)",
+      icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--brand-01)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="5"/><path d="M8 5v3l2 1.5"/></svg> },
+    { value: "completed", label: "Complete", color: "#22c55e",
+      icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5L6.5 11.5 12.5 4.5"/></svg> },
+    { value: "archived", label: "Archived", color: "#909090",
+      icon: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#909090" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="12" height="3" rx="1"/><path d="M3 6v6.5a1 1 0 001 1h8a1 1 0 001-1V6M6.5 9h3"/></svg> },
+  ];
+
+  const setupAnchors = [
+    { id: "setup-basic", label: "Basic Info", icon: icons.info },
+    { id: "setup-branding", label: "Branding", icon: icons.palette },
+    { id: "setup-clubs", label: "Clubs", icon: icons.club },
+    { id: "setup-rounds", label: "Rounds", icon: icons.clock },
+    { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
+    { id: "setup-levels", label: "Levels", icon: icons.layers },
+    { id: "setup-scoring", label: "Scoring", icon: icons.gauge },
+    { id: "setup-submissions", label: "Submissions", icon: icons.send },
+    { id: "setup-judges", label: "Judges", icon: icons.judge },
+  ];
+
+  const phase2Steps = [
+    { label: "Score Input", icon: icons.score, step: 1 },
+    { label: "Results", icon: icons.trophy, step: 2 },
+    { label: "Exports", icon: icons.doc, step: 3 },
+    { label: "MC Mode", icon: icons.mic, step: 4 },
+  ];
+
+  const initial = (account?.name || account?.email || "?")[0].toUpperCase();
+
+  return (
+    <div className={`app-sidebar${collapsed ? " collapsed" : ""}`}>
+      <button className="as-toggle" onClick={onToggle} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          {collapsed ? <path d="M3 1l3 3-3 3"/> : <path d="M5 1L2 4l3 3"/>}
+        </svg>
+      </button>
+      <div className="as-top">
+        <div className="as-header">
+          <div className="as-logo">
+            <img src={GymCompLogotype} alt="GymComp" className="as-logo-logotype" />
+            <img src={GymCompLogomark} alt="GC" className="as-logo-logomark" />
+          </div>
+        </div>
+
+        <div className="as-nav">
+          {/* ── org-dashboard context ── */}
+          {screen === "org-dashboard" && (<>
+            <NavItem icon={icons.plus} label="New Competition" onClick={onNew} />
+            <div className="as-divider" />
+            <div className="as-section-title">Filter</div>
+            {sidebarFilters.map(f => (
+              <NavItem key={f.value} icon={f.icon} label={f.label}
+                active={statusFilter === f.value}
+                count={filterCounts[f.value]}
+                onClick={() => setStatusFilter(prev => prev === f.value ? "all" : f.value)} />
+            ))}
+          </>)}
+
+          {/* ── active / phase 1 (edit setup) ── */}
+          {screen === "active" && phase === 1 && (<>
+            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <div className="as-divider" />
+            <div className="as-section-title">Setup Sections</div>
+            {setupAnchors.map(a => (
+              <NavItem key={a.id} icon={a.icon} label={a.label} active={activeSection === a.id} onClick={() => scrollTo(a.id)} />
+            ))}
+          </>)}
+
+          {/* ── active / dashboard ── */}
+          {screen === "active" && phase === "dashboard" && (<>
+            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <div className="as-divider" />
+            <NavItem icon={icons.edit} label="Edit Setup" onClick={onEditSetup} />
+            <NavItem icon={icons.users} label="Manage Gymnasts" onClick={onManageGymnasts} />
+            <NavItem icon={icons.play} label="Start Competition" onClick={onStartComp} />
+          </>)}
+
+          {/* ── active / gymnasts ── */}
+          {screen === "active" && phase === "gymnasts" && (<>
+            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <NavItem icon={icons.home} label="Dashboard" onClick={onDashboard} />
+          </>)}
+
+          {/* ── active / phase 2 (competition) ── */}
+          {screen === "active" && phase === 2 && (<>
+            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <NavItem icon={icons.home} label="Dashboard" onClick={onDashboard} />
+            <div className="as-divider" />
+            <div className="as-section-title">Competition</div>
+            {phase2Steps.map(s => (
+              <NavItem key={s.step} icon={s.icon} label={s.label}
+                active={step === s.step}
+                onClick={() => setStep(s.step)} />
+            ))}
+          </>)}
+        </div>
+      </div>
+
+      <div className="as-bottom">
+        <button className="as-account" onClick={onSettings} title={collapsed ? "Account" : undefined}>
+          <div className="as-account-avatar">{initial}</div>
+          <span className="as-account-label">{account?.name || account?.email || "Account"}</span>
+        </button>
+        <button className="as-signout" onClick={onLogout}>
+          {icons.logout}
+          <span className="as-label">Sign Out</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MOBILE TAB BAR
+// ============================================================
+function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onSave }) {
+  const icons = {
+    plus: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>,
+    account: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>,
+    home: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
+    save: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.5 14h-9a1 1 0 01-1-1V3a1 1 0 011-1h7l3 3v9a1 1 0 01-1 1z"/><path d="M10 14V9H6v5M6 2v3h5"/></svg>,
+    edit: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>,
+    users: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 14c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/></svg>,
+    play: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>,
+    score: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 2v12"/></svg>,
+    trophy: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2h6v5a3 3 0 01-6 0V2zM8 10v3M5 13h6"/></svg>,
+    doc: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z"/><path d="M9 2v4h4"/></svg>,
+    mic: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="6" height="8" rx="3"/><path d="M3 8a5 5 0 0010 0M8 13v2"/></svg>,
+    back: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 12L6 8l4-4"/></svg>,
+  };
+
+  const Tab = ({ icon, label, active, onClick }) => (
+    <button className={`mtb-tab${active ? " active" : ""}`} onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+
+  return (
+    <div className="mobile-tab-bar">
+      {screen === "org-dashboard" && (<>
+        <Tab icon={icons.plus} label="New" onClick={onNew} />
+        <Tab icon={icons.account} label="Account" onClick={onSettings} />
+      </>)}
+
+      {screen === "active" && phase === 1 && (<>
+        <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
+        <Tab icon={icons.save} label="Save" onClick={onSave} />
+      </>)}
+
+      {screen === "active" && phase === "dashboard" && (<>
+        <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
+        <Tab icon={icons.edit} label="Edit" onClick={onEditSetup} />
+        <Tab icon={icons.users} label="Gymnasts" onClick={onManageGymnasts} />
+        <Tab icon={icons.play} label="Start" onClick={onStartComp} />
+      </>)}
+
+      {screen === "active" && phase === "gymnasts" && (<>
+        <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
+        <Tab icon={icons.back} label="Dashboard" onClick={onDashboard} />
+      </>)}
+
+      {screen === "active" && phase === 2 && (<>
+        <Tab icon={icons.score} label="Scores" active={step === 1} onClick={() => setStep(1)} />
+        <Tab icon={icons.trophy} label="Results" active={step === 2} onClick={() => setStep(2)} />
+        <Tab icon={icons.doc} label="Exports" active={step === 3} onClick={() => setStep(3)} />
+        <Tab icon={icons.mic} label="MC" active={step === 4} onClick={() => setStep(4)} />
+      </>)}
+    </div>
+  );
+}
+
+// ============================================================
 // APP ROOT
 // ============================================================
 export default function App() {
@@ -7067,6 +7545,10 @@ export default function App() {
   // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "new-pin" | "active"
   const [screen, setScreen] = useState("loading");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  // Sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [filterCounts, setFilterCounts] = useState({ draft: 0, active: 0, completed: 0, archived: 0 });
   // Current event record (from events store) — links comp to account
   const [currentEventId, setCurrentEventId] = useState(null);
 
@@ -7082,10 +7564,13 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [setupWarn, setSetupWarn] = useState(null);
   const [pendingChange, setPendingChange] = useState(null);
+  const [leaveEditConfirm, setLeaveEditConfirm] = useState(null);
 
   // Supabase sync state
   const [compId, setCompId] = useState(() => generateId());
   const [compPin, setCompPin] = useState(null);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const pinModalCallback = useRef(null);
   const [syncStatus, setSyncStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState(null);
   const [showShareToast, setShowShareToast] = useState(false);
@@ -7094,7 +7579,7 @@ export default function App() {
 
   const [compData, setCompDataRaw] = useState({
     name: "", location: "", date: "", holder: "",
-    organiserName: "", venue: "", brandColour: "#c8f53a", logo: "",
+    organiserName: "", venue: "", brandColour: "#000dff", logo: "",
     useDEScoring: false, allowSubmissions: false,
     clubs: [], rounds: [], apparatus: [], levels: [], judges: []
   });
@@ -7244,7 +7729,7 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#c8f53a", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+    setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
     setGymnasts([]);
     setScores({});
     setPhase(1); setStep(1);
@@ -7258,7 +7743,7 @@ export default function App() {
       setCurrentEventId(null);
     }
 
-    setScreen("new-pin");
+    setScreen("active");
   };
 
   // Open an existing event from the organiser dashboard
@@ -7270,13 +7755,15 @@ export default function App() {
       setCompDataRaw(snapshot.compData || {});
       setGymnasts(snapshot.gymnasts || []);
       setScores(snapshot.scores || {});
-      setPhase("dashboard"); setStep(1);
+      // Draft events open in edit mode; others open to dashboard
+      if (ev.status === "draft") { setPhase(1); setStep(1); }
+      else { setPhase("dashboard"); setStep(1); }
       setSyncStatus("saved");
     } else {
       // No snapshot yet — start fresh setup
       setCompId(ev.compId);
       setCompPin(null);
-      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#c8f53a", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
       setGymnasts([]);
       setScores({});
       setPhase(1); setStep(1);
@@ -7284,9 +7771,29 @@ export default function App() {
     }
     setCurrentEventId(ev.id);
 
-    // Mark active if still draft
-    if (ev.status === "draft") events.update(ev.id, { status: "active" });
+    setScreen("active");
+  };
 
+  // Open an existing event directly into edit mode (phase 1)
+  const handleEditEvent = (ev) => {
+    const snapshot = ev.snapshot;
+    if (snapshot) {
+      setCompId(ev.compId);
+      setCompPin(snapshot.compData?.pin || null);
+      setCompDataRaw(snapshot.compData || {});
+      setGymnasts(snapshot.gymnasts || []);
+      setScores(snapshot.scores || {});
+      setSyncStatus("saved");
+    } else {
+      setCompId(ev.compId);
+      setCompPin(null);
+      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+      setGymnasts([]);
+      setScores({});
+      setSyncStatus("idle");
+    }
+    setPhase(1); setStep(1);
+    setCurrentEventId(ev.id);
     setScreen("active");
   };
 
@@ -7299,7 +7806,7 @@ export default function App() {
     // Copy comp setup but clear date and reset gymnasts/scores
     const baseData = snapshot?.compData
       ? { ...snapshot.compData, name: `${snapshot.compData.name || "Competition"} (Copy)`, date: "", gymnasts: [], judges: [] }
-      : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#c8f53a", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+      : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     setCompDataRaw(baseData);
     setGymnasts([]);
     setScores({});
@@ -7314,11 +7821,67 @@ export default function App() {
       setCurrentEventId(null);
     }
 
-    setScreen("new-pin");
+    setScreen("active");
   };
 
-  const handlePinSet = (pin) => { setCompPin(pin); setScreen("active"); };
-  const handlePinSkip = () => { setCompPin(null); setScreen("active"); };
+  const handlePinSet = (pin) => {
+    setCompPin(pin); setShowPinModal(false);
+    // Sync PIN to Supabase + local snapshot
+    pushToSupabase(compData, gymnasts, scores, pin);
+    if (currentEventId) events.snapshot(currentEventId, { ...compData, pin }, gymnasts, scores);
+    if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
+  };
+  const handlePinSkip = () => {
+    setCompPin(null); setShowPinModal(false);
+    if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
+  };
+
+  // Navigate back to org dashboard
+  const goBackToDashboard = () => {
+    const doLeave = () => { setScreen("org-dashboard"); };
+    // Warn if on edit page with unsaved changes
+    if (phase === 1 && syncStatus !== "saved" && syncStatus !== "idle") {
+      setLeaveEditConfirm(() => doLeave);
+    } else {
+      doLeave();
+    }
+  };
+
+  // ---- Sidebar nav callbacks for active screen ----
+  const handleSaveSetup = () => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    pushToSupabase(compData, gymnasts, scores);
+    if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+  };
+
+  const handleStartComp = () => { setPhase(2); setStep(1); };
+  const handleEditSetup = () => { setPhase(1); setStep(1); };
+  const handleManageGymnasts = () => setPhase("gymnasts");
+  const handleGoToDashboard = () => { setPhase("dashboard"); setStep(1); };
+
+  // Scroll .app-main to top on phase/screen transitions
+  const appMainRef = useRef(null);
+  useEffect(() => {
+    if (appMainRef.current) appMainRef.current.scrollTop = 0;
+  }, [phase, step, screen]);
+
+  // Track which setup section is in view (Phase 1 scroll-spy)
+  const [activeSection, setActiveSection] = useState("");
+  useEffect(() => {
+    if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
+    const ids = ["setup-basic","setup-branding","setup-clubs","setup-rounds","setup-apparatus","setup-levels","setup-scoring","setup-submissions","setup-judges"];
+    const root = appMainRef.current;
+    if (!root) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible.length > 0) setActiveSection(visible[0].target.id);
+    }, { root, rootMargin: "-10% 0px -60% 0px", threshold: 0 });
+    // Small delay so DOM has rendered the cards
+    const t = setTimeout(() => {
+      ids.forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
+    }, 100);
+    return () => { clearTimeout(t); observer.disconnect(); };
+  }, [screen, phase]);
 
   // ---- Resume competition (PIN-only path for judges / no-account users) ----
   const handleResume = (id, savedData) => {
@@ -7327,7 +7890,8 @@ export default function App() {
     setCompDataRaw(savedData.compData || {});
     setGymnasts(savedData.gymnasts || []);
     setScores(savedData.scores || {});
-    setPhase("dashboard"); setStep(1);
+    // Judges land directly on scoring view, not dashboard
+    setPhase(2); setStep(1);
     setSyncStatus("saved");
     setCurrentEventId(null);
     setScreen("active");
@@ -7397,30 +7961,40 @@ export default function App() {
     return (
       <>
         <style>{css}</style>
-        <div className="app">
-          <nav className="nav">
-            <div className="nav-logo">GYMCOMP<span>.</span></div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>Organiser Portal</div>
-            <div />
-          </nav>
-          <OrganizerDashboard
-            account={currentAccount}
-            onNew={handleNew}
-            onOpen={handleOpenEvent}
-            onDuplicate={handleDuplicateEvent}
-            onLogout={handleLogout}
-            onSettings={() => setShowAccountSettings(true)}
-          />
-          {showAccountSettings && (
-            <AccountSettingsModal
+        <div className="app-shell">
+          <AppSidebar screen="org-dashboard" phase={null} step={null} setStep={null}
+            collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)}
+            account={currentAccount} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+            filterCounts={filterCounts} activeSection=""
+            onNew={handleNew} onMyEvents={null} onEditSetup={null} onManageGymnasts={null}
+            onStartComp={null} onDashboard={null}
+            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
+          <div className="app-main">
+            <OrganizerDashboard
               account={currentAccount}
-              profile={currentProfile}
-              onSave={handleAccountSave}
-              onLogout={handleLogout}
-              onClose={() => setShowAccountSettings(false)}
+              onNew={handleNew}
+              onOpen={handleOpenEvent}
+              onEdit={handleEditEvent}
+              onDuplicate={handleDuplicateEvent}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              onFilterCountsChange={setFilterCounts}
             />
-          )}
+          </div>
         </div>
+        <MobileTabBar screen="org-dashboard" phase={null} step={null} setStep={null}
+          onNew={handleNew} onMyEvents={null} onEditSetup={null} onManageGymnasts={null}
+          onStartComp={null} onDashboard={null}
+          onSettings={() => setShowAccountSettings(true)} />
+        {showAccountSettings && (
+          <AccountSettingsModal
+            account={currentAccount}
+            profile={currentProfile}
+            onSave={handleAccountSave}
+            onLogout={handleLogout}
+            onClose={() => setShowAccountSettings(false)}
+          />
+        )}
       </>
     );
   }
@@ -7439,139 +8013,180 @@ export default function App() {
   }
 
   // ---- ACTIVE COMPETITION ----
+  // Organisers get app-shell with sidebar; judges (no account) get minimal nav
+  const activeContent = (
+    <>
+      {/* SHARE TOAST */}
+      {showShareToast && (
+        <div style={{
+          position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)",
+          background: "var(--accent)", color: "#fff", borderRadius: 8, padding: "12px 24px",
+          fontSize: 13, fontWeight: 700, zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          maxWidth: "90vw", textAlign: "center", lineHeight: 1.6
+        }}>
+          Link copied — share with parents<br />
+          <span style={{ fontWeight: 400, wordBreak: "break-all", fontSize: 11 }}>{shareUrl}</span>
+        </div>
+      )}
+
+      {/* Simplified nav — comp name + sync + action buttons only */}
+      <nav className="nav">
+        {/* Logo only on mobile (sidebar hidden) or for judges */}
+        {!currentAccount && (
+          <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => setScreen("auth-login")}>GYMCOMP<span>.</span></div>
+        )}
+        {currentAccount && <div style={{ width: 8 }} />}
+
+        <div className="nav-centre" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, flex: 1 }}>
+          {compData.name && (
+            <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center" }}>
+              <strong style={{ color: "var(--text)" }}>{compData.name}</strong>
+              {compData.date && <> · {new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB")}</>}
+            </div>
+          )}
+          {syncStatus !== "idle" && (
+            <div style={{ fontSize: 11, color: syncStatus === "saved" ? "var(--success)" : "var(--muted)", cursor: "pointer" }}
+              onClick={() => setShowCompId(v => !v)}>
+              {syncDot} {syncLabel}
+              {syncStatus === "saved" && <> · <span style={{ fontFamily: "monospace", fontSize: 10 }}>{showCompId ? compId : "ID"}</span></>}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {phase === 2 && (
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={() => exportResultsPDF(compData, gymnasts, scores)}>
+                Export PDF
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={handleShare}>
+                Share Results
+              </button>
+            </>
+          )}
+          {/* For judges (no account), keep back/nav buttons */}
+          {!currentAccount && phase === 2 && <div style={{ width: 8 }} />}
+        </div>
+      </nav>
+
+      {/* DASHBOARD */}
+      {phase === "dashboard" && (
+        <CompDashboard
+          compData={compData} gymnasts={gymnasts}
+          compId={compId} compPin={compPin}
+          onStartComp={handleStartComp}
+          onEditSetup={handleEditSetup}
+          onManageGymnasts={handleManageGymnasts}
+          onSetPin={() => {
+            pinModalCallback.current = null;
+            setShowPinModal(true);
+          }}
+          onAcceptSubmissions={(newGymnasts) => {
+            setGymnastsWithSync(prev => [...prev, ...newGymnasts]);
+          }}
+        />
+      )}
+
+      {/* SETUP phase 1 */}
+      {phase === 1 && (
+        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+          <Step1_CompDetails data={compData} setData={setCompData} syncStatus={syncStatus} onSave={handleSaveSetup} onNext={() => {
+            if (syncTimer.current) clearTimeout(syncTimer.current);
+            pushToSupabase(compData, gymnasts, scores);
+            if (currentEventId) {
+              events.snapshot(currentEventId, compData, gymnasts, scores);
+              const ev = events.list().find(e => e.id === currentEventId);
+              if (ev && ev.status === "draft") events.update(currentEventId, { status: "active" });
+            }
+            if (!compPin) {
+              pinModalCallback.current = () => setPhase("dashboard");
+              setShowPinModal(true);
+            } else {
+              setPhase("dashboard");
+            }
+          }} />
+        </main>
+      )}
+
+      {/* GYMNAST MANAGEMENT */}
+      {phase === "gymnasts" && (
+        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+          <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
+            onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
+        </main>
+      )}
+
+      {/* COMPETITION phase 2 — no old sidebar, just content */}
+      {phase === 2 && (
+        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+          {step === 1 && <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} />}
+          {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} />}
+          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} />}
+          {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
+        </main>
+      )}
+    </>
+  );
+
   return (
     <>
       <style>{css}</style>
-      <div className="app">
-        <nav className="nav">
-          <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => {
-            if (currentAccount) setScreen("org-dashboard");
-            else setScreen("auth-login");
-          }}>GYMCOMP<span>.</span></div>
-
-          <div className="nav-centre" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            {compData.name && (
-              <div style={{ fontSize: 13, color: "var(--muted)", textAlign: "center" }}>
-                <strong style={{ color: "var(--text)" }}>{compData.name}</strong>
-                {compData.date && <> · {new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB")}</>}
-              </div>
-            )}
-            {syncStatus !== "idle" && (
-              <div style={{ fontSize: 11, color: syncStatus === "saved" ? "var(--success)" : "var(--muted)", cursor: "pointer" }}
-                onClick={() => setShowCompId(v => !v)}>
-                {syncDot} {syncLabel}
-                {syncStatus === "saved" && <> · <span style={{ fontFamily: "monospace", fontSize: 10 }}>{showCompId ? compId : "ID"}</span></>}
-              </div>
-            )}
+      {currentAccount ? (
+        <div className="app-shell">
+          <AppSidebar screen="active" phase={phase} step={step} setStep={setStep}
+            collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)}
+            account={currentAccount} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+            filterCounts={filterCounts} activeSection={activeSection}
+            onNew={handleNew} onMyEvents={goBackToDashboard} onEditSetup={handleEditSetup}
+            onManageGymnasts={handleManageGymnasts} onStartComp={handleStartComp}
+            onDashboard={handleGoToDashboard}
+            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
+          <div className="app-main" ref={appMainRef}>
+            {activeContent}
           </div>
+        </div>
+      ) : (
+        /* Judge mode — no sidebar, current layout */
+        <div className="app">
+          {activeContent}
+        </div>
+      )}
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {currentAccount && (
-              <button className="btn btn-ghost btn-sm" onClick={() => setScreen("org-dashboard")} style={{ fontSize: 11 }}>
-                ← My Events
-              </button>
-            )}
-            {phase === 2 && (
-              <>
-                <button className="btn btn-secondary btn-sm" onClick={() => exportResultsPDF(compData, gymnasts, scores)}>
-                  🖨 Export PDF
-                </button>
-                <button className="btn btn-primary btn-sm" onClick={handleShare}>
-                  🔗 Share Results
-                </button>
-              </>
-            )}
-            {phase === 2 ? (
-              <button className="btn btn-secondary btn-sm" onClick={() => { setPhase("dashboard"); setStep(1); }}>
-                ← Dashboard
-              </button>
-            ) : phase === "dashboard" ? (
-              <button className="btn btn-secondary btn-sm" onClick={() => { setPhase(1); setStep(1); }}>
-                ← Edit Setup
-              </button>
-            ) : phase === "gymnasts" ? (
-              <button className="btn btn-secondary btn-sm" onClick={() => setPhase("dashboard")}>
-                ← Dashboard
-              </button>
-            ) : (
-              <div style={{ width: 80 }} />
-            )}
-          </div>
-        </nav>
+      {currentAccount && (
+        <MobileTabBar screen="active" phase={phase} step={step} setStep={setStep}
+          onNew={handleNew} onMyEvents={goBackToDashboard} onEditSetup={handleEditSetup}
+          onManageGymnasts={handleManageGymnasts} onStartComp={handleStartComp}
+          onDashboard={handleGoToDashboard}
+          onSettings={() => setShowAccountSettings(true)} onSave={handleSaveSetup} />
+      )}
 
-        {/* SHARE TOAST */}
-        {showShareToast && (
-          <div style={{
-            position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)",
-            background: "var(--accent)", color: "#000", borderRadius: 8, padding: "12px 24px",
-            fontSize: 13, fontWeight: 700, zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            maxWidth: "90vw", textAlign: "center", lineHeight: 1.6
-          }}>
-            ✅ Link copied — share with parents<br />
-            <span style={{ fontWeight: 400, wordBreak: "break-all", fontSize: 11 }}>{shareUrl}</span>
-          </div>
-        )}
-
-        {/* DASHBOARD */}
-        {phase === "dashboard" && (
-          <CompDashboard
-            compData={compData} gymnasts={gymnasts}
-            compId={compId} compPin={compPin}
-            onStartComp={() => { setPhase(2); setStep(1); }}
-            onEditSetup={() => { setPhase(1); setStep(1); }}
-            onManageGymnasts={() => setPhase("gymnasts")}
-            onAcceptSubmissions={(newGymnasts) => {
-              setGymnastsWithSync(prev => [...prev, ...newGymnasts]);
-            }}
-          />
-        )}
-
-        {/* SETUP phase 1 */}
-        {phase === 1 && (
-          <div className="main">
-            <main className="content">
-              <Step1_CompDetails data={compData} setData={setCompData} onNext={() => setPhase("dashboard")} />
-            </main>
-          </div>
-        )}
-
-        {/* GYMNAST MANAGEMENT */}
-        {phase === "gymnasts" && (
-          <div className="main">
-            <main className="content">
-              <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
-                onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
-            </main>
-          </div>
-        )}
-
-        {/* COMPETITION phase 2 */}
-        {phase === 2 && (
-          <div className="main">
-            <aside className="sidebar">
-              {phase2Steps.map((s, i) => (
-                <div key={i}
-                  className={`sidebar-step ${step === i+1 ? "active" : ""} ${s.done && step !== i+1 ? "done" : ""}`}
-                  onClick={() => setStep(i+1)}>
-                  <div className="step-num">{s.done && step !== i+1 ? "✓" : i+1}</div>
-                  <span>{s.label}</span>
-                </div>
-              ))}
-            </aside>
-            <main className="content">
-              {step === 1 && <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} />}
-              {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} />}
-              {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} />}
-              {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
-            </main>
-          </div>
-        )}
-      </div>
+      {showAccountSettings && (
+        <AccountSettingsModal
+          account={currentAccount}
+          profile={currentProfile}
+          onSave={handleAccountSave}
+          onLogout={handleLogout}
+          onClose={() => setShowAccountSettings(false)}
+        />
+      )}
 
       {setupWarn && (
         <ConfirmModal message={setupWarn} confirmLabel="Yes, continue" isDanger={false}
           onConfirm={confirmSetupChange}
           onCancel={() => { setSetupWarn(null); setPendingChange(null); }} />
+      )}
+
+      {showPinModal && (
+        <PinSetupModal onSet={handlePinSet} onSkip={handlePinSkip} />
+      )}
+
+      {leaveEditConfirm && (
+        <ConfirmModal
+          message="You have unsaved changes. Are you sure you want to leave?"
+          confirmLabel="Leave" isDanger={false}
+          onConfirm={() => { const fn = leaveEditConfirm; setLeaveEditConfirm(null); fn(); }}
+          onCancel={() => setLeaveEditConfirm(null)}
+        />
       )}
     </>
   );
