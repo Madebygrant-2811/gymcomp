@@ -5371,6 +5371,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
       if (!session) return;
       supabase.fetchListForUser(session.access_token, session.user.id).then(({ data: supabaseComps, error }) => {
         if (error) return;
+        console.log("[syncFromSupabase] raw rows:", (supabaseComps || []).map(c => ({ id: c.id, status: c.status, keys: Object.keys(c) })));
         const all = events.getAll();
         let changed = false;
         const ownedCompIds = new Set((supabaseComps || []).map(c => c.id));
@@ -5386,27 +5387,17 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
             : undefined;
           const supaStatus = comp.status || "active";
           if (!existing) {
+            console.log("[syncFromSupabase] NEW local event:", comp.id, "supabase status:", comp.status, "→ local status:", supaStatus);
             all.push({ id: generateId(), accountId: account.id, compId: comp.id, status: supaStatus, createdAt: comp.created_at, updatedAt: comp.created_at, snapshot });
             changed = true;
           } else {
-            const localHasCustomStatus = existing.status !== "active";
-            const supaHasDefault = !comp.status || comp.status === "active";
-            // If local has a non-default status but Supabase still has default, local wins — push it up
-            if (localHasCustomStatus && supaHasDefault) {
-              pushStatusToSupabase(comp.id, existing.status);
-              if (snapshot) {
-                const idx = all.indexOf(existing);
-                all[idx] = { ...existing, snapshot };
-                changed = true;
-              }
-            } else {
-              // Supabase has an explicit status — it wins
-              const needsStatusUpdate = existing.status !== supaStatus;
-              if (snapshot || needsStatusUpdate) {
-                const idx = all.indexOf(existing);
-                all[idx] = { ...existing, ...(snapshot ? { snapshot } : {}), status: supaStatus };
-                changed = true;
-              }
+            // Supabase is source of truth for status — always apply it
+            const needsUpdate = snapshot || existing.status !== supaStatus;
+            if (needsUpdate) {
+              console.log("[syncFromSupabase] UPDATE:", comp.id, "supabase status:", comp.status, "→ supaStatus:", supaStatus, "| local was:", existing.status);
+              const idx = all.indexOf(existing);
+              all[idx] = { ...existing, ...(snapshot ? { snapshot } : {}), status: supaStatus };
+              changed = true;
             }
           }
         });
