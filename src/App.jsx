@@ -5359,8 +5359,11 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
+  // Guard: track recently-patched comp IDs so syncFromSupabase won't overwrite them before the PATCH lands
+  const recentPatches = useRef({});
 
   const pushStatusToSupabase = async (cid, newStatus) => {
+    recentPatches.current[cid] = { status: newStatus, ts: Date.now() };
     try {
       const { data: { session } } = await supabaseAuth.auth.getSession();
       if (!session) { console.error("[pushStatusToSupabase] no session"); return; }
@@ -5385,6 +5388,9 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
 
   const syncFromSupabase = useCallback(() => {
     reload();
+    // Clean up expired patch guards (>10s old)
+    const now = Date.now();
+    Object.keys(recentPatches.current).forEach(k => { if (now - recentPatches.current[k].ts > 10000) delete recentPatches.current[k]; });
     supabaseAuth.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
       supabase.fetchListForUser(session.access_token, session.user.id).then(({ data: supabaseComps, error }) => {
@@ -5409,12 +5415,18 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
             all.push({ id: generateId(), accountId: account.id, compId: comp.id, status: supaStatus, createdAt: comp.created_at, updatedAt: comp.created_at, snapshot });
             changed = true;
           } else {
-            // Supabase is source of truth for status — always apply it
-            const needsUpdate = snapshot || existing.status !== supaStatus;
+            // If this comp was recently patched locally, trust local status over stale Supabase data
+            const patch = recentPatches.current[comp.id];
+            const useLocalStatus = patch && (Date.now() - patch.ts < 5000);
+            const effectiveStatus = useLocalStatus ? patch.status : supaStatus;
+            if (useLocalStatus) {
+              console.log("[syncFromSupabase] SKIP status overwrite for", comp.id, "— recent patch:", patch.status, "(supabase has:", comp.status, ")");
+            }
+            const needsUpdate = snapshot || existing.status !== effectiveStatus;
             if (needsUpdate) {
-              console.log("[syncFromSupabase] UPDATE:", comp.id, "supabase status:", comp.status, "→ supaStatus:", supaStatus, "| local was:", existing.status);
+              console.log("[syncFromSupabase] UPDATE:", comp.id, "status:", existing.status, "→", effectiveStatus);
               const idx = all.indexOf(existing);
-              all[idx] = { ...existing, ...(snapshot ? { snapshot } : {}), status: supaStatus };
+              all[idx] = { ...existing, ...(snapshot ? { snapshot } : {}), status: effectiveStatus };
               changed = true;
             }
           }
