@@ -5199,10 +5199,20 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
     supabaseAuth.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
       supabase.fetchListForUser(session.access_token).then(({ data: supabaseComps, error }) => {
-        if (error || !supabaseComps?.length) return;
+        if (error) return;
         const all = events.getAll();
         let changed = false;
-        supabaseComps.forEach(comp => {
+        // Build set of competition IDs that actually belong to this user in Supabase
+        const ownedCompIds = new Set((supabaseComps || []).map(c => c.id));
+        // Remove any local events for this account that are NOT in Supabase
+        // (they were leaked from another account or deleted server-side)
+        const toRemove = all.filter(e => e.accountId === account.id && e.compId && !ownedCompIds.has(e.compId));
+        if (toRemove.length > 0) {
+          toRemove.forEach(e => { const idx = all.indexOf(e); if (idx !== -1) all.splice(idx, 1); });
+          changed = true;
+        }
+        // Merge in competitions from Supabase
+        (supabaseComps || []).forEach(comp => {
           const existing = all.find(e => e.compId === comp.id && e.accountId === account.id);
           const snapshot = comp.data
             ? { compData: comp.data.compData, gymnasts: comp.data.gymnasts, scores: comp.data.scores }
@@ -5211,7 +5221,6 @@ function OrganizerDashboard({ account, onNew, onOpen, onDuplicate, onLogout, onS
             all.push({ id: generateId(), accountId: account.id, compId: comp.id, status: "active", createdAt: comp.created_at, updatedAt: comp.created_at, snapshot });
             changed = true;
           } else if (snapshot) {
-            // Update snapshot with latest Supabase data without overwriting local status
             const idx = all.indexOf(existing);
             all[idx] = { ...existing, snapshot };
             changed = true;
