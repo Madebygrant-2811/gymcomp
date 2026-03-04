@@ -7080,15 +7080,17 @@ export default function App() {
   // ---- Supabase sync ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
+    if (!currentUser) { console.error("pushToSupabase: no authenticated user"); setSyncStatus("error"); return; }
     setSyncStatus("saving");
     try {
       const { data: { session } } = await supabaseAuth.auth.getSession();
-      const token = session?.access_token || SUPABASE_KEY;
+      if (!session) { console.error("pushToSupabase: no active session"); setSyncStatus("error"); return; }
+      const token = session.access_token;
       const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
       const { error } = await supabase.upsert("competitions", {
         id: compId,
         data: payload,
-        ...(currentUser ? { user_id: currentUser.id } : {}),
+        user_id: currentUser.id,
       }, token);
       if (error) throw new Error(error);
       setSyncStatus("saved");
