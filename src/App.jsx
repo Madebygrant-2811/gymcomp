@@ -5342,10 +5342,13 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
 
-  const pushStatusToSupabase = async (compId, newStatus) => {
-    const { data: { session } } = await supabaseAuth.auth.getSession();
-    if (!session) return;
-    await supabase.upsert("competitions", { id: compId, status: newStatus }, session.access_token);
+  const pushStatusToSupabase = async (cid, newStatus) => {
+    try {
+      const { data: { session } } = await supabaseAuth.auth.getSession();
+      if (!session) { console.error("[pushStatusToSupabase] no session"); return; }
+      const { error } = await supabase.upsert("competitions", { id: cid, status: newStatus, user_id: session.user.id }, session.access_token);
+      if (error) console.error("[pushStatusToSupabase] failed:", error);
+    } catch (e) { console.error("[pushStatusToSupabase] error:", e); }
   };
 
   const reload = () => {
@@ -8059,7 +8062,7 @@ export default function App() {
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
         supabaseAuth.auth.getSession().then(({ data: { session } }) => {
-          if (session) supabase.upsert("competitions", { id: ev.compId, status: "live" }, session.access_token);
+          if (session) supabase.upsert("competitions", { id: ev.compId, status: "live", user_id: session.user.id }, session.access_token);
         });
       }
     }
