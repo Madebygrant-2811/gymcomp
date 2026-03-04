@@ -1870,7 +1870,7 @@ const css = `
     --bg: #0a0a0f; --surface: #111118; --surface2: #1a1a24; --border: #2a2a3a;
     --accent: #c8f53a; --accent2: #7c5af5; --text: #f0f0f8; --muted: #6b6b85;
     --danger: #f53a5a; --success: #3af5a0; --warn: #f5b43a;
-    --radius: 8px; --font-display: 'Bebas Neue', sans-serif; --font-body: 'DM Sans', sans-serif;
+    --radius: 8px; --font-display: 'Saans', sans-serif; --font-body: 'Saans', sans-serif;
   }
   body { background: var(--bg); color: var(--text); font-family: var(--font-body); }
   .app { min-height: 100vh; display: flex; flex-direction: column; }
@@ -4811,11 +4811,12 @@ function Phase2_Step2({ compData, gymnasts, scores }) {
 // ============================================================
 // AUTH SCREEN — Google OAuth + Magic Link (replaces LoginScreen + RegisterScreen)
 // ============================================================
-function AuthScreen({ onJudgePath }) {
+function AuthScreen({ onResume }) {
   const [email, setEmail]     = useState("");
   const [sent, setSent]       = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
+  const [showJudgePin, setShowJudgePin] = useState(false);
 
   const handleGoogle = async () => {
     setError("");
@@ -4843,7 +4844,8 @@ function AuthScreen({ onJudgePath }) {
   };
 
   const googleIconUrl = "https://www.figma.com/api/mcp/asset/ecdc4d55-f8d8-4a06-ae78-791219f31494";
-  const heroImageUrl = "https://www.figma.com/api/mcp/asset/b18be7e3-debb-469e-9172-cfaab137a9c8";
+  const heroImageUrl = "https://www.figma.com/api/mcp/asset/aaec2cb4-9483-4034-9b9a-89218ba8373d";
+  const heroImage2Url = "https://www.figma.com/api/mcp/asset/197c6562-3f74-4df6-b7fa-f12e207e12c0";
 
   /* ── Shared form elements ── */
   const googleBtn = (
@@ -4852,9 +4854,9 @@ function AuthScreen({ onJudgePath }) {
       disabled={loading}
       style={{
         width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
-        gap: 10, padding: 16, border: "1px solid var(--brand-01)", borderRadius: 72,
+        gap: 10, padding: "12px 21px", border: "1px solid var(--brand-01)", borderRadius: 72,
         background: "#fff", cursor: loading ? "not-allowed" : "pointer",
-        fontFamily: "'Saans', sans-serif", fontWeight: 600, fontSize: 16,
+        fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16,
         color: "#050505", letterSpacing: "0.3px",
       }}
     >
@@ -4866,7 +4868,7 @@ function AuthScreen({ onJudgePath }) {
   const divider = (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>or sign in with email</span>
+      <span style={{ fontFamily: "var(--font-display)", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>or sign in with email</span>
       <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
     </div>
   );
@@ -4881,8 +4883,8 @@ function AuthScreen({ onJudgePath }) {
       autoFocus
       style={{
         width: "100%", boxSizing: "border-box", background: "#fff",
-        border: "1px solid var(--border)", borderRadius: 72, padding: "16px 24px",
-        fontFamily: "var(--font-body)", fontSize: 16, color: "var(--text-primary)",
+        border: "1px solid var(--border)", borderRadius: 72, padding: "12px 24px",
+        fontFamily: "var(--font-display)", fontSize: 16, color: "var(--text-primary)",
         outline: "none",
       }}
     />
@@ -4894,7 +4896,7 @@ function AuthScreen({ onJudgePath }) {
       disabled={loading}
       style={{
         width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
-        padding: 16, fontFamily: "var(--font-body)", fontWeight: 400,
+        padding: "12px 16px", fontFamily: "var(--font-display)", fontWeight: 400,
         fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
         letterSpacing: "0.3px", cursor: loading ? "not-allowed" : "pointer",
         opacity: loading ? 0.7 : 1,
@@ -4905,27 +4907,25 @@ function AuthScreen({ onJudgePath }) {
   );
 
   const judgeCard = (
-    <div style={{
-      width: "100%", maxWidth: 397, border: "1px solid var(--border)", borderRadius: 16,
-      padding: "16px 24px", display: "flex", flexDirection: "column", gap: 8, boxSizing: "border-box",
-    }}>
-      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
-        Entering Scores?
-      </div>
-      <div
-        onClick={onJudgePath}
-        style={{
-          fontFamily: "var(--font-body)", fontSize: 14, color: "var(--brand-02)",
-          cursor: "pointer", letterSpacing: "0.3px",
-        }}
-      >
+    <div
+      onClick={() => setShowJudgePin(true)}
+      style={{
+        width: "100%", border: "1px solid var(--border)", borderRadius: 16,
+        padding: "12px 24px", display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", boxSizing: "border-box", cursor: "pointer",
+      }}
+    >
+      <div style={{
+        fontFamily: "var(--font-display)", fontSize: 14, color: "var(--brand-02)",
+        textAlign: "center", letterSpacing: "0.3px",
+      }}>
         Enter as Scorer or Judge — PIN access →
       </div>
     </div>
   );
 
   const footer = (
-    <div style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-tertiary)" }}>
+    <div style={{ fontFamily: "var(--font-display)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center" }}>
       All Rights Reserved 2026 GymComp©
     </div>
   );
@@ -4960,14 +4960,15 @@ function AuthScreen({ onJudgePath }) {
   return (
     <>
       <style>{`
-        .auth-wrapper { position:fixed;inset:0;display:flex;font-family:'Saans',sans-serif;background:var(--background-light);--font-display:'Saans',sans-serif;--font-body:'Saans',sans-serif;--border:#ddd;--background-neutral:#efefef; }
+        .auth-wrapper { position:fixed;inset:0;display:flex;font-family:var(--font-display);background:var(--background-light);--border:#ddd;--background-neutral:#efefef; }
         .auth-left { width:550px;flex-shrink:0;padding:48px;display:flex;flex-direction:column;justify-content:space-between;background:var(--background-light);box-sizing:border-box; }
         .auth-left-logo img { height:25px; }
-        .auth-left-middle { display:flex;flex-direction:column;align-items:center;justify-content:space-between;height:586px;padding:0 40px; }
-        .auth-left-form { width:100%;display:flex;flex-direction:column;gap:32px; }
+        .auth-left-middle { display:flex;flex-direction:column;align-items:center;justify-content:space-between;height:363px;padding:0 40px; }
+        .auth-left-form { width:100%;display:flex;flex-direction:column;gap:16px; }
         .auth-right { flex:1;padding:24px;min-width:0;height:100%;box-sizing:border-box; }
         .auth-right-inner { background:#000dff;border-radius:32px;overflow:hidden;height:100%;width:100%;position:relative; }
-        .auth-right-inner img { position:absolute;width:200%;height:200%;top:-80%;left:-25%;max-width:none;pointer-events:none;object-fit:cover; }
+        .auth-right-inner .auth-hero-bg { position:absolute;width:200%;height:200%;top:-80%;left:-25%;max-width:none;pointer-events:none;object-fit:cover; }
+        .auth-right-inner .auth-hero-laptop { position:absolute;left:0;top:-2%;width:100%;height:102%;max-width:none;pointer-events:none;object-fit:cover; }
 
         @media(max-width:767px) {
           .auth-wrapper { flex-direction:column; }
@@ -4975,7 +4976,6 @@ function AuthScreen({ onJudgePath }) {
           .auth-left-middle { height:auto;gap:32px;padding:0; }
           .auth-left-form { width:100%;max-width:396px; }
           .auth-right { display:none; }
-          .auth-left-footer { text-align:center; }
         }
       `}</style>
       <div className="auth-wrapper">
@@ -4986,11 +4986,13 @@ function AuthScreen({ onJudgePath }) {
           </div>
 
           <div className="auth-left-middle">
-            <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 32, color: "var(--text-primary)", lineHeight: 1.1, textAlign: "center", width: "100%" }}>
-              Welcome to GymComp
-            </div>
-            <div style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-secondary)", textAlign: "center", lineHeight: "18px", maxWidth: 200 }}>
-              Sign in or sign up for free<br />with your email
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: "100%" }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 32, color: "var(--text-primary)", lineHeight: 1.1, textAlign: "center", width: "100%" }}>
+                Welcome to GymComp
+              </div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 12, color: "var(--text-secondary)", textAlign: "center", lineHeight: "18px", maxWidth: 200 }}>
+                Sign in or sign up for free<br />with your email
+              </div>
             </div>
             <div className="auth-left-form">
               {googleBtn}
@@ -5000,14 +5002,14 @@ function AuthScreen({ onJudgePath }) {
                 {error && <div style={{ fontSize: 13, color: "#e53e3e", paddingLeft: 24 }}>{error}</div>}
                 {sendBtn}
               </div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 10, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.4, maxWidth: 246, alignSelf: "center" }}>
+                By signing up to a free account you agree to the GymComp Privacy Policy, Terms and Cookie Notice.
+              </div>
             </div>
-            <div style={{ fontFamily: "var(--font-body)", fontSize: 10, color: "var(--text-tertiary)", textAlign: "center", lineHeight: 1.4, maxWidth: 246 }}>
-              By signing up to a free account you agree to the GymComp Privacy Policy, Terms and Cookie Notice.
-            </div>
-            {judgeCard}
           </div>
 
-          <div className="auth-left-footer">
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24, width: "100%" }}>
+            {judgeCard}
             {footer}
           </div>
         </div>
@@ -5015,10 +5017,18 @@ function AuthScreen({ onJudgePath }) {
         {/* ── Right Panel (hero image) ── */}
         <div className="auth-right">
           <div className="auth-right-inner">
-            <img src={heroImageUrl} alt="" />
+            <img className="auth-hero-bg" src={heroImageUrl} alt="" />
+            <img className="auth-hero-laptop" src={heroImage2Url} alt="" />
           </div>
         </div>
       </div>
+
+      {showJudgePin && (
+        <JudgePinModal
+          onResume={onResume}
+          onClose={() => setShowJudgePin(false)}
+        />
+      )}
     </>
   );
 }
@@ -6557,9 +6567,9 @@ function HomeScreen({ onNew, onResume }) {
 }
 
 // ============================================================
-// JUDGE PIN SCREEN — competition ID + PIN entry only
+// JUDGE PIN MODAL — competition ID + PIN entry overlay
 // ============================================================
-function JudgePinScreen({ onResume, onBack }) {
+function JudgePinModal({ onResume, onClose }) {
   const [resumeId, setResumeId] = useState("");
   const [resumePin, setResumePin] = useState("");
   const [resumeError, setResumeError] = useState("");
@@ -6579,47 +6589,87 @@ function JudgePinScreen({ onResume, onBack }) {
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, minHeight: "calc(100vh - 65px)" }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 56, letterSpacing: 3, lineHeight: 1, color: "var(--accent)", marginBottom: 10 }}>GYMCOMP</div>
-          <div style={{ color: "var(--muted)", fontSize: 14 }}>Judge access — enter your competition details below</div>
-        </div>
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(4,4,4,0.7)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "var(--background-light)", borderRadius: 24, padding: 32,
+          width: 347, maxWidth: "calc(100vw - 32px)", position: "relative",
+          display: "flex", flexDirection: "column", gap: 16, boxSizing: "border-box",
+          fontFamily: "var(--font-display)",
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute", top: 13, right: 13, width: 25, height: 25,
+            background: "none", border: "none", cursor: "pointer", padding: 0,
+            fontFamily: "inherit", fontSize: 16, color: "var(--text-tertiary)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          aria-label="Close"
+        >
+          &#x2715;
+        </button>
 
-        <div className="card" style={{ padding: "28px 32px" }}>
-          <div className="card-title" style={{ marginBottom: 16 }}>Open Competition</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              className="input"
-              placeholder="Competition ID"
-              value={resumeId}
-              onChange={e => setResumeId(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleOpen()}
-              autoFocus
-            />
-            <input
-              className="input"
-              placeholder="PIN (if set)"
-              type="password"
-              maxLength={4}
-              value={resumePin}
-              onChange={e => setResumePin(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleOpen()}
-            />
-            {resumeError && <div className="error-box">{resumeError}</div>}
-            <button
-              className="btn btn-primary"
-              style={{ width: "100%", justifyContent: "center" }}
-              onClick={handleOpen}
-              disabled={resuming || !resumeId.trim()}
-            >
-              {resuming ? "Loading…" : "Open Competition →"}
-            </button>
+        {/* Header */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontFamily: "inherit", fontWeight: 600, fontSize: 18, color: "var(--text-primary)", lineHeight: 1.2 }}>
+            Enter Competition
+          </div>
+          <div style={{ fontFamily: "inherit", fontSize: 10, color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+            If you are a Judge or someone entering the Scores please enter the Competition ID and PIN (if set) — if you are unsure please contact your Competition Organiser.
           </div>
         </div>
 
-        <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back to Sign In</button>
+        {/* Form */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <input
+            placeholder="Competition ID"
+            value={resumeId}
+            onChange={e => setResumeId(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleOpen()}
+            autoFocus
+            style={{
+              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
+              borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
+              fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
+            }}
+          />
+          <input
+            placeholder="PIN (if set)"
+            type="password"
+            maxLength={4}
+            value={resumePin}
+            onChange={e => setResumePin(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleOpen()}
+            style={{
+              width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
+              borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
+              fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
+            }}
+          />
+          {resumeError && <div style={{ fontSize: 13, color: "#e53e3e", paddingLeft: 24 }}>{resumeError}</div>}
+          <button
+            onClick={handleOpen}
+            disabled={resuming || !resumeId.trim()}
+            style={{
+              width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
+              padding: 16, fontFamily: "inherit", fontWeight: 400,
+              fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
+              letterSpacing: "0.3px", cursor: resuming || !resumeId.trim() ? "not-allowed" : "pointer",
+              opacity: resuming ? 0.7 : 1,
+            }}
+          >
+            {resuming ? "Loading…" : "Enter Competition →"}
+          </button>
         </div>
       </div>
     </div>
@@ -7014,7 +7064,7 @@ export default function App() {
   const [currentUser,    setCurrentUser]    = useState(null);  // supabase user object
   const [currentProfile, setCurrentProfile] = useState(null);  // row from profiles table
   const [authLoading,    setAuthLoading]    = useState(true);
-  // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "judge-pin" | "new-pin" | "active"
+  // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "new-pin" | "active"
   const [screen, setScreen] = useState("loading");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   // Current event record (from events store) — links comp to account
@@ -7319,7 +7369,7 @@ export default function App() {
     return (
       <>
         <style>{css}</style>
-        <AuthScreen onJudgePath={() => setScreen("judge-pin")} />
+        <AuthScreen onResume={handleResume} />
       </>
     );
   }
@@ -7370,23 +7420,6 @@ export default function App() {
               onClose={() => setShowAccountSettings(false)}
             />
           )}
-        </div>
-      </>
-    );
-  }
-
-  // ---- JUDGE PIN ENTRY ----
-  if (screen === "judge-pin") {
-    return (
-      <>
-        <style>{css}</style>
-        <div className="app">
-          <nav className="nav">
-            <div className="nav-logo">GYMCOMP<span>.</span></div>
-            <div />
-            <button className="btn btn-ghost btn-sm" onClick={() => setScreen("auth-login")}>Sign In</button>
-          </nav>
-          <JudgePinScreen onResume={handleResume} onBack={() => setScreen("auth-login")} />
         </div>
       </>
     );
