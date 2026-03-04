@@ -7841,9 +7841,9 @@ export default function App() {
       const token = session.access_token;
       const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
       const record = { id: compId, data: payload, user_id: currentUser.id };
-      // Always include current status — use explicit param, or look up local event status
-      const localStatus = status || (currentEventId ? (events.getAll().find(e => e.id === currentEventId) || {}).status : undefined);
-      if (localStatus) record.status = localStatus;
+      // Always include status — use explicit param, or look up from local events by compId (not currentEventId which may be stale in closure)
+      const localEv = events.getAll().find(e => e.compId === compId);
+      record.status = status || localEv?.status || "draft";
       const { error } = await supabase.upsert("competitions", record, token);
       if (error) throw new Error(error);
       setSyncStatus("saved");
@@ -7851,7 +7851,7 @@ export default function App() {
       console.error("Supabase sync failed:", e.message);
       setSyncStatus("error");
     }
-  }, [compId, compPin, inSandbox, currentUser, currentEventId]);
+  }, [compId, compPin, inSandbox, currentUser]);
 
   const scheduleSync = useCallback((cd, g, s) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
