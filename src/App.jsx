@@ -2140,6 +2140,9 @@ const css = `
      ============================================================ */
 
   @media (max-width: 768px) {
+    /* Prevent iOS Safari auto-zoom on focus — all interactive elements must be ≥16px */
+    .input, .select, textarea, input, select, .btn, .club-edit-input, .score-input { font-size: 16px !important; }
+
     .nav { padding: 12px 16px; gap: 10px; }
     .nav-logo { font-size: 22px; }
 
@@ -5605,6 +5608,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
         .od-empty-box-btn:hover{opacity:0.92;}
         .od-section-title{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:16px;}
         .od-empty-msg{text-align:center;padding:40px 24px;color:var(--text-tertiary);font-size:14px;width:100%;}
+        .od-mobile-filters{display:none;}
         @media(max-width:768px){
           .od-main{padding:24px 16px;}
           .od-cards-row{flex-direction:column;}
@@ -5645,11 +5649,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
         {/* Cards area */}
         <div className="od-content">
           {/* Active filter pill */}
-          {statusFilter !== "all" && (
-            <button className="od-filter-pill" onClick={() => setStatusFilter("all")}>
-              {sidebarFilters.find(f => f.value === statusFilter)?.label || statusFilter} <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.5 }}>✕</span>
-            </button>
-          )}
+          {/* Active filter dismiss pill — mobile only (desktop uses sidebar) */}
 
           {/* Empty state — no events at all */}
           {myEvents.length === 0 ? (
