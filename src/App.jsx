@@ -5615,6 +5615,12 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
           .od-main{padding:24px 16px;}
           .od-cards-row{flex-direction:column;}
           .od-card-wrap{min-width:0;}
+          .od-mobile-filters{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+          .od-mobile-filters::-webkit-scrollbar{display:none;}
+          .od-mobile-filter{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:48px;border:1.5px solid var(--border);background:var(--background-light);font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--text-tertiary);cursor:pointer;white-space:nowrap;}
+          .od-mobile-filter.active{background:var(--brand-01);color:white;border-color:var(--brand-01);}
+          .od-mobile-filter .od-mf-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+          .od-mobile-filter .od-mf-count{font-size:11px;opacity:0.7;}
         }
       `}</style>
       <div className="od-main">
@@ -5623,6 +5629,23 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
           <div className="od-subtitle">
             This is your Organiser Vault - within here are all of your competitions - you can filter these on your toolbar into the different status of competitions you currently have.
           </div>
+        </div>
+
+        {/* Mobile filter pills — visible only ≤768px */}
+        <div className="od-mobile-filters">
+          {sidebarFilters.map(f => {
+            const count = myEvents.filter(e => e.status === f.value).length;
+            const isActive = statusFilter === f.value;
+            const sc = statusConfig[f.value] || {};
+            return (
+              <button key={f.value} className={`od-mobile-filter${isActive ? " active" : ""}`}
+                onClick={() => setStatusFilter(prev => prev === f.value ? "all" : f.value)}>
+                <span className="od-mf-dot" style={{ background: isActive ? "white" : sc.dot }} />
+                {f.label}
+                {count > 0 && <span className="od-mf-count">{count}</span>}
+              </button>
+            );
+          })}
         </div>
 
         {/* Cards area */}
@@ -7818,7 +7841,9 @@ export default function App() {
       const token = session.access_token;
       const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
       const record = { id: compId, data: payload, user_id: currentUser.id };
-      if (status) record.status = status;
+      // Always include current status — use explicit param, or look up local event status
+      const localStatus = status || (currentEventId ? (events.getAll().find(e => e.id === currentEventId) || {}).status : undefined);
+      if (localStatus) record.status = localStatus;
       const { error } = await supabase.upsert("competitions", record, token);
       if (error) throw new Error(error);
       setSyncStatus("saved");
@@ -7826,7 +7851,7 @@ export default function App() {
       console.error("Supabase sync failed:", e.message);
       setSyncStatus("error");
     }
-  }, [compId, compPin, inSandbox, currentUser]);
+  }, [compId, compPin, inSandbox, currentUser, currentEventId]);
 
   const scheduleSync = useCallback((cd, g, s) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
