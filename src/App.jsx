@@ -2163,7 +2163,10 @@ const css = `
 
     .main { flex-direction: column; }
 
-    .content { padding: 16px 12px; }
+    .content { padding: 16px; }
+    .round-time-row { flex-direction: column; align-items: stretch !important; gap: 8px; }
+    .round-time-row > div:first-child { width: auto !important; text-align: center; }
+    .round-time-row .field { flex: 1 1 auto !important; width: 100%; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
     .card { padding: 14px 12px; overflow: hidden; }
 
@@ -2195,7 +2198,7 @@ const css = `
     .dash-hero-title { font-size: 32px !important; }
 
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .content { padding: 12px 8px; }
+    .content { padding: 16px; }
     .card { padding: 12px 10px; }
 
     .home-logo { font-size: 44px !important; letter-spacing: 2px !important; }
@@ -2486,7 +2489,7 @@ function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
           <div style={{ marginTop: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Set times for each round</div>
             {data.rounds.map((r, i) => (
-              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+              <div key={r.id} className="round-time-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                 <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
                 <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
                   <label className="label">Start</label>
@@ -8329,7 +8332,7 @@ export default function App() {
 
       {/* SETUP phase 1 */}
       {phase === 1 && (
-        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+        <main className="content" style={{ maxWidth: 1200 }}>
           <Step1_CompDetails data={compData} setData={setCompData} syncStatus={syncStatus} onSave={handleSaveSetup} onNext={() => {
             if (syncTimer.current) clearTimeout(syncTimer.current);
             const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
@@ -8351,7 +8354,7 @@ export default function App() {
 
       {/* GYMNAST MANAGEMENT */}
       {phase === "gymnasts" && (
-        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+        <main className="content" style={{ maxWidth: 1200 }}>
           <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
             onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
         </main>
@@ -8359,7 +8362,7 @@ export default function App() {
 
       {/* COMPETITION phase 2 — no old sidebar, just content */}
       {phase === 2 && (
-        <main className="content" style={{ padding: 40, maxWidth: 1200 }}>
+        <main className="content" style={{ maxWidth: 1200 }}>
           {step === 1 && <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} />}
           {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} />}
           {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} />}
