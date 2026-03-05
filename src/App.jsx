@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -1949,7 +1950,7 @@ const css = `
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
   .card-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
-  .field { margin-bottom: 18px; }
+  .field { margin-bottom: 18px; min-width: 0; }
   .label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
   .input, .select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 11px 20px; transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
   .select { appearance: none; -webkit-appearance: none; padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b85' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; }
@@ -2088,6 +2089,11 @@ const css = `
   .results-level-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
   .results-level-header { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
   .results-level-header span { font-size: 14px; font-weight: 600; color: var(--text-primary); background: rgba(0,13,255,0.06); padding: 4px 12px; border-radius: 99px; letter-spacing: 0.3px; }
+  .results-filters { display: flex; gap: 8px; align-items: center; }
+
+  .si-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .si-toolbar .tabs { flex: 1; margin-bottom: 0; border-bottom: none; }
+  .si-toolbar .tab-btn { flex: 1; text-align: center; }
 
   /* ============================================================
      RESPONSIVE
@@ -2096,7 +2102,8 @@ const css = `
   @media (max-width: 768px) {
     /* Prevent iOS Safari auto-zoom on focus — all interactive elements must be ≥16px */
     .input, .select, textarea, input, select, .btn, .club-edit-input, .score-input { font-size: 16px !important; }
-    .input, .select, input, select, textarea { padding: 10px 14px; box-sizing: border-box; max-width: 100%; width: 100%; }
+    .input, .select, input, select, textarea { padding: 10px 14px; box-sizing: border-box; max-width: 100%; width: 100%; min-width: 0; }
+    input[type="date"], input[type="time"] { -webkit-appearance: none; appearance: none; }
 
     .nav { padding: 12px 16px; gap: 10px; }
     .nav-logo { font-size: 22px; }
@@ -2125,6 +2132,10 @@ const css = `
     .results-toolbar .tabs { width: 100%; justify-content: stretch; }
     .results-toolbar .tab-btn { flex: 1; text-align: center; }
     .results-level-card { padding: 14px; }
+    .results-level-header { flex-wrap: wrap; }
+    .results-level-header .results-filters { width: 100%; }
+    .si-toolbar .tabs { width: 100%; }
+    .si-toolbar .si-search { width: 100%; }
 
     .setup-content { padding: 16px !important; }
     .cd-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -4615,15 +4626,11 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     return bufToVal(buf).toFixed(2);
   };
 
-  const handleScoreKey = (field, max) => (e) => {
+  const processKey = (field, max, key) => {
     let buf = modalBufs[field] || "";
-    if (e.key === "Enter") { submitScoreModal(); return; }
-    if (e.key === "Tab" || e.key === "Escape") return;
-    e.preventDefault();
 
-    if (e.key === "Backspace") {
+    if (key === "Backspace") {
       if (modalPristine[field]) {
-        // First backspace on pristine field — clear entirely
         setModalPristine(p => ({ ...p, [field]: false }));
         mb(field, "");
         mf(field, "");
@@ -4636,13 +4643,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       return;
     }
 
-    // Clear pristine field on first digit/dot — start fresh
-    if (modalPristine[field] && (/^\d$/.test(e.key) || e.key === ".")) {
+    if (modalPristine[field] && (/^\d$/.test(key) || key === ".")) {
       setModalPristine(p => ({ ...p, [field]: false }));
       buf = "";
     }
 
-    if (e.key === ".") {
+    if (key === ".") {
       if (buf.includes(".")) return;
       const next = (buf || "0") + ".";
       mb(field, next);
@@ -4651,26 +4657,43 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       return;
     }
 
-    if (!/^\d$/.test(e.key)) return;
+    if (!/^\d$/.test(key)) return;
 
     if (buf.includes(".")) {
       const afterDot = buf.split(".")[1] || "";
       if (afterDot.length >= 2) return;
     }
 
-    const next = buf + e.key;
+    const next = buf + key;
     const v = bufToVal(next);
     if (max !== undefined && v > max) return;
     mb(field, next);
     mf(field, v === 0 ? "" : v.toFixed(2));
   };
 
+  const handleScoreKey = (field, max) => (e) => {
+    if (e.key === "Enter") { submitScoreModal(); return; }
+    if (e.key === "Tab" || e.key === "Escape") return;
+    e.preventDefault();
+    processKey(field, max, e.key);
+  };
+
+  // Mobile: capture input from soft keyboard via beforeinput
+  const handleBeforeInput = (field, max) => (e) => {
+    e.preventDefault();
+    const chars = e.data || "";
+    for (const ch of chars) processKey(field, max, ch);
+  };
+
   const scoreInput = (field, max, autoFocus, large) => (
-    <input className="score-input" type="text" inputMode="numeric"
-      value={scoreDisplay(field)} readOnly
-      style={{ caretColor: "transparent", cursor: "default", ...(large ? { width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 } : {}) }}
+    <input className="score-input" type="text" inputMode="decimal"
+      value={scoreDisplay(field)}
+      style={{ caretColor: "transparent", ...(large ? { width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 } : {}) }}
+      onChange={() => {}}
       onFocus={() => { if (modalBufs[field]) setModalPristine(p => ({ ...p, [field]: true })); }}
-      onKeyDown={handleScoreKey(field, max)} autoFocus={autoFocus} />
+      onKeyDown={handleScoreKey(field, max)}
+      onBeforeInput={handleBeforeInput(field, max)}
+      autoFocus={autoFocus} />
   );
 
   return (
@@ -4765,7 +4788,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         <div className="page-title" style={{ fontSize: 22, marginBottom: 16 }}>Scores</div>
 
         {/* ── Search + Round Tabs ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <div className="si-toolbar">
           <input
             className="input si-search"
             type="text"
@@ -4774,8 +4797,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
             onChange={e => setSearchQuery(e.target.value)}
             style={{ marginBottom: 0 }}
           />
-          <div style={{ flex: 1 }} />
-          <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+          <div className="tabs">
             {compData.rounds.map(r => (
               <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
                 onClick={() => setActiveRound(r.id)}>{r.name}</button>
@@ -4895,7 +4917,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         if (!g) return null;
         const modalTotal = calcModalTotal();
         const n = judgeCount(scoreModal.app);
-        return (
+        return createPortal(
           <div className="modal-backdrop" onClick={() => setScoreModal(null)}>
             <div className="modal-box" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -4972,12 +4994,13 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
       {/* ── Delete Confirm ── */}
-      {deleteConfirm && (
+      {deleteConfirm && createPortal(
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Delete Score?</div>
@@ -4989,11 +5012,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
               <button className="btn btn-danger" onClick={() => deleteScore(deleteConfirm.gid, deleteConfirm.app)}>Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Query Modal ── */}
-      {queryModal && (
+      {queryModal && createPortal(
         <div className="modal-backdrop" onClick={() => setQueryModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Flag Coach Query</div>
@@ -5017,7 +5041,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
               Flagged scores show as "Under Review" on the coach live view until cleared.
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -5152,7 +5177,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
                   {idx === 0 && <>
                     <div style={{ flex: 1 }} />
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div className="results-filters">
                       <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
                         style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
                         <option value="all">All Levels</option>
@@ -5229,7 +5254,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
                   {idx === 0 && <>
                     <div style={{ flex: 1 }} />
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div className="results-filters">
                       <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
                         style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
                         <option value="all">All Levels</option>
