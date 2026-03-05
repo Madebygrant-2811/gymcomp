@@ -419,15 +419,24 @@
           `)
         ].join("");
 
+        if (!hasSomeScore) {
+          return `
+            <div class="app-section">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="app-label" style="margin-bottom:0">${escHtml(app)}</span>
+                <span style="font-size:12px;color:var(--muted);font-style:italic">No scores yet</span>
+              </div>
+            </div>
+          `;
+        }
+
         return `
           <div class="app-section">
             <div class="app-label">${escHtml(app)}</div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th>Score</th></tr></thead>
-                <tbody>
-                  ${hasSomeScore ? rows : `<tr class="empty-row"><td colspan="5">No scores yet</td></tr>`}
-                </tbody>
+                <tbody>${rows}</tbody>
               </table>
             </div>
           </div>
@@ -489,6 +498,17 @@
         })
       ].join("");
 
+      const hasAnyScore = withTotals.some(g => g.total > 0);
+
+      if (!hasAnyScore) {
+        return `
+          <div class="level-card">
+            <div class="level-card-header">${groupLabel}</div>
+            <div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic">No scores yet</div>
+          </div>
+        `;
+      }
+
       return `
         <div class="level-card">
           <div class="level-card-header">${groupLabel}</div>
@@ -502,9 +522,7 @@
                     <th>Total</th>
                   </tr>
                 </thead>
-                <tbody>
-                  ${withTotals.some(g => g.total > 0) ? rows : `<tr class="empty-row"><td colspan="${4 + apparatus.length + 1}">No scores yet</td></tr>`}
-                </tbody>
+                <tbody>${rows}</tbody>
               </table>
             </div>
           </div>
