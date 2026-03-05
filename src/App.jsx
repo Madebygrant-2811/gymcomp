@@ -1539,84 +1539,18 @@ function downloadTemplate() {
 }
 
 // ============================================================
-// POSTCODE LOOKUP — client-side prefix matching (no external fetch needed in sandbox)
+// ADDRESS LOOKUP — Mapbox Geocoding API v5
 // ============================================================
-// ============================================================
-// ADDRESS LOOKUP — address name, street, town or postcode
-// Uses Nominatim (OSM) for address search, postcodes.io for postcode autocomplete
-// Falls back gracefully when fetch is blocked (sandbox / offline)
-// ============================================================
-
-const PC_LOOKUP = {
-  AB:"Aberdeen",AL:"St Albans",B:"Birmingham",BA:"Bath",BB:"Blackburn",BD:"Bradford",
-  BH:"Bournemouth",BL:"Bolton",BN:"Brighton",BR:"Bromley",BS:"Bristol",BT:"Belfast",
-  CA:"Carlisle",CB:"Cambridge",CF:"Cardiff",CH:"Chester",CM:"Chelmsford",CO:"Colchester",
-  CR:"Croydon",CT:"Canterbury",CV:"Coventry",CW:"Crewe",DA:"Dartford",DD:"Dundee",
-  DE:"Derby",DG:"Dumfries",DH:"Durham",DL:"Darlington",DN:"Doncaster",DT:"Dorchester",
-  DY:"Dudley",E:"London E",EC:"London EC",EH:"Edinburgh",EN:"Enfield",EX:"Exeter",
-  FK:"Falkirk",FY:"Blackpool",G:"Glasgow",GL:"Gloucester",GU:"Guildford",HA:"Harrow",
-  HD:"Huddersfield",HG:"Harrogate",HP:"Hemel Hempstead",HR:"Hereford",HS:"Outer Hebrides",
-  HU:"Hull",HX:"Halifax",IG:"Ilford",IP:"Ipswich",IV:"Inverness",KA:"Kilmarnock",
-  KT:"Kingston upon Thames",KW:"Caithness",KY:"Kirkcaldy",L:"Liverpool",LA:"Lancaster",
-  LD:"Llandrindod Wells",LE:"Leicester",LL:"Llandudno",LN:"Lincoln",LS:"Leeds",LU:"Luton",
-  M:"Manchester",ME:"Medway",MK:"Milton Keynes",ML:"Motherwell",N:"London N",
-  NE:"Newcastle upon Tyne",NG:"Nottingham",NN:"Northampton",NP:"Newport",NR:"Norwich",
-  NW:"London NW",OL:"Oldham",OX:"Oxford",PA:"Paisley",PE:"Peterborough",PH:"Perth",
-  PL:"Plymouth",PO:"Portsmouth",PR:"Preston",RG:"Reading",RH:"Redhill",RM:"Romford",
-  S:"Sheffield",SA:"Swansea",SE:"London SE",SG:"Stevenage",SK:"Stockport",SL:"Slough",
-  SM:"Sutton",SN:"Swindon",SO:"Southampton",SP:"Salisbury",SR:"Sunderland",SS:"Southend-on-Sea",
-  ST:"Stoke-on-Trent",SW:"London SW",SY:"Shrewsbury",TA:"Taunton",TD:"Galashiels",
-  TF:"Telford",TN:"Tonbridge",TQ:"Torquay",TR:"Truro",TS:"Cleveland",TW:"Twickenham",
-  UB:"Southall",W:"London W",WA:"Warrington",WC:"London WC",WD:"Watford",WF:"Wakefield",
-  WN:"Wigan",WR:"Worcester",WS:"Walsall",WV:"Wolverhampton",YO:"York",ZE:"Shetland"
-};
-
-const PC_AREAS_LIST = Object.keys(PC_LOOKUP);
-
-// Quick client-side postcode district suggestions (fallback / instant feedback)
-function getLocalPCSuggestions(input) {
-  const q = input.trim().toUpperCase().replace(/\s+/g, "");
-  if (q.length < 2) return [];
-  const m = q.match(/^([A-Z]{1,2})(\d{0,2})/);
-  if (!m) return [];
-  const area = m[1], dist = m[2];
-  const matchAreas = PC_AREAS_LIST.filter(a => a.startsWith(area));
-  if (!matchAreas.length) return [];
-  const results = [];
-  for (const a of matchAreas) {
-    const max = dist === "" ? 9 : 99;
-    for (let i = 1; i <= max && results.length < 8; i++) {
-      if (String(i).startsWith(dist || "")) {
-        results.push({ label: `${a}${i}`, sub: PC_LOOKUP[a] || "" });
-      }
-    }
-  }
-  return results.slice(0, 6);
-}
-
-// Format a Nominatim result into a clean address string
-function formatNominatimAddress(r) {
-  const a = r.address || {};
-  const parts = [
-    a.leisure || a.amenity || a.building || a.house_name,
-    a.house_number && a.road ? `${a.house_number} ${a.road}` : a.road,
-    a.suburb || a.neighbourhood,
-    a.town || a.city || a.village || a.hamlet,
-    a.county,
-    a.postcode,
-  ].filter(Boolean);
-  return parts.join(", ");
-}
+const MAPBOX_TOKEN = "pk.eyJ1IjoibWFkZWJ5Z3JhbnQiLCJhIjoiY21tZHlyZWVuMDE0ejJycXdkeG10Znp6aCJ9.0l6ElokJAH5j-irvMAWL5w";
 
 function AddressLookup({ value, onChange, placeholder }) {
   const [query, setQuery] = useState(value || "");
   const [suggestions, setSuggestions] = useState([]);
-  const [status, setStatus] = useState("idle"); // idle | searching | error
+  const [status, setStatus] = useState("idle");
   const debounceRef = useRef(null);
   const wrapRef = useRef(null);
   const abortRef = useRef(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setSuggestions([]);
@@ -1629,69 +1563,30 @@ function AddressLookup({ value, onChange, placeholder }) {
     const q = val.trim();
     if (q.length < 3) { setSuggestions([]); setStatus("idle"); return; }
 
-    const isPostcodeish = /^[A-Z]{1,2}\d/i.test(q.replace(/\s/g, ""));
-
-    // Always show local postcode hints instantly if it looks like a postcode
-    if (isPostcodeish) {
-      const local = getLocalPCSuggestions(q);
-      if (local.length) setSuggestions(local.map(l => ({ ...l, type: "pc-local" })));
-    }
-
-    // Abort previous request
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     setStatus("searching");
 
     try {
-      let results = [];
-
-      if (isPostcodeish) {
-        // postcodes.io autocomplete
-        const clean = q.replace(/\s+/g, "").toUpperCase();
-        const res = await fetch(
-          `https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}/autocomplete`,
-          { signal: abortRef.current.signal }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const codes = (data.result || []).slice(0, 8);
-          results = codes.map(pc => {
-            const area = pc.match(/^([A-Z]{1,2})/)?.[1] || "";
-            return { label: pc, sub: PC_LOOKUP[area] || "", type: "postcode" };
-          });
-        }
-      } else {
-        // Nominatim address search — UK only
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&countrycodes=gb&q=${encodeURIComponent(q)}`,
-          {
-            signal: abortRef.current.signal,
-            headers: { "Accept-Language": "en-GB" }
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          results = data.map(r => ({
-            label: formatNominatimAddress(r),
-            sub: r.type ? r.type.replace(/_/g, " ") : "",
-            type: "address",
-            lat: r.lat, lon: r.lon
-          })).filter(r => r.label);
-        }
-      }
-
-      if (results.length) {
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&country=gb&limit=6&types=address,poi,place,postcode,locality&language=en`,
+        { signal: abortRef.current.signal }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const results = (data.features || []).map(f => ({
+          label: f.place_name.replace(/, United Kingdom$/, ""),
+          sub: f.place_type?.[0]?.replace(/_/g, " ") || "",
+          type: f.place_type?.[0] || "address",
+        }));
         setSuggestions(results);
-        setStatus("idle");
       } else {
-        setSuggestions(isPostcodeish ? getLocalPCSuggestions(q).map(l => ({ ...l, type: "pc-local" })) : []);
-        setStatus("idle");
+        setSuggestions([]);
       }
+      setStatus("idle");
     } catch (e) {
       if (e.name !== "AbortError") {
-        // Network blocked (sandbox) — show local postcode hints only
-        const fallback = getLocalPCSuggestions(q);
-        setSuggestions(fallback.map(l => ({ ...l, type: "pc-local" })));
+        setSuggestions([]);
         setStatus("idle");
       }
     }
@@ -1702,24 +1597,23 @@ function AddressLookup({ value, onChange, placeholder }) {
     setQuery(val);
     onChange(val);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(val), 280);
+    debounceRef.current = setTimeout(() => search(val), 250);
   };
 
   const select = (s) => {
-    const val = s.label;
-    setQuery(val);
-    onChange(val);
+    setQuery(s.label);
+    onChange(s.label);
     setSuggestions([]);
   };
 
-  const iconFor = (type) => type === "address" ? "📍" : "🏷";
+  const iconFor = (type) => type === "poi" ? "📍" : type === "postcode" ? "🏷" : "📍";
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <div style={{ position: "relative" }}>
         <input
           className="input"
-          placeholder={placeholder || "Search by venue name, address or postcode…"}
+          placeholder={placeholder || "Search by venue name, address or postcode\u2026"}
           value={query}
           onChange={handleChange}
           onFocus={() => query.length >= 3 && search(query)}
@@ -1729,7 +1623,7 @@ function AddressLookup({ value, onChange, placeholder }) {
           <div style={{
             position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
             fontSize: 11, color: "var(--muted)"
-          }}>⏳</div>
+          }}>\u23F3</div>
         )}
       </div>
       {suggestions.length > 0 && (
@@ -2232,6 +2126,7 @@ const css = `
     .results-toolbar .tab-btn { flex: 1; text-align: center; }
     .results-level-card { padding: 14px; }
 
+    .setup-content { padding: 16px !important; }
     .cd-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .csv-zone { min-width: 100% !important; }
     .club-pills-row { flex-direction: column; }
@@ -2290,8 +2185,8 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     const target = el || window;
     const onScroll = () => {
       const y = el ? el.scrollTop : window.scrollY;
-      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
-      else if (y < lastScrollY.current) setTopbarHidden(false);
+      if (y > 60) setTopbarHidden(true);
+      else setTopbarHidden(false);
       lastScrollY.current = y;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
@@ -2453,7 +2348,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     <div>
       {topbar}
 
-      <div style={{ padding: "40px", maxWidth: 1200 }}>
+      <div className="setup-content" style={{ padding: "40px", maxWidth: 1200 }}>
       {/* Intro */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
@@ -4041,8 +3936,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     const target = el || window;
     const onScroll = () => {
       const y = el ? el.scrollTop : window.scrollY;
-      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
-      else if (y < lastScrollY.current) setTopbarHidden(false);
+      if (y > 60) setTopbarHidden(true);
+      else setTopbarHidden(false);
       lastScrollY.current = y;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
@@ -4212,7 +4107,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
         </div>
       </div>
 
-      <div style={{ padding: "40px", maxWidth: 1200 }}>
+      <div className="setup-content" style={{ padding: "40px", maxWidth: 1200 }}>
       <div className="page-header">
         <div className="page-title">Gymnast <span>Details</span></div>
         <div className="page-sub">Add gymnasts club by club, or upload via CSV</div>
@@ -4470,8 +4365,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     const target = el || window;
     const onScroll = () => {
       const y = el ? el.scrollTop : window.scrollY;
-      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
-      else if (y < lastScrollY.current) setTopbarHidden(false);
+      if (y > 60) setTopbarHidden(true);
+      else setTopbarHidden(false);
       lastScrollY.current = y;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
@@ -5199,7 +5094,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
     const el = document.querySelector(".app-main");
     if (!el) return;
     let last = el.scrollTop;
-    const onScroll = () => { const t = el.scrollTop; setTopbarHidden(t > 60 && t > last); last = t; };
+    const onScroll = () => { const t = el.scrollTop; setTopbarHidden(t > 60); last = t; };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
@@ -6720,8 +6615,8 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     const target = el || window;
     const onScroll = () => {
       const y = el ? el.scrollTop : window.scrollY;
-      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
-      else if (y < lastScrollY.current) setTopbarHidden(false);
+      if (y > 60) setTopbarHidden(true);
+      else setTopbarHidden(false);
       lastScrollY.current = y;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
@@ -6818,7 +6713,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </div>
       </div>
 
-      <div style={{ padding: "40px 24px", paddingTop: 24 }}>
+      <div className="setup-content" style={{ padding: "40px 24px", paddingTop: 24 }}>
       <div style={{ width: "100%", maxWidth: 860, margin: "0 auto" }}>
 
         {/* Title + meta */}
