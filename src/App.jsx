@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import GymCompLogo from "./assets/GymComp-Logo.svg";
 import GymCompLogotype from "./assets/Logotype.svg";
 import GymCompLogomark from "./assets/Logomark.svg";
@@ -2032,23 +2034,21 @@ const css = `
   .page-sub { color: var(--muted); margin-top: 6px; font-size: 14px; line-height: 1.4; }
 
   /* ── Setup Topbar ── */
-  .setup-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; margin-bottom: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+  .setup-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; margin-bottom: 28px; background: var(--brand-01); border: none; border-radius: 16px; transition: transform 0.25s ease, opacity 0.25s ease; }
+  .setup-topbar.topbar-hidden { transform: translateY(-120%); opacity: 0; pointer-events: none; }
   .setup-topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; flex-wrap: wrap; }
-  .setup-topbar-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
-  .setup-topbar-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .setup-topbar-meta::before { content: "·"; margin-right: 12px; color: var(--border); }
-  .setup-topbar-right { flex-shrink: 0; }
-  .setup-topbar-sync { font-size: 12px; font-weight: 600; font-family: var(--font-display); }
-  .setup-topbar-sync.saving { color: var(--muted); }
-  .setup-topbar-sync.saved { color: var(--success); }
-  .setup-topbar-sync.error { color: var(--danger); }
+  .setup-topbar-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-alternate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+  .setup-topbar-meta { font-size: 12px; color: rgba(255,255,255,0.7); white-space: nowrap; }
+  .setup-topbar-meta::before { content: "·"; margin-right: 12px; color: rgba(255,255,255,0.35); }
+  .setup-topbar-right { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+  .setup-topbar-sync { font-size: 12px; font-weight: 600; font-family: var(--font-display); color: rgba(255,255,255,0.7); }
   @media (max-width: 768px) {
     .setup-topbar { margin-bottom: 16px; padding: 10px 12px; }
     .setup-topbar-name { max-width: 180px; font-size: 13px; }
   }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
-  .card-title { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
   .field { margin-bottom: 18px; }
   .label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
@@ -2101,9 +2101,9 @@ const css = `
 
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
   .toggle-switch input { opacity: 0; width: 0; height: 0; }
-  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--border); border-radius: 24px; transition: 0.2s; }
-  .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
-  .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e0e0e0; border-radius: 24px; transition: 0.2s; }
+  .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+  .toggle-switch input:checked + .toggle-slider { background: var(--brand-01); }
   .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   .group-header { display: flex; align-items: center; gap: 10px; padding: 6px 0; margin: 16px 0 8px; }
@@ -2217,13 +2217,29 @@ const css = `
 // ============================================================
 // PHASE 1 STEP 1
 // ============================================================
-function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [editingClubId, setEditingClubId] = useState(null);
   const [editingClubVal, setEditingClubVal] = useState("");
   const [newClub, setNewClub] = useState("");
   const [roundCount, setRoundCount] = useState(data.rounds.length || 1);
   const [newLevel, setNewLevel] = useState("");
+  const [showWarnings, setShowWarnings] = useState(false);
+  const [topbarHidden, setTopbarHidden] = useState(false);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const el = document.querySelector(".app-main");
+    const target = el || window;
+    const onScroll = () => {
+      const y = el ? el.scrollTop : window.scrollY;
+      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
+      else if (y < lastScrollY.current) setTopbarHidden(false);
+      lastScrollY.current = y;
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Seed Round 1 on first load if rounds array is empty
   useEffect(() => {
@@ -2331,19 +2347,48 @@ function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
     data.clubs.length > 0 && data.rounds.length > 0 &&
     data.apparatus.length > 0 && data.levels.length > 0;
 
+  const missingFields = [
+    ...(!data.name ? ["Competition name"] : []),
+    ...(!data.date ? ["Date"] : []),
+    ...(dateError ? ["Valid date (must be today or future)"] : []),
+    ...(data.clubs.length === 0 ? ["At least one club"] : []),
+    ...(data.rounds.length === 0 ? ["At least one round"] : []),
+    ...(data.apparatus.length === 0 ? ["At least one apparatus"] : []),
+    ...(data.levels.length === 0 ? ["At least one level"] : []),
+  ];
+
+  const canSave = !!data.name;
+
+  const handleSaveAndExit = () => {
+    if (canProceed) {
+      // All fields complete — full save & continue (PIN flow + dashboard)
+      setShowWarnings(false);
+      onNext();
+    } else if (canSave) {
+      // Partial save — persist what we have and go back to dashboard
+      setShowWarnings(false);
+      if (onSaveExit) onSaveExit();
+    } else {
+      // No name — show what's missing
+      setShowWarnings(true);
+    }
+  };
+
   return (
     <div>
-      <div className="setup-topbar">
+      <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`}>
         <div className="setup-topbar-left">
           {data.name && <span className="setup-topbar-name">{data.name}</span>}
           {data.date && <span className="setup-topbar-meta">{new Date(data.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
           {data.venue && <span className="setup-topbar-meta">{data.venue}</span>}
-          {!data.name && !data.date && !data.venue && <span className="setup-topbar-name" style={{ color: "var(--muted)" }}>New Competition</span>}
+          {!data.name && !data.date && !data.venue && <span className="setup-topbar-name" style={{ opacity: 0.6 }}>New Competition</span>}
         </div>
         <div className="setup-topbar-right">
-          {syncStatus === "saving" && <span className="setup-topbar-sync saving">Saving…</span>}
-          {syncStatus === "saved" && <span className="setup-topbar-sync saved">Saved ✓</span>}
-          {syncStatus === "error" && <span className="setup-topbar-sync error">Sync error</span>}
+          <span className="setup-topbar-sync">Draft</span>
+          <button className="btn btn-sm" onClick={handleSaveAndExit} disabled={!canSave}
+            style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.15)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.3)" }}>
+            {canProceed ? "Save & Continue →" : "Save & Exit →"}
+          </button>
         </div>
       </div>
 
@@ -2635,13 +2680,13 @@ function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
           Allow clubs to submit their gymnast lists online before the competition. You review and approve each submission — nothing is added automatically.
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px",
-          background: "var(--surface2)", borderRadius: 16, border: `1px solid ${data.allowSubmissions ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px",
+          background: "var(--background-neutral)", borderRadius: 12, border: `1px solid ${data.allowSubmissions ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>
               {data.allowSubmissions ? "Submissions open" : "Submissions closed"}
             </div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 3, fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
               {data.allowSubmissions
                 ? "Clubs can submit gymnasts via your submission link. Share the link from your Competition Dashboard."
                 : "Enable this to generate a submission link you can share with clubs."}
@@ -2651,21 +2696,21 @@ function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
             onClick={() => setData(d => ({ ...d, allowSubmissions: !d.allowSubmissions }))}
             style={{
               width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer", flexShrink: 0,
-              background: data.allowSubmissions ? "var(--accent)" : "var(--surface2)",
+              background: data.allowSubmissions ? "var(--brand-01)" : "var(--background-neutral)",
               position: "relative", transition: "background 0.2s",
               boxShadow: "inset 0 0 0 1.5px var(--border)"
             }}>
             <div style={{
-              width: 20, height: 20, borderRadius: "50%", background: data.allowSubmissions ? "#000" : "var(--muted)",
+              width: 20, height: 20, borderRadius: "50%", background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
               position: "absolute", top: 3, transition: "left 0.2s",
               left: data.allowSubmissions ? 25 : 3
             }} />
           </button>
         </div>
         {data.allowSubmissions && (
-          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12,
+          <div style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12,
             background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)",
-            fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
+            fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
             Clubs will see your competition name, date and venue on their submission form. They select from your configured levels and age categories. You assign round and gymnast numbers during review.
           </div>
         )}
@@ -2799,10 +2844,18 @@ function Step1_CompDetails({ data, setData, onNext, syncStatus, onSave }) {
         </div>
       )}
 
+      {showWarnings && missingFields.length > 0 && (
+        <div style={{ margin: "0 0 16px", padding: "14px 18px", borderRadius: 12,
+          background: "rgba(229,62,62,0.06)", border: "1px solid rgba(229,62,62,0.25)",
+          fontSize: 13, color: "#c53030" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Enter a competition name to save your progress</div>
+        </div>
+      )}
+
       <div className="step-nav">
         <div />
-        <button className="btn btn-primary" onClick={onNext} disabled={!canProceed}>
-          Save & Continue →
+        <button className="btn btn-primary" onClick={handleSaveAndExit} disabled={!canSave}>
+          {canProceed ? "Save & Continue →" : "Save & Exit →"}
         </button>
       </div>
 
@@ -2888,13 +2941,41 @@ const PRINT_BASE_CSS = `
   .apparatus-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 3px; background: #e8e8e8; color: #333; margin-right: 4px; }
 `;
 
-function printDocument(htmlContent) {
-  const win = window.open("", "_blank", "width=900,height=700");
-  if (!win) { alert("Please allow pop-ups to generate PDFs."); return; }
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>${PRINT_BASE_CSS}</style></head><body>${htmlContent}</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => { win.print(); }, 400);
+async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;top:-20000px;left:0;width:794px;background:#fff;z-index:-1;";
+  document.body.appendChild(container);
+  container.innerHTML = fullHTML;
+  // Wait for images (logos) to load
+  const imgs = container.querySelectorAll("img");
+  if (imgs.length) await Promise.all([...imgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+  // Small delay for layout
+  await new Promise(r => setTimeout(r, 200));
+  try {
+    const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, windowWidth: 794 });
+    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const contentW = pageW - margin * 2;
+    const imgH = (canvas.height / canvas.width) * contentW;
+    let yOffset = 0;
+    const sliceH = pageH - margin * 2;
+    while (yOffset < imgH) {
+      if (yOffset > 0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", margin, margin - yOffset, contentW, imgH);
+      yOffset += sliceH;
+    }
+    pdf.save(filename);
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+function printDocument(htmlContent, filename = "gymcomp-document.pdf") {
+  const fullHTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>${PRINT_BASE_CSS}</style></head><body>${htmlContent}</body></html>`;
+  generatePDF(fullHTML, filename);
 }
 
 // Build agenda content
@@ -3000,8 +3081,8 @@ function buildAgendaHTML(compData, gymnasts, compId) {
     const coachUrl = `${origin}/coach.html?comp=${compId}`;
     const parentUrl = `${origin}/results.html?comp=${compId}`;
     const qrSize = 100;
-    const coachQR = "https://chart.googleapis.com/chart?cht=qr&chs=" + qrSize + "x" + qrSize + "&chl=" + encodeURIComponent(coachUrl) + "&choe=UTF-8";
-    const parentQR = "https://chart.googleapis.com/chart?cht=qr&chs=" + qrSize + "x" + qrSize + "&chl=" + encodeURIComponent(parentUrl) + "&choe=UTF-8";
+    const coachQR = "https://quickchart.io/chart?cht=qr&chs=" + qrSize + "x" + qrSize + "&chl=" + encodeURIComponent(coachUrl) + "&choe=UTF-8";
+    const parentQR = "https://quickchart.io/chart?cht=qr&chs=" + qrSize + "x" + qrSize + "&chl=" + encodeURIComponent(parentUrl) + "&choe=UTF-8";
 
     html += "<div class=\"page-break\"></div>" +
     "<h2 style=\"text-align:center;margin-bottom:16px;\">Live Results — Share With Coaches &amp; Parents</h2>" +
@@ -3283,7 +3364,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
       use: "Email to clubs after the event. Display at the awards ceremony.",
       available: hasScores,
       unavailableMsg: "Enter scores in Score Input to generate results.",
-      action: () => printDocument(buildResultsHTML(compData, gymnasts, scores)),
+      action: () => printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf"),
     },
     {
       id: "diagnostic",
@@ -3295,7 +3376,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
       unavailableMsg: compData.useDEScoring
         ? "Enter D/E scores in Score Input to generate diagnostics."
         : "Enable D/E Scoring in Step 1 → Scoring Settings to use this report.",
-      action: () => printDocument(buildDiagnosticHTML(compData, gymnasts, scores)),
+      action: () => printDocument(buildDiagnosticHTML(compData, gymnasts, scores), "gymcomp-diagnostic.pdf"),
     },
   ];
 
@@ -3398,8 +3479,7 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
 
       <div className="card" style={{ marginTop: 16, background: "rgba(0,13,255,0.03)", borderColor: "rgba(0,13,255,0.12)" }}>
         <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-          <strong style={{ color: "var(--text)" }}>How it works:</strong> Documents open in a new tab formatted for printing.
-          Use your browser's <strong>Print</strong> menu (Ctrl+P / ⌘P) and choose <strong>"Save as PDF"</strong> as the destination.
+          <strong style={{ color: "var(--text)" }}>How it works:</strong> Click "Generate PDF" to download a .pdf file directly to your device.
           All documents are automatically branded with your competition name, organiser details, logo and colour.
         </div>
       </div>
@@ -4790,9 +4870,10 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
 // ============================================================
 // PHASE 2 STEP 2 — Results
 // ============================================================
-function Phase2_Step2({ compData, gymnasts, scores }) {
+function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("apparatus");
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
 
   const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
 
@@ -4960,6 +5041,32 @@ function Phase2_Step2({ compData, gymnasts, scores }) {
           })}
           {rankGroups.length === 0 && <div className="empty">No results to display yet</div>}
         </div>
+      )}
+
+      {/* ── COMPLETE COMPETITION CTA ─────────────────────────── */}
+      {onComplete && (
+        <div style={{ marginTop: 40, padding: "28px 32px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Finished scoring?</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              Mark this competition as complete. Results will be finalised and the event moved to your completed list.
+            </div>
+          </div>
+          <button className="btn btn-primary"
+            style={{ fontSize: 15, padding: "12px 32px", letterSpacing: 0.5, background: "#15803d", flexShrink: 0 }}
+            onClick={() => setShowCompleteConfirm(true)}>
+            Complete Competition
+          </button>
+        </div>
+      )}
+
+      {showCompleteConfirm && (
+        <ConfirmModal
+          message="Are you sure you want to complete this competition? The event status will change to Completed."
+          confirmLabel="Complete"
+          onConfirm={() => { setShowCompleteConfirm(false); onComplete(); }}
+          onCancel={() => setShowCompleteConfirm(false)}
+        />
       )}
     </div>
   );
@@ -5358,7 +5465,7 @@ function RegisterScreen({ onRegister, onGoLogin }) {
 // ============================================================
 // ORGANISER DASHBOARD — list of events for logged-in account
 // ============================================================
-function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange }) {
+function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange }) {
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
@@ -5522,10 +5629,11 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
     const isCompleted = ev.status === "completed" || ev.status === "archived";
 
     const isArchived = ev.status === "archived";
+    const isDraft = ev.status === "draft";
 
     return (
       <div key={ev.id} className="od-card-wrap">
-        <div className="od-card" style={{ borderLeftColor: sc.border, position: "relative" }}>
+        <div className={`od-card${isDraft ? " od-card-draft" : ""}`} style={{ borderLeftColor: sc.border, position: "relative" }}>
           {/* Delete button — top right (hidden for archived since CTA handles it) */}
           {!isArchived && (
             <button onClick={() => handleDelete(ev)}
@@ -5540,51 +5648,76 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
                 {statusMeta(ev.status).label}
               </span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="od-card-title">{cd.name || "Untitled Competition"}</div>
-              <div className="od-card-meta">
-                {cd.date && (
-                  <div className="od-card-meta-row">
-                    <span className="od-card-meta-icon">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg>
-                    </span>
-                    {new Date(cd.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                  </div>
-                )}
-                {cd.location && (
-                  <div className="od-card-meta-row">
-                    <span className="od-card-meta-icon">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="8" cy="7" r="2"/><path d="M8 15S3 10 3 7a5 5 0 0110 0c0 3-5 8-5 8z"/></svg>
-                    </span>
-                    {cd.location}
-                  </div>
-                )}
+            {isDraft && (
+              <div className="od-card-draft-banner">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5M8 10.5h.01"/></svg>
+                Setup incomplete — finish setting up your competition to get started
               </div>
-            </div>
-            <div className="od-card-divider" />
-            <div>
-              <div className="od-card-clubs-title">Clubs Details</div>
-              <div className="od-card-clubs-row">
-                <div className="od-card-clubs-item">
-                  <span className="od-card-clubs-badge" style={clubs.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{clubs.length}</span>
-                  Clubs Registered
+            )}
+            <div style={isDraft ? { opacity: 0.45 } : undefined}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div className="od-card-title">{cd.name || "Untitled Competition"}</div>
+                <div className="od-card-meta">
+                  {cd.date && (
+                    <div className="od-card-meta-row">
+                      <span className="od-card-meta-icon">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg>
+                      </span>
+                      {new Date(cd.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
+                  )}
+                  {cd.location && (
+                    <div className="od-card-meta-row">
+                      <span className="od-card-meta-icon">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="8" cy="7" r="2"/><path d="M8 15S3 10 3 7a5 5 0 0110 0c0 3-5 8-5 8z"/></svg>
+                      </span>
+                      {cd.location}
+                    </div>
+                  )}
+                  {!cd.date && !cd.location && isDraft && (
+                    <div className="od-card-meta-row" style={{ fontStyle: "italic" }}>No details added yet</div>
+                  )}
                 </div>
-                <div className="od-card-clubs-item">
-                  <span className="od-card-clubs-badge" style={gymnasts.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{gymnasts.length}</span>
-                  Gymnasts Registered
+              </div>
+              <div className="od-card-divider" style={{ marginTop: 24 }} />
+              <div style={{ marginTop: 24 }}>
+                <div className="od-card-clubs-title">Clubs Details</div>
+                <div className="od-card-clubs-row">
+                  <div className="od-card-clubs-item">
+                    <span className="od-card-clubs-badge" style={clubs.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{clubs.length}</span>
+                    Clubs Registered
+                  </div>
+                  <div className="od-card-clubs-item">
+                    <span className="od-card-clubs-badge" style={gymnasts.length === 0 ? { background: "#efefef", color: "var(--text-tertiary)" } : undefined}>{gymnasts.length}</span>
+                    Gymnasts Registered
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div className="od-card-actions">
-            <button className={`od-card-btn-open${ev.status === "draft" ? " outlined" : ""}`} onClick={() => isArchived ? handleDelete(ev) : onOpen(ev)}
-              style={isArchived ? { background: "#e53e3e" } : ev.status === "live" ? { background: "#22c55e" } : undefined}>
-              {ev.status === "draft" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>}
-              {ev.status === "live" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>}
-              {{ draft: "Edit Comp", active: "Open Comp", live: "Resume Comp", completed: "View Results", archived: "Delete Event" }[ev.status] || "Open Comp"}
-              {ev.status !== "draft" && ev.status !== "live" && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(-90deg)" }}><path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </button>
+            {isDraft ? (
+              <button className="od-card-btn-open" onClick={() => onOpen(ev)}
+                style={{ background: "#f59e0b" }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                Finish Setup
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4l4 4-4 4"/></svg>
+              </button>
+            ) : (
+              <button className={`od-card-btn-open`} onClick={() => isArchived ? handleDelete(ev) : onOpen(ev)}
+                style={isArchived ? { background: "#e53e3e" } : ev.status === "live" ? { background: "#22c55e" } : undefined}>
+                {ev.status === "live" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>}
+                {{ active: "Open Comp", live: "Resume Comp", completed: "View Results", archived: "Delete Event" }[ev.status] || "Open Comp"}
+                {ev.status !== "live" && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(-90deg)" }}><path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </button>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
+              {ev.status === "live" && (
+                <button className="od-card-btn-open outlined" onClick={() => onView(ev)}
+                  style={{ background: "none", border: "1.5px solid var(--border)", color: "var(--text-primary)" }}>
+                  View Comp
+                </button>
+              )}
               {ev.status === "active" && (
                 <button className="od-card-btn-icon" onClick={() => onEdit(ev)} title="Edit Comp">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
@@ -5631,6 +5764,8 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
         .od-card-btn-open.outlined:hover{background:rgba(0,13,255,0.06);}
         .od-card-btn-icon{width:30px;height:30px;border-radius:80px;border:none;background:#efefef;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;}
         .od-card-btn-icon:hover{background:var(--background-neutral);}
+        .od-card-draft{background:var(--background-light);}
+        .od-card-draft-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);font-size:12px;color:#92600a;font-family:var(--font-display);line-height:1.4;}
         .od-card-btn-icon.danger{border:1px solid red;background:none;}
         .od-card-btn-icon.danger:hover{background:#fee;}
         .od-empty-box{flex:1;min-height:322px;border:1px dashed #080808;background:#f2f2f2;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:16px 18px;}
@@ -5695,7 +5830,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
             <div className="od-empty-box">
               <button className="od-empty-box-btn" onClick={onNew}>+ New Competition</button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : statusFilter !== "all" && filtered.length === 0 ? (
             <div className="od-empty-msg">No {sidebarFilters.find(f => f.value === statusFilter)?.label?.toLowerCase() || statusFilter} competitions</div>
           ) : statusFilter !== "all" ? (
             /* Filtered view — flat list */
@@ -5705,11 +5840,23 @@ function OrganizerDashboard({ account, onNew, onOpen, onEdit, onDuplicate, statu
           ) : (
             /* Default view — sectioned */
             <>
-              {currentEvents.length > 0 && (
+              {currentEvents.length > 0 ? (
                 <div>
                   <div className="od-section-title">Current Events</div>
                   <div className="od-cards-row">
                     {currentEvents.map(ev => renderCard(ev))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="od-section-title">Current Events</div>
+                  <div className="od-empty-box">
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                      <div style={{ fontSize: 14, color: "var(--text-tertiary)", fontFamily: "var(--font-display)", textAlign: "center", lineHeight: 1.5 }}>
+                        No current competitions — create one to get started
+                      </div>
+                      <button className="od-empty-box-btn" onClick={onNew}>+ New Competition</button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -5974,10 +6121,10 @@ function ProfileOnboardingScreen({ user, onComplete }) {
   );
 }
 
-// ── Tiny inline QR code component (uses Google Charts API — works when printed/opened online) ──
+// ── Tiny inline QR code component (uses QuickChart API) ──
 function QRDisplay({ url, size = 120, label }) {
   const [copied, setCopied] = useState(false);
-  const qrUrl = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+  const qrUrl = `https://quickchart.io/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(url)}&choe=UTF-8`;
   const copy = async () => {
     try { await navigator.clipboard.writeText(url); } catch {}
     setCopied(true);
@@ -6011,18 +6158,21 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   const [showReview, setShowReview] = useState(false);
   const [pendingCount, setPendingCount] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showDisabledWarning, setShowDisabledWarning] = useState(false);
 
+  const enabled = !!compData.allowSubmissions;
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
   const submitUrl = `${origin}/submit.html?comp=${compId}`;
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
   useEffect(() => {
+    if (!enabled) return;
     if (inSandbox) { setPendingCount(2); return; } // demo count in sandbox
     supabase.fetchSubmissions(compId).then(({ data }) => {
       if (data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
-  }, [compId]);
+  }, [compId, enabled]);
 
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(submitUrl); } catch {}
@@ -6049,26 +6199,51 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
     refreshCount();
   };
 
+  const handleDisabledClick = (e) => {
+    if (!enabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowDisabledWarning(true);
+    }
+  };
+
   return (
     <>
       <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14, fontFamily: "var(--font-display)" }}>
           Club Submissions
         </div>
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px 24px" }}>
-          <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div
+          title={!enabled ? "Enable Club Submissions in Setup to use this feature" : undefined}
+          style={{
+            background: "var(--background-light)", border: "1px solid var(--border)", borderRadius: 16, padding: "24px 28px",
+            position: "relative",
+            ...(enabled ? {} : { opacity: 0.45 })
+          }}
+        >
+          {/* Disabled overlay — blocks all inner clicks, triggers warning */}
+          {!enabled && (
+            <div onClick={handleDisabledClick} style={{
+              position: "absolute", inset: 0, borderRadius: 16, cursor: "pointer", zIndex: 2
+            }} />
+          )}
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* QR + link */}
             <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Submission Link</div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--text-primary)", marginBottom: 6 }}>Submission Link</div>
+              <div style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16, lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
                 Share this with club contacts so they can submit their gymnast list before the competition.
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                <div style={{ flex: 1, fontSize: 11, color: "var(--muted)", background: "var(--surface2)", borderRadius: 6, padding: "7px 10px", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: 1, fontSize: 12, color: "var(--text-tertiary)", background: "var(--background-neutral)", borderRadius: 56, padding: "10px 16px", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: "1px solid var(--border)" }}>
                   {submitUrl}
                 </div>
-                <button onClick={copyLink} className="btn btn-primary btn-sm" style={{ flexShrink: 0, fontSize: 11 }}>
-                  {linkCopied ? "✅ Copied!" : "📋 Copy"}
+                <button onClick={copyLink} style={{
+                  flexShrink: 0, padding: "10px 18px", borderRadius: 56, border: "none", cursor: "pointer",
+                  background: "var(--brand-01)", color: "var(--text-alternate)",
+                  fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
+                }}>
+                  {linkCopied ? "Copied!" : "Copy Link"}
                 </button>
               </div>
             </div>
@@ -6077,17 +6252,40 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
           </div>
 
           {/* Review button with badge */}
-          <div style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>
-              {pendingCount === null ? "Loading…" : pendingCount === 0 ? "No pending submissions" : (
-                <span style={{ color: "var(--accent)", fontWeight: 700 }}>⚡ {pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
+          <div style={{ borderTop: "1px solid var(--border)", marginTop: 20, paddingTop: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}>
+              {!enabled ? "Submissions disabled" : pendingCount === null ? "Loading…" : pendingCount === 0 ? "No pending submissions" : (
+                <span style={{ color: "var(--brand-01)", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
               )}
             </div>
-            <button onClick={() => setShowReview(true)} className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
-              Review Submissions {pendingCount > 0 && <span style={{ marginLeft: 6, background: "var(--accent)", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, fontWeight: 800 }}>{pendingCount}</span>}
+            <button onClick={() => setShowReview(true)} style={{
+              padding: "10px 20px", borderRadius: 56, border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
+              fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
+              display: "inline-flex", alignItems: "center", gap: 8
+            }}>
+              Review Submissions
+              {enabled && pendingCount > 0 && <span style={{ background: "var(--brand-01)", color: "var(--text-alternate)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>}
             </button>
           </div>
         </div>
+
+        {/* Disabled warning */}
+        {showDisabledWarning && (
+          <div style={{
+            marginTop: 12, background: "#fef3cd", border: "1px solid #f0d78c", borderRadius: 12, padding: "14px 20px",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap"
+          }}>
+            <div style={{ fontSize: 13, color: "#664d03", fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
+              Club Submissions is currently disabled. Enable it in <strong>Setup</strong> to allow clubs to submit gymnast lists.
+            </div>
+            <button onClick={() => setShowDisabledWarning(false)} style={{
+              flexShrink: 0, padding: "6px 14px", borderRadius: 56, border: "1px solid #c9a706", background: "none",
+              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "#664d03"
+            }}>
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
 
       {showReview && (
@@ -6104,9 +6302,32 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   );
 }
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
+  const [showSubmReview, setShowSubmReview] = useState(false);
+  const [pendingCount, setPendingCount] = useState(null);
+
+  const inSandbox = typeof window !== "undefined" &&
+    (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
+
+  useEffect(() => {
+    if (!compData.allowSubmissions || !compId) return;
+    if (inSandbox) { setPendingCount(2); return; }
+    supabase.fetchSubmissions(compId).then(({ data }) => {
+      if (data) setPendingCount(data.filter(s => s.status === "pending").length);
+    });
+  }, [compId, compData.allowSubmissions]);
+
+  const refreshSubmCount = () => {
+    if (!inSandbox) {
+      supabase.fetchSubmissions(compId).then(({ data }) => {
+        if (data) setPendingCount(data.filter(s => s.status === "pending").length);
+      });
+    } else {
+      setPendingCount(c => Math.max(0, (c || 1) - 1));
+    }
+  };
 
   const copySubmitLink = async () => {
     const url = `${typeof window !== "undefined" ? window.location.origin : ""}/submit.html?comp=${compId}`;
@@ -6161,41 +6382,87 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     <div style={{ flex: 1, overflowY: "auto", padding: "40px 24px" }}>
       <div style={{ width: "100%", maxWidth: 860, margin: "0 auto" }}>
 
-        {/* Hero */}
-        <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 58, letterSpacing: 3, lineHeight: 1, marginBottom: 12 }}>
-            {compData.name}
+        {/* Topbar — styled like setup topbar */}
+        <div className="setup-topbar" style={{ marginBottom: 32 }}>
+          <div className="setup-topbar-left">
+            <div className="setup-topbar-name">{compData.name || "Untitled Competition"}</div>
+            {compData.date && <div className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</div>}
+            {compData.location && <div className="setup-topbar-meta">{compData.location}</div>}
           </div>
-          <div style={{ color: "var(--muted)", fontSize: 14, display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap" }}>
-            {compData.date && <span>📅 {new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>}
-            {compData.location && <span>📍 {compData.location}</span>}
-            {compData.holder && <span>👤 {compData.holder}</span>}
+          <div className="setup-topbar-right">
+            <button onClick={onEditSetup} style={{
+              padding: "7px 18px", borderRadius: 56, border: "1.5px solid rgba(255,255,255,0.3)", background: "none",
+              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "var(--text-alternate)"
+            }}>
+              Edit Setup
+            </button>
           </div>
         </div>
 
+        {/* Title + meta */}
+        <div style={{ marginBottom: 32 }}>
+          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 58, fontWeight: 500, lineHeight: 1, marginBottom: 12 }}>
+            {compData.name}
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 14, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+            {compData.date && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 1.5v3M11 1.5v3"/></svg>
+              {new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </span>}
+            {compData.location && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="8" cy="7" r="2"/><path d="M8 15S3 10 3 7a5 5 0 0110 0c0 3-5 8-5 8z"/></svg>
+              {compData.location}
+            </span>}
+          </div>
+        </div>
+
+        {/* ── COMPETITION DETAILS — ROUNDS ─────────────────────────── */}
+        {compData.rounds.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+              Rounds
+            </div>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+              {compData.rounds.map((r, i) => {
+                const formatTime = (t) => {
+                  if (!t) return "—";
+                  const [h, m] = t.split(":");
+                  const hour = parseInt(h);
+                  return `${hour > 12 ? hour - 12 : hour}:${m} ${hour >= 12 ? "PM" : "AM"}`;
+                };
+                return (
+                  <div key={r.id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    padding: "14px 18px", fontSize: 14, fontFamily: "var(--font-display)",
+                    borderBottom: i < compData.rounds.length - 1 ? "1px solid var(--border)" : "none",
+                    background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)"
+                  }}>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{r.name}</div>
+                    <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
+                      {r.start || r.end ? `${formatTime(r.start)} – ${formatTime(r.end)}` : "No times set"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: hasGymnasts ? 8 : 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>Overview</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
           {statCard("Gymnasts", totalGymnasts, "var(--accent)")}
           {statCard("Clubs", clubs.length)}
           {statCard("Levels", compData.levels.length)}
           {statCard("Apparatus", compData.apparatus.length)}
         </div>
 
-        {/* ── MANAGE GYMNASTS LINK (when gymnasts exist) ─────────── */}
-        {hasGymnasts && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={onManageGymnasts}>
-              + Manage Gymnasts ({totalGymnasts})
-            </button>
+        {/* ── GYMNASTS SECTION ───────────────────────────────────── */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+            Gymnasts
           </div>
-        )}
-
-        {/* ── GYMNAST LIST ────────────────────────────────────────── */}
-        {hasGymnasts && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14 }}>
-              Registered Gymnasts
-            </div>
+          {hasGymnasts ? (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, borderBottom: "1px solid var(--border)", padding: "8px 16px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--muted)" }}>
                 <div>#</div>
@@ -6208,7 +6475,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                 const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level || "—";
                 const roundName = compData.rounds.find(r => r.id === g.round)?.name || g.round || "—";
                 return (
-                  <div key={g.id} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: i < gymnasts.length - 1 ? "1px solid var(--border)" : "none", background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
+                  <div key={g.id} style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
                     <div style={{ color: "var(--muted)", fontSize: 11 }}>{g.number || i + 1}</div>
                     <div style={{ fontWeight: 600 }}>{g.name}</div>
                     <div style={{ color: "var(--muted)" }}>{g.club || "—"}</div>
@@ -6217,72 +6484,93 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </div>
                 );
               })}
-            </div>
-          </div>
-        )}
-
-        {/* ── EMPTY STATE ────────────────────────────────────────── */}
-        {!hasGymnasts && (
-          <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 44, marginBottom: 14 }}>🤸</div>
-            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No gymnasts added yet</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
-              You need to add gymnasts before the competition can start. Add them manually or share the submission link so clubs can send their own lists.
-            </div>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#fff" }}
-                onClick={onManageGymnasts}>
-                + Add Gymnasts Manually
-              </button>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                <button className="btn btn-secondary" style={{ fontSize: 14, padding: "12px 24px" }}
-                  onClick={copySubmitLink}>
-                  {submLinkCopied ? "✅ Link copied!" : "Share Submission Link with Clubs"}
+              <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <button onClick={onManageGymnasts} style={{
+                  display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
+                  background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
+                  fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
+                }}>
+                  + Manage Gymnasts
                 </button>
-                {!compData.allowSubmissions && (
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>Enable club submissions in Setup first</div>
+                {compData.allowSubmissions && compId && pendingCount > 0 && (
+                  <button onClick={() => setShowSubmReview(true)} style={{
+                    display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 20px", borderRadius: 56,
+                    border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
+                    fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600, color: "var(--text-primary)"
+                  }}>
+                    Review Submissions
+                    <span style={{ background: "var(--brand-01)", color: "var(--text-alternate)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>
+                  </button>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center" }}>
+              <div style={{ fontSize: 44, marginBottom: 14 }}>🤸</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No gymnasts added yet</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
+                You need to add gymnasts before the competition can start. Add them manually or share the submission link so clubs can send their own lists.
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#fff" }}
+                  onClick={onManageGymnasts}>
+                  + Add Gymnasts Manually
+                </button>
+                {compData.allowSubmissions && compId && (
+                  <button className="btn btn-secondary" style={{ fontSize: 14, padding: "12px 24px" }}
+                    onClick={copySubmitLink}>
+                    {submLinkCopied ? "✅ Link copied!" : "Share Submission Link with Clubs"}
+                  </button>
+                )}
+              </div>
+              {compData.allowSubmissions && compId && pendingCount > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <button onClick={() => setShowSubmReview(true)} style={{
+                    display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 56,
+                    border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
+                    fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600, color: "var(--text-primary)"
+                  }}>
+                    Review Submissions
+                    <span style={{ background: "var(--brand-01)", color: "var(--text-alternate)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── PRE-COMPETITION DOCUMENTS ─────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
             Pre-Competition Documents
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {docBtn("📋", "Competition Agenda",
               hasGymnasts,
-              () => printDocument(buildAgendaHTML(compData, gymnasts, compId)),
+              () => printDocument(buildAgendaHTML(compData, gymnasts, compId), "gymcomp-agenda.pdf"),
               "Add gymnasts in Setup to generate"
             )}
             {docBtn("✍️", "Judge Score Sheets",
               hasGymnasts && hasApparatus,
-              () => printDocument(buildJudgeSheetsHTML(compData, gymnasts)),
+              () => printDocument(buildJudgeSheetsHTML(compData, gymnasts), "gymcomp-judge-sheets.pdf"),
               "Add gymnasts and apparatus in Setup"
             )}
             {docBtn("✅", "Attendance List",
               hasGymnasts,
-              () => printDocument(buildAttendanceHTML(compData, gymnasts)),
+              () => printDocument(buildAttendanceHTML(compData, gymnasts), "gymcomp-attendance.pdf"),
               "Add gymnasts in Setup to generate"
             )}
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>
-            Documents open in a new tab — use Ctrl+P / ⌘P → Save as PDF
+            PDFs download directly to your device
           </div>
         </div>
 
-        {/* ── CLUB SUBMISSIONS ──────────────────────────────────── */}
-        {compData.allowSubmissions && compId && (
-          <SubmissionsDashboardSection compId={compId} compData={compData} gymnasts={gymnasts} onAcceptGymnasts={onAcceptSubmissions} />
-        )}
 
         {/* ── LIVE VIEWS + QR CODES ─────────────────────────────── */}
         {compId && (
           <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
               Live View Links
             </div>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "24px" }}>
@@ -6298,27 +6586,31 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         )}
 
         {/* ── START CTA ─────────────────────────────────────────── */}
-        <div style={{ background: hasGymnasts ? `${colour}12` : "var(--surface)", border: `1px solid ${hasGymnasts ? colour + "33" : "var(--border)"}`, borderRadius: "var(--radius)", padding: "28px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
+        <div style={{ background: hasGymnasts ? (eventStatus === "live" ? "#22c55e12" : `${colour}12`) : "var(--surface)", border: `1px solid ${hasGymnasts ? (eventStatus === "live" ? "#22c55e33" : colour + "33") : "var(--border)"}`, borderRadius: "var(--radius)", padding: "28px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
-              {hasGymnasts ? "Ready to begin?" : "Almost ready"}
+              {!hasGymnasts ? "Almost ready" : eventStatus === "live" ? "Competition in progress" : "Ready to begin?"}
             </div>
             <div style={{ fontSize: 13, color: "var(--muted)" }}>
               {hasGymnasts
-                ? "Opens the scoring interface — you can return here any time via \"← Dashboard\""
+                ? eventStatus === "live"
+                  ? "Return to the scoring interface to continue judging"
+                  : "Opens the scoring interface — you can return here any time via \"← Dashboard\""
                 : "Add at least one gymnast above before starting the competition."}
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
             <button className="btn btn-primary"
-              style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: hasGymnasts ? colour : "var(--surface2)", color: hasGymnasts ? "#fff" : "var(--muted)", opacity: hasGymnasts ? 1 : 0.55 }}
+              style={{ fontSize: 16, padding: "14px 36px", letterSpacing: 1, background: hasGymnasts ? (eventStatus === "live" ? "#22c55e" : colour) : "var(--surface2)", color: hasGymnasts ? "#fff" : "var(--muted)", opacity: hasGymnasts ? 1 : 0.55 }}
               onClick={onStartComp}
               disabled={!hasGymnasts}>
-              Start Competition →
+              {eventStatus === "live" ? "Resume Competition →" : "Start Competition →"}
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={onEditSetup} style={{ fontSize: 11 }}>
-              Edit setup
-            </button>
+            {!hasGymnasts && (
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4, textAlign: "center" }}>
+                Add gymnasts before starting the competition
+              </div>
+            )}
           </div>
         </div>
 
@@ -6356,6 +6648,17 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         )}
 
       </div>
+
+      {showSubmReview && (
+        <SubmissionsReviewPanel
+          compId={compId}
+          compData={compData}
+          gymnasts={gymnasts}
+          onAccept={(newGymnasts) => { onAcceptSubmissions(newGymnasts); refreshSubmCount(); }}
+          onDecline={refreshSubmCount}
+          onClose={() => setShowSubmReview(false)}
+        />
+      )}
     </div>
   );
 }
@@ -6432,34 +6735,38 @@ function ClubSubmissionScreen({ compId }) {
 
   const colour = compConfig?.brandColour || "#000dff";
 
+  const inputStyle = { width: "100%", padding: "12px 16px", background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 56, color: "var(--text-primary)", fontSize: 14, fontFamily: "var(--font-display)", boxSizing: "border-box", outline: "none" };
+  const labelStyle = { fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 8, fontFamily: "var(--font-display)" };
+  const selectStyle = { ...inputStyle, borderRadius: 56, appearance: "none", WebkitAppearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 16px center", paddingRight: 40 };
+
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a0a0a", color: "#fff" }}>
-      <div style={{ fontSize: 14, color: "#888" }}>Loading competition details…</div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background-neutral)", fontFamily: "var(--font-display)" }}>
+      <div style={{ fontSize: 14, color: "var(--text-tertiary)" }}>Loading competition details…</div>
     </div>
   );
 
   if (error) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a0a0a", color: "#fff", padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background-neutral)", padding: 24, fontFamily: "var(--font-display)" }}>
       <div style={{ textAlign: "center", maxWidth: 400 }}>
         <div style={{ fontSize: 32, marginBottom: 16 }}>⚠️</div>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Unable to load</div>
-        <div style={{ color: "#888", fontSize: 14 }}>{error}</div>
+        <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8, color: "var(--text-primary)" }}>Unable to load</div>
+        <div style={{ color: "var(--text-tertiary)", fontSize: 14 }}>{error}</div>
       </div>
     </div>
   );
 
   if (submitted) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a0a0a", color: "#fff", padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background-neutral)", padding: 24, fontFamily: "var(--font-display)" }}>
       <div style={{ textAlign: "center", maxWidth: 440 }}>
         <div style={{ fontSize: 56, marginBottom: 20 }}>🎉</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 36, color: colour, marginBottom: 8 }}>Submitted!</div>
-        <div style={{ color: "#aaa", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+        <div style={{ fontSize: 36, fontWeight: 600, color: colour, marginBottom: 8 }}>Submitted!</div>
+        <div style={{ color: "var(--text-tertiary)", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
           Your gymnast list has been sent to the organiser for review.
           You will be contacted if any details need to be confirmed.
         </div>
-        <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 10, padding: "16px 20px", fontSize: 13, color: "#ccc", textAlign: "left" }}>
-          <strong style={{ color: "#fff" }}>{compConfig.name}</strong><br />
-          {compConfig.date && <span style={{ color: "#888", fontSize: 12 }}>{new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>}<br />
+        <div style={{ background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 16, padding: "20px 24px", fontSize: 13, color: "var(--text-tertiary)", textAlign: "left" }}>
+          <strong style={{ color: "var(--text-primary)", fontSize: 15 }}>{compConfig.name}</strong><br />
+          {compConfig.date && <span style={{ fontSize: 12 }}>{new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>}<br />
           <span style={{ color: colour, fontWeight: 600, marginTop: 8, display: "block" }}>
             {gymnasts.filter(g => g.name.trim()).length} gymnast{gymnasts.filter(g => g.name.trim()).length !== 1 ? "s" : ""} submitted from {clubName}
           </span>
@@ -6469,121 +6776,84 @@ function ClubSubmissionScreen({ compId }) {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "var(--background-neutral)", fontFamily: "var(--font-display)" }}>
       {/* Header */}
-      <div style={{ borderBottom: `3px solid ${colour}`, padding: "20px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ background: "var(--background-light)", borderBottom: "1px solid #e4e4e4", padding: "20px 24px", display: "flex", alignItems: "center", gap: 16 }}>
         {compConfig.logo && <img src={compConfig.logo} alt="Logo" style={{ height: 44, objectFit: "contain" }} />}
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 22, color: colour }}>{compConfig.name}</div>
-          <div style={{ fontSize: 13, color: "#888", display: "flex", gap: 16, marginTop: 2 }}>
-            {compConfig.date && <span>📅 {new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
-            {(compConfig.venue || compConfig.location) && <span>📍 {compConfig.venue || compConfig.location}</span>}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 20, color: "var(--text-primary)" }}>{compConfig.name}</div>
+          <div style={{ fontSize: 13, color: "var(--text-tertiary)", display: "flex", gap: 16, marginTop: 3 }}>
+            {compConfig.date && <span>{new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
+            {(compConfig.venue || compConfig.location) && <span>{compConfig.venue || compConfig.location}</span>}
           </div>
         </div>
-        <div style={{ marginLeft: "auto", background: colour + "22", border: "1px solid " + colour + "44", borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: colour, letterSpacing: 1, textTransform: "uppercase" }}>
+        <div style={{ background: colour + "14", border: "1px solid " + colour + "30", borderRadius: 56, padding: "6px 14px", fontSize: 11, fontWeight: 600, color: colour, letterSpacing: 0.5, whiteSpace: "nowrap" }}>
           Gymnast Submission
         </div>
       </div>
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "32px 20px" }}>
 
         {/* Club details */}
-        <div style={{ background: "#141414", border: "1px solid #2a2a2a", borderRadius: 12, padding: "24px", marginBottom: 24 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 18, color: colour }}>Club Details</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 16, padding: "28px", marginBottom: 20 }}>
+          <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 20, color: "var(--text-primary)" }}>Club Details</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                Club Name <span style={{ color: colour }}>*</span>
-              </label>
-              <input
-                style={{ width: "100%", padding: "10px 14px", background: "#1e1e1e", border: "1px solid #333", borderRadius: 8, color: "#fff", fontSize: 14, boxSizing: "border-box" }}
-                placeholder="e.g. Acton Gymnastics Club"
-                value={clubName}
-                onChange={e => setClubName(e.target.value)}
-              />
+              <label style={labelStyle}>Club Name <span style={{ color: colour }}>*</span></label>
+              <input style={inputStyle} placeholder="e.g. Acton Gymnastics Club" value={clubName} onChange={e => setClubName(e.target.value)} />
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                Contact Name <span style={{ color: "#555", fontWeight: 400 }}>(optional)</span>
-              </label>
-              <input
-                style={{ width: "100%", padding: "10px 14px", background: "#1e1e1e", border: "1px solid #333", borderRadius: 8, color: "#fff", fontSize: 14, boxSizing: "border-box" }}
-                placeholder="Your name"
-                value={contactName}
-                onChange={e => setContactName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#888", display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                Contact Email <span style={{ color: "#555", fontWeight: 400 }}>(optional)</span>
-              </label>
-              <input
-                type="email"
-                style={{ width: "100%", padding: "10px 14px", background: "#1e1e1e", border: "1px solid #333", borderRadius: 8, color: "#fff", fontSize: 14, boxSizing: "border-box" }}
-                placeholder="coach@example.com"
-                value={contactEmail}
-                onChange={e => setContactEmail(e.target.value)}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Contact Name <span style={{ fontWeight: 400, color: "#bbb" }}>(optional)</span></label>
+                <input style={inputStyle} placeholder="Your name" value={contactName} onChange={e => setContactName(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Contact Email <span style={{ fontWeight: 400, color: "#bbb" }}>(optional)</span></label>
+                <input type="email" style={inputStyle} placeholder="coach@example.com" value={contactEmail} onChange={e => setContactEmail(e.target.value)} />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Gymnast list */}
-        <div style={{ background: "#141414", border: "1px solid #2a2a2a", borderRadius: 12, padding: "24px", marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: colour }}>
-              Gymnasts <span style={{ fontSize: 13, fontWeight: 400, color: "#666" }}>({gymnasts.filter(g => g.name.trim()).length} entered)</span>
+        <div style={{ background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 16, padding: "28px", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <div style={{ fontWeight: 600, fontSize: 16, color: "var(--text-primary)" }}>
+              Gymnasts <span style={{ fontSize: 13, fontWeight: 400, color: "var(--text-tertiary)" }}>({gymnasts.filter(g => g.name.trim()).length} entered)</span>
             </div>
             <button onClick={addGymnast}
-              style={{ padding: "7px 14px", background: colour, color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              style={{ padding: "8px 16px", background: colour, color: "var(--text-alternate)", border: "none", borderRadius: 56, fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "var(--font-display)" }}>
               + Add gymnast
             </button>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {gymnasts.map((g, idx) => (
-              <div key={g.id} style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8, padding: "14px 16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#666", flexShrink: 0 }}>
+              <div key={g.id} style={{ background: "var(--background-neutral)", border: "1px solid #e4e4e4", borderRadius: 12, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: colour + "14", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: colour, flexShrink: 0 }}>
                     {idx + 1}
                   </div>
-                  <input
-                    style={{ flex: 1, padding: "8px 12px", background: "#222", border: "1px solid #333", borderRadius: 6, color: "#fff", fontSize: 14 }}
-                    placeholder="Full name"
-                    value={g.name}
-                    onChange={e => updateGymnast(g.id, "name", e.target.value)}
-                  />
+                  <input style={{ ...inputStyle, flex: 1, width: "auto" }} placeholder="Full name" value={g.name} onChange={e => updateGymnast(g.id, "name", e.target.value)} />
                   {gymnasts.length > 1 && (
                     <button onClick={() => removeGymnast(g.id)}
-                      style={{ width: 28, height: 28, background: "transparent", border: "1px solid #333", borderRadius: 6, color: "#666", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
+                      style={{ width: 32, height: 32, background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 8, color: "var(--text-tertiary)", cursor: "pointer", fontSize: 16, flexShrink: 0, fontFamily: "var(--font-display)" }}>
                       ×
                     </button>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: 10, fontWeight: 600, color: "#666", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                      Level <span style={{ color: colour }}>*</span>
-                    </label>
-                    <select
-                      style={{ width: "100%", padding: "8px 12px", background: "#222", border: "1px solid #333", borderRadius: 6, color: g.level ? "#fff" : "#666", fontSize: 13 }}
-                      value={g.level}
-                      onChange={e => updateGymnast(g.id, "level", e.target.value)}>
+                    <label style={{ ...labelStyle, fontSize: 11, marginBottom: 6 }}>Level <span style={{ color: colour }}>*</span></label>
+                    <select style={{ ...selectStyle, color: g.level ? "var(--text-primary)" : "var(--text-tertiary)" }} value={g.level} onChange={e => updateGymnast(g.id, "level", e.target.value)}>
                       <option value="">Select level…</option>
-                      {(compConfig.levels || []).map(l => (
-                        <option key={l.id} value={l.name}>{l.name}</option>
-                      ))}
+                      {(compConfig.levels || []).map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
                     </select>
                   </div>
                   {(compConfig.levels || []).some(l => l.rankBy === "level+age") && (
                     <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 10, fontWeight: 600, color: "#666", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                        Age Category
-                      </label>
-                      <select
-                        style={{ width: "100%", padding: "8px 12px", background: "#222", border: "1px solid #333", borderRadius: 6, color: g.ageCategory ? "#fff" : "#666", fontSize: 13 }}
-                        value={g.ageCategory}
-                        onChange={e => updateGymnast(g.id, "ageCategory", e.target.value)}>
+                      <label style={{ ...labelStyle, fontSize: 11, marginBottom: 6 }}>Age Category</label>
+                      <select style={{ ...selectStyle, color: g.ageCategory ? "var(--text-primary)" : "var(--text-tertiary)" }} value={g.ageCategory} onChange={e => updateGymnast(g.id, "ageCategory", e.target.value)}>
                         <option value="">Select…</option>
                         <option value="Junior">Junior</option>
                         <option value="Senior">Senior</option>
@@ -6602,18 +6872,18 @@ function ClubSubmissionScreen({ compId }) {
         </div>
 
         {formError && (
-          <div style={{ background: "rgba(220,53,69,0.12)", border: "1px solid rgba(220,53,69,0.4)", borderRadius: 8, padding: "12px 16px", fontSize: 13, color: "#f87171", marginBottom: 16 }}>
-            ⚠ {formError}
+          <div style={{ background: "rgba(220,53,69,0.06)", border: "1px solid rgba(220,53,69,0.25)", borderRadius: 12, padding: "14px 18px", fontSize: 13, color: "#c53030", marginBottom: 16, fontFamily: "var(--font-display)" }}>
+            {formError}
           </div>
         )}
 
         <button onClick={handleSubmit} disabled={submitting}
-          style={{ width: "100%", padding: "16px", background: colour, color: "#fff", border: "none", borderRadius: 10,
-            fontWeight: 800, fontSize: 16, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+          style={{ width: "100%", padding: "16px", background: colour, color: "var(--text-alternate)", border: "none", borderRadius: 56,
+            fontWeight: 600, fontSize: 16, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-display)" }}>
           {submitting ? "Submitting…" : "Submit Gymnast List"}
         </button>
 
-        <div style={{ textAlign: "center", fontSize: 11, color: "#555", marginTop: 16 }}>
+        <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: 20, fontFamily: "var(--font-display)" }}>
           Powered by GYMCOMP · Your details will only be used for this competition
         </div>
       </div>
@@ -7132,7 +7402,7 @@ function PinSetupModal({ onSet, onSkip }) {
         <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
         <div style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>Set a PIN</div>
         <div style={{ fontSize: 14, color: "var(--text-tertiary)", marginBottom: 24, lineHeight: 1.5 }}>
-          Protect this competition with a 4-digit PIN. Anyone resuming it will need the PIN to make changes. The public results page is always open.
+          Set a PIN to restrict score entry to authorised judges and scorers. Anyone entering scores will need this PIN to access the competition.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div>
@@ -7266,18 +7536,7 @@ ${body}
 <div class="footer">Generated by GYMCOMP · ${new Date().toLocaleDateString("en-GB")}</div>
 </body></html>`;
 
-  // Use Blob URL — avoids popup blockers and works reliably cross-browser
-  const blob = new Blob([html], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Clean up the object URL after a short delay
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  generatePDF(html, "gymcomp-results.pdf");
 }
 
 // ============================================================
@@ -7510,7 +7769,7 @@ function LiveViewPanel({ compId, compData }) {
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, eventStatus }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // SVG icon helpers (16x16)
@@ -7628,13 +7887,14 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
             <div className="as-divider" />
             <NavItem icon={icons.edit} label="Edit Setup" onClick={onEditSetup} />
             <NavItem icon={icons.users} label="Manage Gymnasts" onClick={onManageGymnasts} />
-            <NavItem icon={icons.play} label="Start Competition" onClick={onStartComp} />
+            {gymnastsCount > 0 && (
+              <NavItem icon={icons.play} label={eventStatus === "live" ? "Resume Competition" : "Start Competition"} onClick={onStartComp} />
+            )}
           </>)}
 
           {/* ── active / gymnasts ── */}
           {screen === "active" && phase === "gymnasts" && (<>
-            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
-            <NavItem icon={icons.home} label="Dashboard" onClick={onDashboard} />
+            <NavItem icon={icons.back} label="Back to Comp" onClick={onDashboard} />
           </>)}
 
           {/* ── active / phase 2 (competition) ── */}
@@ -7746,9 +8006,7 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
       </>)}
 
       {screen === "active" && phase === "gymnasts" && (<>
-        <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
-        <D />
-        <Tab icon={icons.back} label="Dashboard" onClick={onDashboard} />
+        <Tab icon={icons.back} label="Back to Comp" onClick={onDashboard} />
       </>)}
 
       {screen === "active" && phase === 2 && (<>
@@ -7770,6 +8028,7 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
 export default function App() {
   // ── Auth state (Supabase Auth) ──────────────────────────────────────────
   const [currentUser,    setCurrentUser]    = useState(null);  // supabase user object
+  const hasAuthed = useRef(false); // guard against token-refresh re-navigation
   const [currentProfile, setCurrentProfile] = useState(null);  // row from profiles table
   const [authLoading,    setAuthLoading]    = useState(true);
   // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "new-pin" | "active"
@@ -7827,8 +8086,11 @@ export default function App() {
       const { data: profile } = await supabase.fetchProfile(user.id, token);
       setCurrentProfile(profile || null);
       setAuthLoading(false);
-      // Show onboarding if the profile doesn't have a name yet
-      setScreen(profile?.full_name ? "org-dashboard" : "profile-onboarding");
+      // Only navigate on initial auth — not on token refreshes that re-trigger loadUserProfile
+      if (!hasAuthed.current) {
+        hasAuthed.current = true;
+        setScreen(profile?.full_name ? "org-dashboard" : "profile-onboarding");
+      }
     } catch (e) {
       console.error("Profile load error:", e);
       setAuthLoading(false);
@@ -7849,10 +8111,11 @@ export default function App() {
     });
 
     const { data: { subscription } } = supabaseAuth.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
+      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         setCurrentUser(session.user);
         loadUserProfile(session.user);
       } else if (event === "SIGNED_OUT") {
+        hasAuthed.current = false;
         setCurrentUser(null);
         setCurrentProfile(null);
         setAuthLoading(false);
@@ -7913,6 +8176,25 @@ export default function App() {
     });
   }, [gymnasts, scores, scheduleSync]);
 
+  // Local-only version of setCompData — updates React state without syncing to Supabase.
+  // Used in Phase 1 setup so edits aren't auto-saved.
+  const setCompDataLocal = useCallback((updater) => {
+    setCompDataRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (gymnasts.length > 0) {
+        const apparatusChanged = JSON.stringify(prev.apparatus) !== JSON.stringify(next.apparatus);
+        const roundsChanged = JSON.stringify(prev.rounds.map(r => r.id)) !== JSON.stringify(next.rounds.map(r => r.id));
+        const levelsChanged = JSON.stringify(prev.levels.map(l => l.id)) !== JSON.stringify(next.levels.map(l => l.id));
+        if (apparatusChanged || roundsChanged || levelsChanged) {
+          setPendingChange(next);
+          setSetupWarn("Changing this setup may affect gymnast data already entered. Do you want to continue?");
+          return prev;
+        }
+      }
+      return next;
+    });
+  }, [gymnasts]);
+
   const setGymnastsWithSync = useCallback((updater) => {
     setGymnasts(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -7931,7 +8213,6 @@ export default function App() {
 
   const confirmSetupChange = () => {
     setCompDataRaw(pendingChange);
-    scheduleSync(pendingChange, gymnasts, scores);
     setSetupWarn(null);
     setPendingChange(null);
   };
@@ -8028,6 +8309,22 @@ export default function App() {
     setScreen("active");
   };
 
+  // Open an existing event into the dashboard overview (comp details + PDFs)
+  const handleViewEvent = (ev) => {
+    const snapshot = ev.snapshot;
+    if (snapshot) {
+      setCompId(ev.compId);
+      setCompPin(snapshot.compData?.pin || null);
+      setCompDataRaw(snapshot.compData || {});
+      setGymnasts(snapshot.gymnasts || []);
+      setScores(snapshot.scores || {});
+      setSyncStatus("saved");
+    }
+    setPhase("dashboard"); setStep(1);
+    setCurrentEventId(ev.id);
+    setScreen("active");
+  };
+
   // Duplicate an event as a new competition
   const handleDuplicateEvent = (ev) => {
     const snapshot = ev.snapshot;
@@ -8070,8 +8367,8 @@ export default function App() {
   // Navigate back to org dashboard
   const goBackToDashboard = () => {
     const doLeave = () => { setScreen("org-dashboard"); };
-    // Warn if on edit page with unsaved changes
-    if (phase === 1 && syncStatus !== "saved" && syncStatus !== "idle") {
+    // Always warn during phase 1 setup — nothing auto-saves
+    if (phase === 1) {
       setLeaveEditConfirm(() => doLeave);
     } else {
       doLeave();
@@ -8096,6 +8393,21 @@ export default function App() {
         });
       }
     }
+  };
+  const handleCompleteComp = () => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    pushToSupabase(compData, gymnasts, scores);
+    if (currentEventId) {
+      events.snapshot(currentEventId, compData, gymnasts, scores);
+      events.update(currentEventId, { status: "completed" });
+      const ev = events.getAll().find(e => e.id === currentEventId);
+      if (ev?.compId) {
+        supabaseAuth.auth.getSession().then(({ data: { session } }) => {
+          if (session) supabase.patch("competitions", ev.compId, { status: "completed" }, session.access_token);
+        });
+      }
+    }
+    setScreen("org-dashboard");
   };
   const handleEditSetup = () => { setPhase(1); setStep(1); };
   const handleManageGymnasts = () => setPhase("gymnasts");
@@ -8216,6 +8528,7 @@ export default function App() {
               account={currentAccount}
               onNew={handleNew}
               onOpen={handleOpenEvent}
+              onView={handleViewEvent}
               onEdit={handleEditEvent}
               onDuplicate={handleDuplicateEvent}
               statusFilter={statusFilter}
@@ -8272,8 +8585,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Nav bar — hidden during setup (phase 1) for organisers; setup has its own topbar */}
-      {!(currentAccount && phase === 1) && (
+      {/* Nav bar — hidden during setup (phase 1) and dashboard for organisers */}
+      {!(currentAccount && (phase === 1 || phase === "dashboard")) && (
         <nav className="nav">
           {!currentAccount && (
             <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => setScreen("auth-login")}>GYMCOMP<span>.</span></div>
@@ -8317,6 +8630,7 @@ export default function App() {
         <CompDashboard
           compData={compData} gymnasts={gymnasts}
           compId={compId} compPin={compPin}
+          eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined}
           onStartComp={handleStartComp}
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
@@ -8333,22 +8647,31 @@ export default function App() {
       {/* SETUP phase 1 */}
       {phase === 1 && (
         <main className="content" style={{ maxWidth: 1200 }}>
-          <Step1_CompDetails data={compData} setData={setCompData} syncStatus={syncStatus} onSave={handleSaveSetup} onNext={() => {
-            if (syncTimer.current) clearTimeout(syncTimer.current);
-            const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
-            const isDraft = ev && ev.status === "draft";
-            pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
-            if (currentEventId) {
-              events.snapshot(currentEventId, compData, gymnasts, scores);
-              if (isDraft) events.update(currentEventId, { status: "active" });
-            }
-            if (!compPin) {
-              pinModalCallback.current = () => setPhase("dashboard");
-              setShowPinModal(true);
-            } else {
-              setPhase("dashboard");
-            }
-          }} />
+          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup}
+            onSaveExit={() => {
+              // Partial save — persist and go back to organiser dashboard (event list)
+              if (syncTimer.current) clearTimeout(syncTimer.current);
+              pushToSupabase(compData, gymnasts, scores);
+              if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+              setScreen("org-dashboard");
+            }}
+            onNext={() => {
+              // Full save — all mandatory fields complete
+              if (syncTimer.current) clearTimeout(syncTimer.current);
+              const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
+              const isDraft = ev && ev.status === "draft";
+              pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
+              if (currentEventId) {
+                events.snapshot(currentEventId, compData, gymnasts, scores);
+                if (isDraft) events.update(currentEventId, { status: "active" });
+              }
+              if (!compPin) {
+                pinModalCallback.current = () => setPhase("dashboard");
+                setShowPinModal(true);
+              } else {
+                setPhase("dashboard");
+              }
+            }} />
         </main>
       )}
 
@@ -8364,7 +8687,7 @@ export default function App() {
       {phase === 2 && (
         <main className="content" style={{ maxWidth: 1200 }}>
           {step === 1 && <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} />}
-          {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} />}
+          {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} onComplete={handleCompleteComp} />}
           {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
@@ -8384,7 +8707,9 @@ export default function App() {
             onNew={handleNew} onMyEvents={goBackToDashboard} onEditSetup={handleEditSetup}
             onManageGymnasts={handleManageGymnasts} onStartComp={handleStartComp}
             onDashboard={handleGoToDashboard}
-            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
+            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
+            gymnastsCount={gymnasts.length}
+            eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined} />
           <div className="app-main" ref={appMainRef}>
             {activeContent}
           </div>
