@@ -2035,17 +2035,21 @@ const css = `
   .page-sub { color: var(--muted); margin-top: 6px; font-size: 14px; line-height: 1.4; }
 
   /* ── Setup Topbar ── */
-  .setup-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; margin-bottom: 28px; background: var(--brand-01); border: none; border-radius: 16px; transition: transform 0.25s ease, opacity 0.25s ease; }
+  .setup-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; margin-bottom: 28px; background: var(--brand-01); border: none; border-radius: 16px; transition: transform 0.25s ease, opacity 0.25s ease; flex-wrap: wrap; }
   .setup-topbar.topbar-hidden { transform: translateY(-120%); opacity: 0; pointer-events: none; }
   .setup-topbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; flex-wrap: wrap; }
   .setup-topbar-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-alternate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
   .setup-topbar-meta { font-size: 12px; color: rgba(255,255,255,0.7); white-space: nowrap; }
   .setup-topbar-meta::before { content: "·"; margin-right: 12px; color: rgba(255,255,255,0.35); }
-  .setup-topbar-right { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+  .setup-topbar-right { flex-shrink: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .setup-topbar-sync { font-size: 12px; font-weight: 600; font-family: var(--font-display); color: rgba(255,255,255,0.7); }
   @media (max-width: 768px) {
-    .setup-topbar { margin-bottom: 16px; padding: 10px 12px; }
-    .setup-topbar-name { max-width: 180px; font-size: 13px; }
+    .setup-topbar { margin-bottom: 16px; padding: 10px 12px; gap: 8px; border-radius: 12px; }
+    .setup-topbar-left { gap: 6px; }
+    .setup-topbar-name { max-width: 140px; font-size: 13px; }
+    .setup-topbar-meta { display: none; }
+    .setup-topbar-right { flex-shrink: 1; width: auto; }
+    .setup-topbar-right .btn { font-size: 11px !important; padding: 5px 10px !important; white-space: nowrap; }
   }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
@@ -2184,6 +2188,9 @@ const css = `
   .apparatus-section-header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-bottom: 1px solid var(--border); }
   .apparatus-section-body { padding: 12px 16px; }
 
+  .results-body { padding: 24px 40px 40px; max-width: 1200px; }
+  .results-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+  .results-toolbar-views { display: flex; gap: 8px; flex: 1; }
   .results-level-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
   .results-level-header { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
   .results-level-header span { font-size: 14px; font-weight: 600; color: var(--text-primary); background: rgba(0,13,255,0.06); padding: 4px 12px; border-radius: 99px; letter-spacing: 0.3px; }
@@ -2195,7 +2202,7 @@ const css = `
   @media (max-width: 768px) {
     /* Prevent iOS Safari auto-zoom on focus — all interactive elements must be ≥16px */
     .input, .select, textarea, input, select, .btn, .club-edit-input, .score-input { font-size: 16px !important; }
-    .input, .select, input, select, textarea { padding: 10px 14px; box-sizing: border-box; max-width: 100%; }
+    .input, .select, input, select, textarea { padding: 10px 14px; box-sizing: border-box; max-width: 100%; width: 100%; }
 
     .nav { padding: 12px 16px; gap: 10px; }
     .nav-logo { font-size: 22px; }
@@ -2207,7 +2214,7 @@ const css = `
     .round-time-row > div:first-child { width: auto !important; text-align: center; }
     .round-time-row .field { flex: 1 1 auto !important; width: 100%; }
     .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .card { padding: 14px 12px; overflow: hidden; }
+    .card { padding: 16px; overflow: hidden; }
 
     .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
     .dash-hero-title { font-size: 40px !important; }
@@ -2217,7 +2224,18 @@ const css = `
     .apparatus-section-body table { min-width: 480px; }
     .score-input { width: 68px; padding: 8px 6px; font-size: 14px; }
 
+    .results-body { padding: 16px 12px 24px; }
+    .results-toolbar { gap: 10px; }
+    .results-toolbar-views { flex: none; width: 100%; }
+    .results-toolbar-views .btn { flex: 1; justify-content: center; }
+    .results-toolbar .tabs { width: 100%; justify-content: stretch; }
+    .results-toolbar .tab-btn { flex: 1; text-align: center; }
     .results-level-card { padding: 14px; }
+
+    .cd-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .csv-zone { min-width: 100% !important; }
+    .club-pills-row { flex-direction: column; }
+    .club-pills-row .btn { width: 100%; justify-content: center; }
     .table-wrap { overflow-x: auto; }
 
     .inline-row { flex-wrap: wrap; }
@@ -2660,9 +2678,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             </div>
         }
         {data.levels.map(l => (
-          <div className="list-item" key={l.id}>
-            <div className="list-item-content"><strong>{l.name}</strong></div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="list-item" key={l.id} style={{ flexWrap: "wrap" }}>
+            <div className="list-item-content" style={{ flex: "1 1 100%" }}><strong>{l.name}</strong></div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "1 1 auto" }}>
               <span style={{ fontSize: 12, color: "var(--muted)" }}>Rank by:</span>
               <select className="select" style={{ width: "auto", padding: "4px 10px", fontSize: 12 }}
                 value={l.rankBy} onChange={e => updateLevelRank(l.id, e.target.value)}>
@@ -4233,7 +4251,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
         <div className="card-title">{editId ? "Edit Gymnast" : "Add Gymnast Manually"}</div>
         <div style={{ marginBottom: 12 }}>
           <label className="label">Club <span style={{ color: "#e53e3e" }}>*</span></label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
+          <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
             {compData.clubs.map(c => (
               <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
                 onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
@@ -5046,14 +5064,14 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                 {modalTotal > 0 ? (fig ? modalTotal.toFixed(3) : modalTotal.toFixed(2)) : "\u2014"}
               </div>
 
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
                 {scoreModal.isEdit && (
-                  <button className="btn btn-danger btn-sm" style={{ marginRight: "auto" }}
+                  <button className="btn-icon" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger)" }}
+                    title="Delete Score"
                     onClick={() => setDeleteConfirm({ gid: scoreModal.gid, app: scoreModal.app })}>
-                    Delete Score
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M6.67 7.33v4M9.33 7.33v4"/><path d="M3.33 4l.67 9.33a1.33 1.33 0 001.33 1.34h5.34a1.33 1.33 0 001.33-1.34L12.67 4"/></svg>
                   </button>
                 )}
-                <button className="btn btn-ghost" onClick={() => setScoreModal(null)}>Cancel</button>
                 <button className="btn btn-primary" onClick={submitScoreModal}>
                   {scoreModal.isEdit ? "Update Score" : "Submit Score"}
                 </button>
@@ -5210,14 +5228,15 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
         </div>
       </div>
 
-      <div style={{ padding: "24px 40px 40px", maxWidth: 1200 }}>
+      <div className="results-body">
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28, flexWrap: "wrap" }}>
-        <button className={`btn ${view === "apparatus" ? "btn-tertiary" : "btn-secondary"}`}
-          onClick={() => setView("apparatus")}>Per Apparatus</button>
-        <button className={`btn ${view === "overall" ? "btn-tertiary" : "btn-secondary"}`}
-          onClick={() => setView("overall")}>Overall</button>
-        <div style={{ flex: 1 }} />
+      <div className="results-toolbar">
+        <div className="results-toolbar-views">
+          <button className={`btn ${view === "apparatus" ? "btn-tertiary" : "btn-secondary"}`}
+            onClick={() => setView("apparatus")}>Per Apparatus</button>
+          <button className={`btn ${view === "overall" ? "btn-tertiary" : "btn-secondary"}`}
+            onClick={() => setView("overall")}>Overall</button>
+        </div>
         <div className="tabs" style={{ marginBottom: 0 }}>
           {compData.rounds.map(r => (
             <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
@@ -6853,7 +6872,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
 
         {/* Stats */}
         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>Overview</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+        <div className="cd-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
           {statCard("Gymnasts", totalGymnasts, "var(--accent)")}
           {statCard("Clubs", clubs.length)}
           {statCard("Levels", compData.levels.length)}
@@ -8479,8 +8498,8 @@ function MobileLogoHeader({ onGoHome }) {
     const target = el || window;
     const onScroll = () => {
       const y = el ? el.scrollTop : window.scrollY;
-      if (y > lastY.current && y > 48) setHidden(true);
-      else if (y < lastY.current) setHidden(false);
+      if (y > 48) setHidden(true);
+      else setHidden(false);
       lastY.current = y;
     };
     target.addEventListener("scroll", onScroll, { passive: true });
@@ -8498,7 +8517,7 @@ function MobileLogoHeader({ onGoHome }) {
 // ============================================================
 // MOBILE TAB BAR
 // ============================================================
-function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onSave }) {
+function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onSave, saveLabel }) {
   const icons = {
     plus: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>,
     account: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>,
@@ -8533,7 +8552,7 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
       {screen === "active" && phase === 1 && (<>
         <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
         <D />
-        <Tab icon={icons.save} label="Save" onClick={onSave} />
+        <Tab icon={icons.save} label={saveLabel || "Save"} onClick={onSave} />
       </>)}
 
       {screen === "active" && phase === "dashboard" && (<>
@@ -8556,8 +8575,6 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
         <Tab icon={icons.trophy} label="Results" active={step === 2} onClick={() => setStep(2)} />
         <D />
         <Tab icon={icons.doc} label="Exports" active={step === 3} onClick={() => setStep(3)} />
-        <D />
-        <Tab icon={icons.mic} label="MC" active={step === 4} onClick={() => setStep(4)} />
       </>)}
     </div>
   );
@@ -8924,6 +8941,37 @@ export default function App() {
     if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
   };
 
+  const setupCanProceed = compData.name && compData.date &&
+    (compData.clubs || []).length > 0 && (compData.rounds || []).length > 0 &&
+    (compData.apparatus || []).length > 0 && (compData.levels || []).length > 0;
+  const setupCanSave = !!compData.name;
+
+  const handleMobileSave = () => {
+    if (setupCanProceed) {
+      // All fields complete — full save & continue (PIN flow + dashboard)
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
+      const isDraft = ev && ev.status === "draft";
+      pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
+      if (currentEventId) {
+        events.snapshot(currentEventId, compData, gymnasts, scores);
+        if (isDraft) events.update(currentEventId, { status: "active" });
+      }
+      if (!compPin) {
+        pinModalCallback.current = () => setPhase("dashboard");
+        setShowPinModal(true);
+      } else {
+        setPhase("dashboard");
+      }
+    } else if (setupCanSave) {
+      // Partial save — persist and go back to dashboard
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      pushToSupabase(compData, gymnasts, scores);
+      if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+      setScreen("org-dashboard");
+    }
+  };
+
   const handleStartComp = () => {
     setPhase(2); setStep(1);
     if (currentEventId) {
@@ -9287,7 +9335,9 @@ export default function App() {
           onNew={handleNew} onMyEvents={goBackToDashboard} onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts} onStartComp={handleStartComp}
           onDashboard={handleGoToDashboard}
-          onSettings={() => setShowAccountSettings(true)} onSave={handleSaveSetup} />
+          onSettings={() => setShowAccountSettings(true)}
+          onSave={phase === 1 ? handleMobileSave : handleSaveSetup}
+          saveLabel={phase === 1 ? (setupCanProceed ? "Continue" : "Save & Exit") : "Save"} />
       </>)}
 
       {showAccountSettings && (
