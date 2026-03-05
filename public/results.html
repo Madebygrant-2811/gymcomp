@@ -103,7 +103,7 @@
 
     /* ── Comp hero ───────────────────────────────────────────── */
     .comp-hero {
-      text-align: center;
+      text-align: left;
       margin-bottom: 28px;
     }
     .comp-title {
@@ -112,12 +112,12 @@
       font-weight: 800;
       line-height: 1.1;
       margin-bottom: 10px;
+      color: var(--text);
     }
     .comp-meta {
       display: flex;
       flex-wrap: wrap;
       gap: 16px;
-      justify-content: center;
       color: var(--muted);
       font-size: 13px;
     }
@@ -131,22 +131,22 @@
       justify-content: center;
     }
     .tab-btn {
-      padding: 8px 18px;
-      border-radius: 56px;
-      border: 1px solid var(--border);
-      background: var(--surface);
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
       color: var(--muted);
       font-family: var(--font);
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.2s;
+      border-radius: 0;
     }
-    .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+    .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
+      color: var(--accent);
+      border-bottom-color: var(--accent);
     }
 
     /* ── View toggle ─────────────────────────────────────────── */
@@ -188,7 +188,43 @@
       font-size: 18px;
       font-weight: 700;
       color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
+    .filter-select {
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 32px 6px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23909090' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    .filter-select:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .filter-clear {
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 8px;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .filter-clear:hover { color: var(--text); }
 
     /* ── Apparatus sub-section ───────────────────────────────── */
     .app-section { padding: 16px 20px 0; }
@@ -305,7 +341,7 @@
 
 <header class="site-header">
   <div class="site-header-inner">
-    <div class="logo">GYMCOMP</div>
+    <div class="logo"><img src="./Logo-mono-white.svg" alt="GymComp" height="20" /></div>
     <span class="view-badge">Live Results</span>
     <div class="live-pill" id="livePill" style="display:none">
       <span class="live-dot"></span> LIVE
@@ -328,6 +364,8 @@
 
   let activeRound = null;
   let activeView = "apparatus"; // "apparatus" | "overall"
+  let levelFilter = "all";
+  let ageFilter = "all";
   let compData = null;
   let gymnasts = [];
   let scores = {};
@@ -358,6 +396,69 @@
       .replace(/"/g, "&quot;");
   }
 
+  function getUniqueLevels(rid) {
+    const roundG = gymnasts.filter(g => g.round === rid);
+    return [...new Set(roundG.map(g => {
+      const lo = (compData.levels || []).find(l => l.id === g.level);
+      return lo ? lo.name : "Unknown";
+    }))].sort();
+  }
+
+  function getUniqueAges(rid) {
+    const roundG = gymnasts.filter(g => g.round === rid);
+    const selectedLevelObj = (compData.levels || []).find(l => l.name === levelFilter);
+    if (!selectedLevelObj || selectedLevelObj.rankBy !== "level+age") return [];
+    return [...new Set(roundG.filter(g => {
+      const lo = (compData.levels || []).find(l => l.id === g.level);
+      return (lo ? lo.name : "Unknown") === levelFilter;
+    }).map(g => g.age || "Unknown"))].sort();
+  }
+
+  function isAgeFilterEnabled() {
+    if (levelFilter === "all") return false;
+    const lo = (compData.levels || []).find(l => l.name === levelFilter);
+    return lo && lo.rankBy === "level+age";
+  }
+
+  function setLevelFilterVal(val) {
+    levelFilter = val;
+    ageFilter = "all";
+    renderPage();
+  }
+
+  function setAgeFilterVal(val) {
+    ageFilter = val;
+    renderPage();
+  }
+
+  function clearFilters() {
+    levelFilter = "all";
+    ageFilter = "all";
+    renderPage();
+  }
+
+  function buildFilterHtml(rid) {
+    const levels = getUniqueLevels(rid);
+    if (levels.length < 2) return "";
+    const ages = getUniqueAges(rid);
+    const showAge = isAgeFilterEnabled();
+    const hasActive = levelFilter !== "all" || ageFilter !== "all";
+    return `
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="filter-select" onchange="setLevelFilterVal(this.value)">
+          <option value="all"${levelFilter === "all" ? " selected" : ""}>All Levels</option>
+          ${levels.map(l => `<option value="${escHtml(l)}"${l === levelFilter ? " selected" : ""}>${escHtml(l)}</option>`).join("")}
+        </select>
+        <select class="filter-select" onchange="setAgeFilterVal(this.value)" ${showAge ? "" : "disabled"}>
+          <option value="all"${ageFilter === "all" ? " selected" : ""}>All Ages</option>
+          ${ages.map(a => `<option value="${escHtml(a)}"${a === ageFilter ? " selected" : ""}>${escHtml(a)}</option>`).join("")}
+        </select>
+        ${hasActive ? `<button class="filter-clear" onclick="clearFilters()">Clear</button>` : ""}
+      </div>
+    `;
+  }
+
   function rankBadge(rank) {
     if (rank === null) return `<span class="badge badge-dns">DNS</span>`;
     if (rank === 1) return `<span class="badge badge-gold">🥇 1st</span>`;
@@ -386,12 +487,18 @@
 
   // ── Apparatus view ──
   function renderApparatusView(rid) {
-    const groups = buildRankGroups(rid);
+    const allGroups = buildRankGroups(rid);
+    const groups = allGroups.filter(rg => {
+      if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
+      if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
+      return true;
+    });
     const apparatus = compData.apparatus || [];
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
+    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
+      const filterHtml = idx === 0 ? buildFilterHtml(rid) : "";
 
       // Check if any scores exist across all apparatus for this group
       const groupHasScores = apparatus.some(app => glist.some(g => getScore(rid, g.id, app) > 0));
@@ -399,7 +506,7 @@
       if (!groupHasScores) {
         return `
           <div class="level-card">
-            <div class="level-card-header">${groupLabel}</div>
+            <div class="level-card-header">${groupLabel}${filterHtml}</div>
             <div style="padding:32px 20px;text-align:center;color:var(--muted);font-size:13px">No scores yet</div>
           </div>
         `;
@@ -449,7 +556,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${groupLabel}</div>
+          <div class="level-card-header">${groupLabel}${filterHtml}</div>
           ${appSections}
         </div>
       `;
@@ -458,12 +565,18 @@
 
   // ── Overall view ──
   function renderOverallView(rid) {
-    const groups = buildRankGroups(rid);
+    const allGroups = buildRankGroups(rid);
+    const groups = allGroups.filter(rg => {
+      if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
+      if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
+      return true;
+    });
     const apparatus = compData.apparatus || [];
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
+    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
+      const filterHtml = idx === 0 ? buildFilterHtml(rid) : "";
       const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
       const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns);
@@ -507,7 +620,7 @@
       if (!hasAnyScore) {
         return `
           <div class="level-card">
-            <div class="level-card-header">${groupLabel}</div>
+            <div class="level-card-header">${groupLabel}${filterHtml}</div>
             <div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic">No scores yet</div>
           </div>
         `;
@@ -515,7 +628,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${groupLabel}</div>
+          <div class="level-card-header">${groupLabel}${filterHtml}</div>
           <div style="padding:16px 20px">
             <div class="table-wrap">
               <table>
@@ -545,19 +658,16 @@
       : "";
     const venue = compData.venue || compData.location || "";
 
-    const tabsHtml = rounds.length > 1 ? `
-      <div class="tabs">
-        ${rounds.map(r => `
-          <button class="tab-btn ${r.id === activeRound ? "active" : ""}"
-            onclick="switchRound('${r.id}')">${escHtml(r.name)}</button>
-        `).join("")}
-      </div>
-    ` : "";
+    const roundBtns = rounds.length > 1 ? rounds.map(r => `
+      <button class="tab-btn ${r.id === activeRound ? "active" : ""}"
+        onclick="switchRound('${r.id}')">${escHtml(r.name)}</button>
+    `).join("") : "";
 
-    const viewToggleHtml = `
-      <div class="view-toggle">
+    const controlsHtml = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;flex-wrap:wrap">
         <button class="toggle-btn ${activeView === "apparatus" ? "active" : ""}" onclick="switchView('apparatus')">Per Apparatus</button>
         <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
+        ${roundBtns ? `<div style="flex:1"></div><div style="display:flex;gap:8px;flex-wrap:wrap">${roundBtns}</div>` : ""}
       </div>
     `;
 
@@ -567,14 +677,13 @@
 
     document.getElementById("main").innerHTML = `
       <div class="comp-hero">
-        <div class="comp-title" style="color:${colour}">${escHtml(compData.name || "Competition")}</div>
+        <div class="comp-title">${escHtml(compData.name || "Competition")}</div>
         <div class="comp-meta">
-          ${dateStr ? `<span>📅 ${dateStr}</span>` : ""}
-          ${venue ? `<span>📍 ${escHtml(venue)}</span>` : ""}
+          ${dateStr ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v4M11 1v4"/></svg>${dateStr}</span>` : ""}
+          ${venue ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 014.5 4.5c0 3.5-4.5 8.5-4.5 8.5S3.5 9.5 3.5 6A4.5 4.5 0 018 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>${escHtml(venue)}</span>` : ""}
         </div>
       </div>
-      ${tabsHtml}
-      ${viewToggleHtml}
+      ${controlsHtml}
       ${contentHtml}
     `;
   }

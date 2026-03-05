@@ -2126,9 +2126,9 @@ const css = `
   .si-modal-total { display: flex; align-items: center; justify-content: center; margin: 32px auto 32px; width: fit-content; min-width: 140px; padding: 14px 28px 20px; font-size: 36px; font-weight: 800; font-family: var(--font-display); letter-spacing: 1px; color: var(--text); background: #fff; border: 2px solid var(--text); border-radius: 6px; box-shadow: 0 4px 0 var(--text), 0 6px 12px rgba(0,0,0,0.12); position: relative; }
   .si-modal-total::before { content: "SCORE"; position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--muted); background: var(--surface); padding: 0 8px; }
   .si-modal-fields { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-  .si-modal-field { display: flex; flex-direction: column; gap: 4px; }
-  .si-modal-field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-  .si-modal-field input { width: 72px; }
+  .si-modal-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
+  .si-modal-field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--brand-01); }
+  .si-modal-field input { width: 100%; font-size: 20px; padding: 14px 20px; font-weight: 700; text-align: center; border-radius: 12px; }
   .si-modal-readonly { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--surface2); border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
   .si-modal-readonly strong { font-weight: 700; }
   .si-modal-readonly span { color: var(--muted); }
@@ -2161,7 +2161,7 @@ const css = `
   .error-box { background: rgba(229,62,62,0.06); border: 1px solid rgba(229,62,62,0.2); border-radius: 12px; padding: 12px 18px; font-size: 13px; color: var(--danger); margin-bottom: 12px; }
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 999; }
-  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 460px; width: 90%; }
+  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 460px; width: 90%; max-height: 90vh; overflow-y: auto; }
 
   .pc-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-top: 4px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
   .pc-option { padding: 8px 14px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; color: var(--text); line-height: 1.3; }
@@ -2287,7 +2287,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     }
   }, []);
   const [customLevel, setCustomLevel] = useState("");
-  const [newJudge, setNewJudge] = useState({ name: "", club: "", role: "E", targetApparatus: "" });
+  const [newJudge, setNewJudge] = useState({ name: "", club: "", targetApparatus: "" });
   const [dateError, setDateError] = useState("");
 
   const handleDate = (val) => {
@@ -2360,7 +2360,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     if (!newJudge.name.trim()) return;
     setData(d => ({
       ...d,
-      judges: [...d.judges, { id: generateId(), name: newJudge.name.trim(), club: newJudge.club.trim(), apparatus, role: newJudge.role || "E" }]
+      judges: [...d.judges, { id: generateId(), name: newJudge.name.trim(), club: newJudge.club.trim(), apparatus }]
     }));
     setNewJudge({ name: "", club: "", targetApparatus: "" });
   };
@@ -2712,15 +2712,15 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             </div>
             <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, paddingLeft: 26 }}>
               Full component breakdown per apparatus:
-              <strong style={{ color: "var(--text)", display: "block", marginTop: 3 }}>DV + Bonus + avg(E1…En) − Penalties</strong>
-              Requires E judges to be assigned per apparatus. Unlocks per-gymnast
+              <strong style={{ color: "var(--text)", display: "block", marginTop: 3 }}>D Score + Bonus + avg(10 − Ded1…DedN) − Penalty</strong>
+              Requires judges to be assigned per apparatus. Unlocks per-gymnast
               diagnostic reports with quadrant analysis and component breakdown.
             </div>
             {data.useDEScoring && (
               <div style={{ marginTop: 10, marginLeft: 26, padding: "7px 10px", borderRadius: 12,
                 background: "rgba(0,13,255,0.05)", border: "1px solid rgba(0,13,255,0.12)",
                 fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
-                DV (0–10) · Bonus · E scores per judge (raw, 0–10) · Time fault · OOB · Fall · Neutral deduction
+                D Score · Bonus · Judge deductions (subtracted from 10) · Penalty
               </div>
             )}
           </div>
@@ -2777,24 +2777,20 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             Judges
             {data.useDEScoring && (
               <span style={{ fontSize: 11, fontWeight: 400, color: "var(--muted)", marginLeft: 10 }}>
-                FIG mode — assign D and E judges per apparatus. E judge count drives score input columns.
+                FIG mode — assign judges per apparatus. Judge count drives deduction input columns.
               </span>
             )}
           </div>
           {data.apparatus.map(apparatus => {
             const allJudges = data.judges.filter(j => j.apparatus === apparatus);
-            const dJudges = allJudges.filter(j => j.role === "D");
-            const eJudges = allJudges.filter(j => j.role === "E" || !j.role);
             const isAdding = newJudge.targetApparatus === apparatus;
-            const missingE = data.useDEScoring && eJudges.length === 0;
+            const missingJudge = data.useDEScoring && allJudges.length === 0;
             return (
               <div className="apparatus-section" key={apparatus}>
                 <div className="apparatus-section-header">
                   <strong style={{ fontSize: 14 }}>{APPARATUS_ICONS[apparatus] || "🏅"} {apparatus}</strong>
-                  <span style={{ fontSize: 12, color: missingE ? "#f0ad4e" : "var(--muted)" }}>
-                    {data.useDEScoring
-                      ? `${dJudges.length}D · ${eJudges.length}E${missingE ? " ⚠ No E judges" : ""}`
-                      : `${allJudges.length} judge${allJudges.length !== 1 ? "s" : ""}`}
+                  <span style={{ fontSize: 12, color: missingJudge ? "#f0ad4e" : "var(--muted)" }}>
+                    {`${allJudges.length} Judge${allJudges.length !== 1 ? "s" : ""}${missingJudge ? " ⚠ No judges" : ""}`}
                   </span>
                 </div>
                 <div className="apparatus-section-body">
@@ -2802,67 +2798,19 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                     <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>No judges assigned yet</div>
                   )}
 
-                  {/* Judge list grouped by role in FIG mode */}
-                  {data.useDEScoring ? (
-                    <>
-                      {dJudges.length > 0 && (
-                        <div style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: "var(--muted)", fontWeight: 700, marginBottom: 4 }}>D Panel</div>
-                          {dJudges.map(j => (
-                            <div className="list-item" key={j.id} style={{ padding: "6px 12px" }}>
-                              <div className="list-item-content">
-                                <span style={{ fontSize: 11, fontWeight: 700, color: "#5bc0de", marginRight: 6 }}>D</span>
-                                <span style={{ fontSize: 13 }}>{j.name}</span>
-                                {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
-                              </div>
-                              <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {eJudges.length > 0 && (
-                        <div style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: "var(--muted)", fontWeight: 700, marginBottom: 4 }}>E Panel ({eJudges.length} judge{eJudges.length !== 1 ? "s" : ""} → avg)</div>
-                          {eJudges.map((j, i) => (
-                            <div className="list-item" key={j.id} style={{ padding: "6px 12px" }}>
-                              <div className="list-item-content">
-                                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", marginRight: 6 }}>E{i + 1}</span>
-                                <span style={{ fontSize: 13 }}>{j.name}</span>
-                                {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
-                              </div>
-                              <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    allJudges.map(j => (
-                      <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
-                        <div className="list-item-content">
-                          <span style={{ fontSize: 13 }}>{j.name}</span>
-                          {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
-                        </div>
-                        <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
+                  {allJudges.map(j => (
+                    <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
+                      <div className="list-item-content">
+                        <span style={{ fontSize: 13 }}>{j.name}</span>
+                        {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
                       </div>
-                    ))
-                  )}
+                      <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
+                    </div>
+                  ))}
 
                   {/* Add judge form */}
                   {isAdding ? (
                     <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      {data.useDEScoring && (
-                        <div style={{ display: "flex", border: "1px solid var(--border)", borderRadius: 56, overflow: "hidden", flexShrink: 0 }}>
-                          {["D", "E"].map(role => (
-                            <button key={role} onClick={() => setNewJudge(j => ({ ...j, role }))}
-                              style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
-                                background: newJudge.role === role ? (role === "E" ? "var(--accent)" : "#5bc0de") : "var(--surface2)",
-                                color: newJudge.role === role ? "#000" : "var(--muted)" }}>
-                              {role}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                       <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120 }}
                         value={newJudge.name}
                         onChange={e => setNewJudge(j => ({ ...j, name: e.target.value }))}
@@ -2873,11 +2821,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                         onChange={e => setNewJudge(j => ({ ...j, club: e.target.value }))}
                         onKeyDown={e => e.key === "Enter" && addJudge(apparatus)} />
                       <button className="btn btn-sm btn-primary" onClick={() => addJudge(apparatus)}>Add</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", role: "E", targetApparatus: "" })}>Cancel</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", targetApparatus: "" })}>Cancel</button>
                     </div>
                   ) : (
                     <button className="btn btn-sm btn-secondary" style={{ marginTop: 6 }}
-                      onClick={() => setNewJudge({ name: "", club: "", role: "E", targetApparatus: apparatus })}>
+                      onClick={() => setNewJudge({ name: "", club: "", targetApparatus: apparatus })}>
                       + Add Judge
                     </button>
                   )}
@@ -2887,12 +2835,12 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           })}
 
           {/* FIG validation warning */}
-          {data.useDEScoring && data.apparatus.some(app => data.judges.filter(j => j.apparatus === app && (j.role === "E" || !j.role)).length === 0) && (
+          {data.useDEScoring && data.apparatus.some(app => data.judges.filter(j => j.apparatus === app).length === 0) && (
             <div style={{ margin: "10px 0 0", padding: "10px 14px", borderRadius: 12,
               background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
               fontSize: 12, color: "#c8862a" }}>
-              ⚠ FIG scoring is enabled — each apparatus needs at least one E judge before scores can be entered.
-              The number of E judges determines how many execution score columns appear in Score Input.
+              ⚠ FIG scoring is enabled — each apparatus needs at least one judge before scores can be entered.
+              The number of judges determines how many deduction input columns appear in Score Input.
             </div>
           )}
         </div>
@@ -3196,7 +3144,7 @@ function buildJudgeSheetsHTML(compData, gymnasts) {
       if (assignedJudges.length) {
         html += `<div style="background:${colour}18;border:1px solid ${colour}44;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:10px;">
           <strong>Assigned judge${assignedJudges.length !== 1 ? "s" : ""}:</strong>
-          ${assignedJudges.map(j => `<strong>${j.name}</strong>${j.club ? ` · ${j.club}` : ""}${j.role ? ` (${j.role})` : ""}`).join("&ensp;|&ensp;")}
+          ${assignedJudges.map(j => `<strong>${j.name}</strong>${j.club ? ` · ${j.club}` : ""}`).join("&ensp;|&ensp;")}
         </div>`;
       }
 
@@ -3570,8 +3518,8 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
   const rounds = compData.rounds || [];
 
   // Score helpers — D/E from flat key suffixes
-  const eJudgeCount = (app) =>
-    (compData.judges || []).filter(j => j.apparatus === app && (j.role === "E" || !j.role)).length;
+  const judgeCount = (app) =>
+    (compData.judges || []).filter(j => j.apparatus === app).length;
 
   const sk = (rid, gid, app, sub) => `${gymnast_key(rid, gid, app)}__${sub}`;
   const sv = (rid, gid, app, sub) => parseFloat(scores[sk(rid, gid, app, sub)]) || 0;
@@ -3579,15 +3527,15 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
   const getDV   = (rid, gid, app) => sv(rid, gid, app, "dv");
   const getBonus= (rid, gid, app) => sv(rid, gid, app, "bon");
   const getEAvg = (rid, gid, app) => {
-    const n = Math.max(eJudgeCount(app), 1);
+    const n = Math.max(judgeCount(app), 1);
     let sum = 0, count = 0;
     for (let i = 1; i <= n; i++) {
       const v = sv(rid, gid, app, `e${i}`);
-      if (v > 0) { sum += v; count++; }
+      if (!isNaN(v)) { sum += (10 - v); count++; }
     }
     return count > 0 ? sum / count : 0;
   };
-  const getPen  = (rid, gid, app) => sv(rid,gid,app,"tf")+sv(rid,gid,app,"oob")+sv(rid,gid,app,"fall")+sv(rid,gid,app,"nd");
+  const getPen  = (rid, gid, app) => sv(rid, gid, app, "pen");
   const getTotal = (roundId, gid, app) => parseFloat(scores[gymnast_key(roundId, gid, app)]) || 0;
   const getOverall = (roundId, gid) => apparatus.reduce((s, a) => s + getTotal(roundId, gid, a), 0);
 
@@ -4520,28 +4468,24 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const queryResolvedKey = (gid, app) => `${baseKey(gid, app)}__queryResolved`;
 
   // ── Judge counts ─────────────────────────────────────────
-  const eJudgeCount = (app) =>
-    (compData.judges || []).filter(j => j.apparatus === app && (j.role === "E" || !j.role)).length;
+  const judgeCount = (app) =>
+    (compData.judges || []).filter(j => j.apparatus === app).length;
 
   // ── Total recalculation ──────────────────────────────────
   const recalcTotal = (next, gid, app) => {
     if (!fig) return;
     const dv    = parseFloat(next[subKey(gid, app, "dv")])  || 0;
     const bonus = parseFloat(next[subKey(gid, app, "bon")]) || 0;
-    const tf    = parseFloat(next[subKey(gid, app, "tf")])  || 0;
-    const oob   = parseFloat(next[subKey(gid, app, "oob")]) || 0;
-    const fall  = parseFloat(next[subKey(gid, app, "fall")])|| 0;
-    const nd    = parseFloat(next[subKey(gid, app, "nd")])  || 0;
-    const n = eJudgeCount(app);
+    const pen   = parseFloat(next[subKey(gid, app, "pen")]) || 0;
+    const n = judgeCount(app);
     let eSum = 0, eCount = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(next[subKey(gid, app, `e${i}`)]);
-      if (!isNaN(v) && v > 0) { eSum += v; eCount++; }
+      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
     }
     const eAvg    = eCount > 0 ? eSum / eCount : 0;
-    const penalty = tf + oob + fall + nd;
     const hasAny  = dv > 0 || bonus > 0 || eAvg > 0;
-    const total   = hasAny ? Math.max(0, dv + bonus + eAvg - penalty) : 0;
+    const total   = hasAny ? Math.max(0, dv + bonus + eAvg - pen) : 0;
     next[baseKey(gid, app)] = hasAny ? String(parseFloat(total.toFixed(3))) : "";
   };
 
@@ -4563,16 +4507,16 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     scores[sub ? subKey(gid, app, sub) : baseKey(gid, app)] ?? "";
 
   const getEAvg = (gid, app) => {
-    const n = eJudgeCount(app);
+    const n = judgeCount(app);
     let sum = 0, count = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(scores[subKey(gid, app, `e${i}`)]);
-      if (!isNaN(v) && v > 0) { sum += v; count++; }
+      if (!isNaN(v)) { sum += (10 - v); count++; }
     }
     return count > 0 ? sum / count : null;
   };
   const getPenaltyTotal = (gid, app) =>
-    ["tf","oob","fall","nd"].reduce((s, k) => s + (parseFloat(scores[subKey(gid, app, k)]) || 0), 0);
+    parseFloat(scores[subKey(gid, app, "pen")]) || 0;
   const getAppTotal = (gid, app) => parseFloat(scores[baseKey(gid, app)]) || 0;
   const getGymnastTotal = (gid) =>
     compData.apparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
@@ -4664,12 +4608,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     const toBuf = (v) => { const n = parseFloat(v); return (!v || isNaN(n) || n === 0) ? "" : n.toFixed(2); };
     if (fig) {
       fields.app = app;
-      for (const sub of ["dv", "bon", "tf", "oob", "fall", "nd"]) {
+      for (const sub of ["dv", "bon", "pen"]) {
         const v = readVal(gid, app, sub);
         fields[sub] = v;
         bufs[sub] = toBuf(v);
       }
-      const n = eJudgeCount(app);
+      const n = judgeCount(app);
       for (let i = 1; i <= Math.max(n, 1); i++) {
         const v = readVal(gid, app, `e${i}`);
         fields[`e${i}`] = v;
@@ -4695,15 +4639,14 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     const dv = parseFloat(modalFields.dv) || 0;
     const bonus = parseFloat(modalFields.bon) || 0;
     const app = scoreModal?.app || "";
-    const n = eJudgeCount(app);
+    const n = judgeCount(app);
     let eSum = 0, eCount = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(modalFields[`e${i}`]);
-      if (!isNaN(v) && v > 0) { eSum += v; eCount++; }
+      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
     }
     const eAvg = eCount > 0 ? eSum / eCount : 0;
-    const penalty = (parseFloat(modalFields.tf) || 0) + (parseFloat(modalFields.oob) || 0)
-      + (parseFloat(modalFields.fall) || 0) + (parseFloat(modalFields.nd) || 0);
+    const penalty = parseFloat(modalFields.pen) || 0;
     const hasAny = dv > 0 || bonus > 0 || eAvg > 0;
     return hasAny ? Math.max(0, dv + bonus + eAvg - penalty) : 0;
   };
@@ -4715,12 +4658,9 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         const next = { ...s };
         next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
         next[subKey(gid, app, "bon")] = round2dp(modalFields.bon);
-        const n = eJudgeCount(app);
+        const n = judgeCount(app);
         for (let i = 1; i <= Math.max(n, 1); i++) next[subKey(gid, app, `e${i}`)] = round2dp(modalFields[`e${i}`]);
-        next[subKey(gid, app, "tf")] = round2dp(modalFields.tf);
-        next[subKey(gid, app, "oob")] = round2dp(modalFields.oob);
-        next[subKey(gid, app, "fall")] = round2dp(modalFields.fall);
-        next[subKey(gid, app, "nd")] = round2dp(modalFields.nd);
+        next[subKey(gid, app, "pen")] = round2dp(modalFields.pen);
         recalcTotal(next, gid, app);
         return next;
       });
@@ -4736,8 +4676,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       const next = { ...s };
       delete next[baseKey(gid, app)];
       if (fig) {
-        for (const sub of ["dv","bon","tf","oob","fall","nd"]) delete next[subKey(gid, app, sub)];
-        const n = eJudgeCount(app);
+        for (const sub of ["dv","bon","pen"]) delete next[subKey(gid, app, sub)];
+        const n = judgeCount(app);
         for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `e${i}`)];
       }
       return next;
@@ -4816,6 +4756,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     <input className="score-input" type="text" inputMode="numeric"
       value={scoreDisplay(field)} readOnly
       style={{ caretColor: "transparent", cursor: "default", ...(large ? { width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 } : {}) }}
+      onFocus={() => { if (modalBufs[field]) setModalPristine(p => ({ ...p, [field]: true })); }}
       onKeyDown={handleScoreKey(field, max)} autoFocus={autoFocus} />
   );
 
@@ -5040,7 +4981,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         const g = gymnasts.find(x => x.id === scoreModal.gid);
         if (!g) return null;
         const modalTotal = calcModalTotal();
-        const n = eJudgeCount(scoreModal.app);
+        const n = judgeCount(scoreModal.app);
         return (
           <div className="modal-backdrop" onClick={() => setScoreModal(null)}>
             <div className="modal-box" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
@@ -5066,47 +5007,32 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                 <>
                   <div className="si-modal-fields">
                     <div className="si-modal-field">
-                      <label>DV</label>
+                      <label>D Score</label>
                       {scoreInput("dv", 10, true)}
                     </div>
                     <div className="si-modal-field">
                       <label>Bonus</label>
                       {scoreInput("bon", 2)}
                     </div>
+                    <div className="si-modal-field">
+                      <label>Penalty</label>
+                      {scoreInput("pen", 10)}
+                    </div>
                   </div>
 
                   <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6 }}>
-                    E Judges {n === 0 && <span style={{ color: "#f0ad4e" }}>(none configured)</span>}
+                    E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
                   </div>
                   <div className="si-modal-fields">
                     {Array.from({ length: Math.max(n, 1) }, (_, i) => (
                       <div className="si-modal-field" key={i}>
-                        <label>E{i + 1}</label>
+                        <label>Judge {i + 1}</label>
                         {scoreInput(`e${i + 1}`, 10)}
                       </div>
                     ))}
                   </div>
-
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6, marginTop: 8 }}>
-                    Penalties
-                  </div>
-                  <div className="si-modal-fields">
-                    <div className="si-modal-field">
-                      <label>Time</label>
-                      {scoreInput("tf", 1)}
-                    </div>
-                    <div className="si-modal-field">
-                      <label>OOB</label>
-                      {scoreInput("oob", 1)}
-                    </div>
-                    <div className="si-modal-field">
-                      <label>Fall</label>
-                      {scoreInput("fall", 1)}
-                    </div>
-                    <div className="si-modal-field">
-                      <label>ND</label>
-                      {scoreInput("nd", 1)}
-                    </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
+                    Enter deductions — subtracted from 10 (e.g. 2.50 = E score of 7.50)
                   </div>
                 </>
               ) : (
@@ -7106,12 +7032,9 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                       <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)" }}>{appJudges.length} judge{appJudges.length !== 1 ? "s" : ""}</span>
                     </div>
                     {appJudges.map((j, ji) => (
-                      <div key={j.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: "1px solid var(--border)", background: ji % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
+                      <div key={j.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: "1px solid var(--border)", background: ji % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
                         <div style={{ fontWeight: 600 }}>{j.name}</div>
                         <div style={{ color: "var(--muted)" }}>{j.club || "—"}</div>
-                        {compData.useDEScoring && (
-                          <div style={{ fontSize: 11, fontWeight: 700, color: j.role === "D" ? "#5bc0de" : "var(--accent)", minWidth: 24, textAlign: "center" }}>{j.role || "E"}</div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -8407,10 +8330,10 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     home: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
   };
 
-  const NavItem = ({ icon, label, active, done, onClick, count, title: tip, disabled, badge }) => (
+  const NavItem = ({ icon, label, active, done, onClick, count, title: tip, disabled, badge, primary }) => (
     <button className={`as-nav-item${active ? " active" : ""}${done ? " done" : ""}${disabled ? " disabled" : ""}`}
       onClick={disabled ? undefined : onClick} title={collapsed ? (tip || label) : undefined}
-      style={disabled ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
+      style={disabled ? { opacity: 0.5, cursor: "not-allowed" } : primary ? { background: "var(--brand-01)", color: "#fff", padding: "16px 12px" } : undefined}>
       {icon}
       <span className="as-label">{label}</span>
       {badge && <span style={{ fontSize: 9, fontWeight: 700, background: "var(--brand-03)", color: "var(--brand-01)", padding: "2px 8px", borderRadius: 99, marginLeft: "auto", whiteSpace: "nowrap" }}>{badge}</span>}
@@ -8470,7 +8393,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
         <div className="as-nav">
           {/* ── org-dashboard context ── */}
           {screen === "org-dashboard" && (<>
-            <NavItem icon={icons.plus} label="New Competition" onClick={onNew} />
+            <NavItem icon={icons.plus} label="New Competition" onClick={onNew} primary />
             <div className="as-divider" />
             <div className="as-section-title">Filter</div>
             {sidebarFilters.map(f => (
@@ -8887,6 +8810,7 @@ export default function App() {
       // Draft events open in edit mode; live opens into competition; others to dashboard
       if (ev.status === "draft") { setPhase(1); setStep(1); }
       else if (ev.status === "live") { setPhase(2); setStep(1); }
+      else if (ev.status === "completed") { setPhase(2); setStep(2); }
       else { setPhase("dashboard"); setStep(1); }
       setSyncStatus("saved");
     } else {
