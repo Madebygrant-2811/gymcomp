@@ -2054,6 +2054,7 @@ const css = `
   .field { margin-bottom: 18px; }
   .label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
   .input, .select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; color: var(--text); font-family: var(--font-body); font-size: 14px; padding: 11px 20px; transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
+  .select { appearance: none; -webkit-appearance: none; padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b85' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; }
   .input:focus, .select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,13,255,0.08); }
   .input::placeholder { color: var(--muted); }
   .input.error { border-color: var(--danger); }
@@ -2069,6 +2070,8 @@ const css = `
   .btn-primary:hover:not(:disabled) { background: #1a2aff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,13,255,0.2); }
   .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-tertiary { background: var(--brand-03); color: var(--brand-01); border: none; }
+  .btn-tertiary:hover { opacity: 0.85; }
   .btn-danger { background: rgba(229,62,62,0.08); color: var(--danger); border: 1px solid rgba(229,62,62,0.25); }
   .btn-danger:hover { background: rgba(229,62,62,0.15); }
   .btn-warn { background: rgba(245,158,11,0.08); color: var(--warn); border: 1px solid rgba(245,158,11,0.25); }
@@ -2100,6 +2103,41 @@ const css = `
   .score-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,13,255,0.08); }
   .score-input.de { width: 58px; }
 
+  /* ── Score Input Table ── */
+  .si-body { padding: 0 40px 40px; max-width: 1200px; }
+  .si-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .si-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .si-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .si-table tr:last-child td { border-bottom: none; }
+  .si-col-num { width: 48px; }
+  .si-col-name { width: 160px; }
+  .si-col-club { width: 130px; }
+  .si-col-age { width: 50px; }
+  .si-col-app { width: 100px; }
+  .si-col-total { width: 80px; }
+  .si-col-flag { width: 60px; }
+  .si-add-btn { background: #fff; border: 1px dashed var(--border); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: var(--accent); cursor: pointer; font-weight: 600; transition: all 0.15s; white-space: nowrap; }
+  .si-add-btn:hover { background: rgba(0,13,255,0.04); border-color: var(--accent); }
+  .si-score-cell { display: flex; align-items: center; gap: 6px; }
+  .si-score-val { font-weight: 700; font-size: 13px; color: var(--text); }
+  .si-score-clickable { cursor: pointer; padding: 4px 10px; border-radius: 6px; transition: all 0.15s; }
+  .si-score-clickable:hover { background: rgba(0,13,255,0.06); color: var(--accent); }
+  .si-search { max-width: 320px; margin-bottom: 16px; }
+  .si-modal-total { display: flex; align-items: center; justify-content: center; margin: 32px auto 32px; width: fit-content; min-width: 140px; padding: 14px 28px 20px; font-size: 36px; font-weight: 800; font-family: var(--font-display); letter-spacing: 1px; color: var(--text); background: #fff; border: 2px solid var(--text); border-radius: 6px; box-shadow: 0 4px 0 var(--text), 0 6px 12px rgba(0,0,0,0.12); position: relative; }
+  .si-modal-total::before { content: "SCORE"; position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--muted); background: var(--surface); padding: 0 8px; }
+  .si-modal-fields { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .si-modal-field { display: flex; flex-direction: column; gap: 4px; }
+  .si-modal-field label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+  .si-modal-field input { width: 72px; }
+  .si-modal-readonly { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--surface2); border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .si-modal-readonly strong { font-weight: 700; }
+  .si-modal-readonly span { color: var(--muted); }
+  @media (max-width: 768px) {
+    .si-body { padding: 0 12px 24px; }
+    .si-table th, .si-table td { padding: 6px 6px; font-size: 12px; }
+    .si-add-btn { padding: 3px 6px; font-size: 10px; }
+  }
+
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
   .toggle-switch input { opacity: 0; width: 0; height: 0; }
   .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e0e0e0; border-radius: 24px; transition: 0.2s; }
@@ -2110,7 +2148,7 @@ const css = `
   .group-header { display: flex; align-items: center; gap: 10px; padding: 6px 0; margin: 16px 0 8px; }
   .group-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent2); white-space: nowrap; }
   .group-line { flex: 1; height: 1px; background: var(--border); }
-  .sub-group-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin: 10px 0 6px; }
+  .sub-group-label { font-size: 16px; font-weight: 500; color: var(--accent); margin: 10px 0 16px; }
 
   .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 56px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
   .badge-gold { background: rgba(255,200,0,0.12); color: #b8860b; }
@@ -2147,8 +2185,8 @@ const css = `
   .apparatus-section-body { padding: 12px 16px; }
 
   .results-level-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
-  .results-level-header { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-  .results-level-header span { color: var(--accent); }
+  .results-level-header { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .results-level-header span { font-size: 14px; font-weight: 600; color: var(--text-primary); background: rgba(0,13,255,0.06); padding: 4px 12px; border-radius: 99px; letter-spacing: 0.3px; }
 
   /* ============================================================
      RESPONSIVE
@@ -3367,12 +3405,22 @@ function buildAttendanceHTML(compData, gymnasts) {
 // ============================================================
 // PHASE 2 STEP 3 — EXPORTS & DOCUMENTS
 // ============================================================
-function Phase2_Exports({ compData, gymnasts, scores }) {
+function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
   const colour = compData.brandColour || "#000dff";
   const hasGymnasts = gymnasts.length > 0;
   const hasScores = Object.keys(scores).length > 0;
 
   const docs = [
+    {
+      id: "links",
+      title: "Result Links",
+      icon: "🔗",
+      desc: "Share live result links with parents, coaches and spectators. Links update in real-time as scores are entered.",
+      use: "Share during the event so coaches and parents can follow along live.",
+      available: hasScores,
+      unavailableMsg: "Enter scores in Score Input first.",
+      isLinks: true,
+    },
     {
       id: "results",
       title: "Results Sheet",
@@ -3474,7 +3522,16 @@ function Phase2_Exports({ compData, gymnasts, scores }) {
             }}>
               <strong style={{ color: "var(--text)" }}>When to use:</strong> {doc.use}
             </div>
-            {doc.available && !doc.coming ? (
+            {doc.available && !doc.coming && doc.isLinks ? (
+              <div style={{ display: "flex", gap: 8, flexDirection: "column" }}>
+                <button className="btn btn-tertiary" style={{ width: "100%" }} onClick={onSharePublic}>
+                  Share — Public
+                </button>
+                <button className="btn btn-tertiary" style={{ width: "100%" }} onClick={onShareCoach}>
+                  Share — Coaches
+                </button>
+              </div>
+            ) : doc.available && !doc.coming ? (
               <button
                 className="btn btn-primary"
                 style={{ width: "100%", background: colour, color: "#fff" }}
@@ -4425,15 +4482,35 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 // ============================================================
 // PHASE 2 STEP 1 — Score Input (upgraded: sheet tracker + query flags + DNS)
 // ============================================================
-function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
+function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
-  const [showPenalties, setShowPenalties] = useState({});
   const [queryModal, setQueryModal] = useState(null); // { gid, app }
   const [queryNote, setQueryNote] = useState("");
-  // sheetReceived: { [roundId]: { [judgeIndex_apparatus]: bool } }
   const [sheetReceived, setSheetReceived] = useState({});
-  const [showTracker, setShowTracker] = useState(true);
+  const [showTracker, setShowTracker] = useState(false);
+  const [scoreModal, setScoreModal] = useState(null); // { gid, app, isEdit }
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modalFields, setModalFields] = useState({});
+  const [modalBufs, setModalBufs] = useState({});
+  const [modalPristine, setModalPristine] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
   const fig = !!compData.useDEScoring;
+
+  // Topbar hide-on-scroll
+  const [topbarHidden, setTopbarHidden] = useState(false);
+  const lastScrollY = useRef(0);
+  useEffect(() => {
+    const el = document.querySelector(".app-main");
+    const target = el || window;
+    const onScroll = () => {
+      const y = el ? el.scrollTop : window.scrollY;
+      if (y > lastScrollY.current && y > 60) setTopbarHidden(true);
+      else if (y < lastScrollY.current) setTopbarHidden(false);
+      lastScrollY.current = y;
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, []);
 
   // ── Key helpers ──────────────────────────────────────────
   const baseKey = (gid, app) => gymnast_key(activeRound, gid, app);
@@ -4500,11 +4577,6 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
   const getGymnastTotal = (gid) =>
     compData.apparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
 
-  const togglePenalties = (gid, app) => {
-    const k = `${gid}__${app}`;
-    setShowPenalties(p => ({ ...p, [k]: !p[k] }));
-  };
-
   // ── Query helpers ────────────────────────────────────────
   const isQueried = (gid, app) => !!scores[queryKey(gid, app)];
   const isResolved = (gid, app) => !!scores[queryResolvedKey(gid, app)];
@@ -4534,305 +4606,361 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
     }));
   };
 
-  // ── Sheet received tracker ───────────────────────────────
-  const judges = compData.judges || [];
-  const toggleSheet = (roundId, judgeIdx, apparatus) => {
-    const k = `${judgeIdx}__${apparatus}`;
+  // ── Sheet received tracker (per group × apparatus) ──────
+  const toggleSheet = (roundId, groupKey, apparatus) => {
+    const k = `${groupKey}__${apparatus}`;
     setSheetReceived(prev => ({
       ...prev,
       [roundId]: { ...(prev[roundId] || {}), [k]: !(prev[roundId]?.[k]) }
     }));
   };
 
+  const isSheetIn = (roundId, groupKey, apparatus) =>
+    !!sheetReceived[roundId]?.[`${groupKey}__${apparatus}`];
+
+  // ── Group gymnasts ───────────────────────────────────────
+  const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
+
+  // Unfiltered groups for sheet tracker
+  const allGroups = [];
+  const allGrouped = {};
+  roundGymnasts.forEach(g => {
+    const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
+    const grp = g.group || "\u2014";
+    const key = `${levelName}__${grp}`;
+    if (!allGrouped[key]) {
+      allGrouped[key] = true;
+      allGroups.push({ key, level: levelName, group: grp });
+    }
+  });
+  const appCount = (compData.apparatus || []).length;
+  const totalSheets = allGroups.length * appCount;
   const sheetsIn = (roundId) => {
     const rd = sheetReceived[roundId] || {};
     return Object.values(rd).filter(Boolean).length;
   };
+  const filteredGymnasts = searchQuery.trim()
+    ? roundGymnasts.filter(g => {
+        const q = searchQuery.toLowerCase();
+        return (g.name || "").toLowerCase().includes(q)
+          || (g.number || "").toString().toLowerCase().includes(q)
+          || (g.club || "").toLowerCase().includes(q);
+      })
+    : roundGymnasts;
 
-  const totalSheets = judges.length * (compData.apparatus || []).length;
-
-  // ── Group gymnasts ───────────────────────────────────────
-  const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
   const grouped = {};
-  roundGymnasts.forEach(g => {
+  filteredGymnasts.forEach(g => {
     const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
     if (!grouped[levelName]) grouped[levelName] = {};
-    const grp = g.group || "—";
+    const grp = g.group || "\u2014";
     if (!grouped[levelName][grp]) grouped[levelName][grp] = [];
     grouped[levelName][grp].push(g);
   });
 
-  // ── Labelled score field ─────────────────────────────────
-  const SF = ({ gid, app, sub, label, max, warn, readOnly, value, width = 54 }) => {
-    const stored = readVal(gid, app, sub);
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-        <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: 0.5,
-          color: warn ? "#f0ad4e" : "var(--muted)", fontWeight: 600 }}>{label}</span>
-        {readOnly
-          ? <div style={{ width, height: 30, display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--surface2)", borderRadius: 5, fontSize: 12, fontWeight: 700,
-              color: value !== null && value !== undefined ? "var(--accent)" : "var(--muted)" }}>
-              {value !== null && value !== undefined ? (typeof value === "number" ? value.toFixed(2) : value) : "—"}
-            </div>
-          : <input
-              key={`${gid}_${app}_${sub ?? "tot"}_${stored}`}
-              className="score-input de"
-              type="number" step="0.01" min="0" max={max ?? 99}
-              defaultValue={stored}
-              style={{ width, borderColor: warn ? "rgba(240,173,78,0.5)" : undefined }}
-              onBlur={e => commitField(gid, app, sub, e.target.value)}
-            />
-        }
-      </div>
-    );
+  // ── Score Modal helpers ──────────────────────────────────
+  const openScoreModal = (gid, app, isEdit) => {
+    const fields = {};
+    const bufs = {};
+    const toBuf = (v) => { const n = parseFloat(v); return (!v || isNaN(n) || n === 0) ? "" : n.toFixed(2); };
+    if (fig) {
+      fields.app = app;
+      for (const sub of ["dv", "bon", "tf", "oob", "fall", "nd"]) {
+        const v = readVal(gid, app, sub);
+        fields[sub] = v;
+        bufs[sub] = toBuf(v);
+      }
+      const n = eJudgeCount(app);
+      for (let i = 1; i <= Math.max(n, 1); i++) {
+        const v = readVal(gid, app, `e${i}`);
+        fields[`e${i}`] = v;
+        bufs[`e${i}`] = toBuf(v);
+      }
+    } else {
+      fields.app = app;
+      const v = readVal(gid, app, null);
+      fields.score = v;
+      bufs.score = toBuf(v);
+    }
+    setModalFields(fields);
+    setModalBufs(bufs);
+    // Mark fields with existing values as pristine — first keystroke clears them
+    const pristine = {};
+    for (const k in bufs) if (bufs[k]) pristine[k] = true;
+    setModalPristine(pristine);
+    setScoreModal({ gid, app, isEdit });
   };
+
+  const calcModalTotal = () => {
+    if (!fig) return parseFloat(modalFields.score) || 0;
+    const dv = parseFloat(modalFields.dv) || 0;
+    const bonus = parseFloat(modalFields.bon) || 0;
+    const app = scoreModal?.app || "";
+    const n = eJudgeCount(app);
+    let eSum = 0, eCount = 0;
+    for (let i = 1; i <= Math.max(n, 1); i++) {
+      const v = parseFloat(modalFields[`e${i}`]);
+      if (!isNaN(v) && v > 0) { eSum += v; eCount++; }
+    }
+    const eAvg = eCount > 0 ? eSum / eCount : 0;
+    const penalty = (parseFloat(modalFields.tf) || 0) + (parseFloat(modalFields.oob) || 0)
+      + (parseFloat(modalFields.fall) || 0) + (parseFloat(modalFields.nd) || 0);
+    const hasAny = dv > 0 || bonus > 0 || eAvg > 0;
+    return hasAny ? Math.max(0, dv + bonus + eAvg - penalty) : 0;
+  };
+
+  const submitScoreModal = () => {
+    const { gid, app } = scoreModal;
+    if (fig) {
+      setScores(s => {
+        const next = { ...s };
+        next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
+        next[subKey(gid, app, "bon")] = round2dp(modalFields.bon);
+        const n = eJudgeCount(app);
+        for (let i = 1; i <= Math.max(n, 1); i++) next[subKey(gid, app, `e${i}`)] = round2dp(modalFields[`e${i}`]);
+        next[subKey(gid, app, "tf")] = round2dp(modalFields.tf);
+        next[subKey(gid, app, "oob")] = round2dp(modalFields.oob);
+        next[subKey(gid, app, "fall")] = round2dp(modalFields.fall);
+        next[subKey(gid, app, "nd")] = round2dp(modalFields.nd);
+        recalcTotal(next, gid, app);
+        return next;
+      });
+    } else {
+      const val = round2dp(modalFields.score);
+      setScores(s => ({ ...s, [baseKey(gid, app)]: val }));
+    }
+    setScoreModal(null);
+  };
+
+  const deleteScore = (gid, app) => {
+    setScores(s => {
+      const next = { ...s };
+      delete next[baseKey(gid, app)];
+      if (fig) {
+        for (const sub of ["dv","bon","tf","oob","fall","nd"]) delete next[subKey(gid, app, sub)];
+        const n = eJudgeCount(app);
+        for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `e${i}`)];
+      }
+      return next;
+    });
+    setScoreModal(null);
+    setDeleteConfirm(null);
+  };
+
+  const mf = (field, val) => setModalFields(f => ({ ...f, [field]: val }));
+  const mb = (field, val) => setModalBufs(b => ({ ...b, [field]: val }));
+
+  // Auto-decimal helpers: type digits (implied .XX) or press "." to place decimal explicitly
+  const bufToVal = (b) => {
+    if (!b || b === ".") return 0;
+    if (b.includes(".")) return parseFloat(b) || 0;
+    return parseInt(b, 10) / 100;
+  };
+
+  const scoreDisplay = (field) => {
+    const buf = modalBufs[field] || "";
+    if (!buf) return "";
+    return bufToVal(buf).toFixed(2);
+  };
+
+  const handleScoreKey = (field, max) => (e) => {
+    let buf = modalBufs[field] || "";
+    if (e.key === "Enter") { submitScoreModal(); return; }
+    if (e.key === "Tab" || e.key === "Escape") return;
+    e.preventDefault();
+
+    if (e.key === "Backspace") {
+      if (modalPristine[field]) {
+        // First backspace on pristine field — clear entirely
+        setModalPristine(p => ({ ...p, [field]: false }));
+        mb(field, "");
+        mf(field, "");
+        return;
+      }
+      const next = buf.slice(0, -1);
+      mb(field, next);
+      const v = bufToVal(next);
+      mf(field, v === 0 ? "" : v.toFixed(2));
+      return;
+    }
+
+    // Clear pristine field on first digit/dot — start fresh
+    if (modalPristine[field] && (/^\d$/.test(e.key) || e.key === ".")) {
+      setModalPristine(p => ({ ...p, [field]: false }));
+      buf = "";
+    }
+
+    if (e.key === ".") {
+      if (buf.includes(".")) return;
+      const next = (buf || "0") + ".";
+      mb(field, next);
+      const v = bufToVal(next);
+      mf(field, v === 0 ? "" : v.toFixed(2));
+      return;
+    }
+
+    if (!/^\d$/.test(e.key)) return;
+
+    if (buf.includes(".")) {
+      const afterDot = buf.split(".")[1] || "";
+      if (afterDot.length >= 2) return;
+    }
+
+    const next = buf + e.key;
+    const v = bufToVal(next);
+    if (max !== undefined && v > max) return;
+    mb(field, next);
+    mf(field, v === 0 ? "" : v.toFixed(2));
+  };
+
+  const scoreInput = (field, max, autoFocus, large) => (
+    <input className="score-input" type="text" inputMode="numeric"
+      value={scoreDisplay(field)} readOnly
+      style={{ caretColor: "transparent", cursor: "default", ...(large ? { width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 } : {}) }}
+      onKeyDown={handleScoreKey(field, max)} autoFocus={autoFocus} />
+  );
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-title">Score <span>Input</span></div>
-        <div className="page-sub">
-          {fig ? "FIG artistic scoring — DV + Bonus + avg(E1…En) − Penalties" : "Enter total scores — 2 decimal places"}
+      {/* ── Topbar ── */}
+      <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`} style={{ margin: "0 24px" }}>
+        <div className="setup-topbar-left">
+          {compData.name && <span className="setup-topbar-name">{compData.name}</span>}
+          {compData.date && <span className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+          {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
+          {!compData.name && <span className="setup-topbar-name" style={{ opacity: 0.6 }}>Score Input</span>}
         </div>
-      </div>
-
-      {/* ── Sheet Received Tracker ─────────────────────────── */}
-      {judges.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)" }}>
-              📋 Sheet Tracker — {sheetsIn(activeRound)} of {totalSheets} sheets received
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowTracker(v => !v)}>
-              {showTracker ? "Hide" : "Show"}
+        <div className="setup-topbar-right">
+          {fig && <span className="setup-topbar-sync">FIG Scoring</span>}
+          {onSharePublic && (
+            <button className="btn btn-sm" onClick={onSharePublic}
+              style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
+              Share Results — Public
             </button>
-          </div>
-          {showTracker && (
-            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "12px 16px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: `120px repeat(${(compData.apparatus || []).length}, 1fr)`, gap: 6, alignItems: "center" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)" }}>Judge</div>
-                {(compData.apparatus || []).map(a => (
-                  <div key={a} style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", textAlign: "center" }}>
-                    {APPARATUS_ICONS[a] || "🏅"} {a}
-                  </div>
-                ))}
-                {judges.map((judge, ji) => (
-                  <React.Fragment key={ji}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>
-                      {judge.name || `Judge ${ji + 1}`}
-                      {judge.apparatus && <span style={{ fontSize: 10, color: "var(--muted)", display: "block" }}>{judge.apparatus}</span>}
-                    </div>
-                    {(compData.apparatus || []).map(app => {
-                      const k = `${ji}__${app}`;
-                      const received = sheetReceived[activeRound]?.[k];
-                      // Only relevant if judge is assigned to this apparatus (or has no apparatus restriction)
-                      const relevant = !judge.apparatus || judge.apparatus === app;
-                      return (
-                        <div key={`${ji}-${app}`} style={{ display: "flex", justifyContent: "center" }}>
-                          {relevant ? (
-                            <button
-                              onClick={() => toggleSheet(activeRound, ji, app)}
-                              title={received ? "Mark as not received" : "Mark sheet received"}
-                              style={{
-                                width: 36, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
-                                background: received ? "var(--success)" : "var(--surface2)",
-                                color: received ? "#fff" : "var(--muted)",
-                                fontSize: 13, fontWeight: 700, transition: "all 0.15s"
-                              }}>
-                              {received ? "✓" : "·"}
-                            </button>
-                          ) : (
-                            <div style={{ width: 36, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--border)", fontSize: 16 }}>—</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-              </div>
-              {sheetsIn(activeRound) < totalSheets && (
-                <div style={{ marginTop: 10, fontSize: 11, color: "var(--muted)", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-                  ⏳ Waiting on {totalSheets - sheetsIn(activeRound)} sheet{totalSheets - sheetsIn(activeRound) !== 1 ? "s" : ""}
-                </div>
-              )}
-              {sheetsIn(activeRound) === totalSheets && totalSheets > 0 && (
-                <div style={{ marginTop: 10, fontSize: 11, color: "var(--success)", borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-                  ✅ All sheets received for this round
-                </div>
-              )}
-            </div>
+          )}
+          {onShareCoach && (
+            <button className="btn btn-sm" onClick={onShareCoach}
+              style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
+              Share Results — Coaches
+            </button>
           )}
         </div>
-      )}
-
-      {fig && (
-        <div style={{ background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)",
-          borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 12,
-          color: "var(--muted)", lineHeight: 1.7 }}>
-          <strong style={{ color: "var(--text)" }}>FIG Artistic Scoring</strong>
-          &nbsp;·&nbsp;Total = DV + Bonus + avg(E1…En) − Penalties
-          &nbsp;·&nbsp;E judge count per apparatus set in Setup → Judges
-          &nbsp;·&nbsp;Totals calculated on blur
-        </div>
-      )}
-
-      <div className="tabs">
-        {compData.rounds.map(r => (
-          <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
-            onClick={() => setActiveRound(r.id)}>{r.name}</button>
-        ))}
       </div>
 
-      {Object.keys(grouped).length === 0 && <div className="empty">No gymnasts in this round</div>}
-
-      {Object.entries(grouped).map(([level, groups]) => (
-        <div key={level}>
-          <div className="group-header">
-            <span className="group-label">{level}</span>
-            <div className="group-line" />
-          </div>
-          {Object.entries(groups).map(([grp, glist]) => (
-            <div key={grp} style={{ marginBottom: 24 }}>
-              <div className="sub-group-label">{grp}</div>
-
-              {fig ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {glist.map(g => {
-                    const gymTotal = getGymnastTotal(g.id);
-                    const isDns = !!g.dns;
-                    const hasQuery = compData.apparatus.some(a => isQueried(g.id, a));
-                    return (
-                      <div key={g.id} style={{
-                        background: "var(--surface)", border: `1px solid ${isDns ? "var(--border)" : hasQuery ? "rgba(240,173,78,0.4)" : "var(--border)"}`,
-                        borderRadius: "var(--radius)", overflow: "hidden",
-                        opacity: isDns ? 0.45 : 1
-                      }}>
-                        {/* Gymnast header */}
-                        <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
-                          borderBottom: "1px solid var(--border)",
-                          background: isDns ? "var(--surface2)" : hasQuery ? "rgba(240,173,78,0.06)" : "transparent" }}>
-                          <div style={{ display: "flex", align: "center", gap: 12 }}>
-                            <span style={{ fontWeight: 700, fontSize: 14 }}>{g.name}</span>
-                            <span style={{ color: "var(--muted)", fontSize: 12, marginLeft: 8 }}>#{g.number} · {g.club}</span>
-                            {isDns && <span style={{ background: "var(--danger)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, marginLeft: 8, letterSpacing: 1 }}>DNS</span>}
-                            {hasQuery && !isDns && <span style={{ background: "rgba(240,173,78,0.2)", color: "#f0ad4e", fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, marginLeft: 8, letterSpacing: 1 }}>⚠ QUERY</span>}
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <span style={{ fontSize: 11, color: "var(--muted)" }}>Total&nbsp;</span>
-                            <strong style={{ fontSize: 15, color: gymTotal > 0 ? "var(--accent)" : "var(--muted)" }}>
-                              {gymTotal > 0 ? gymTotal.toFixed(3) : "—"}
-                            </strong>
-                          </div>
-                        </div>
-
-                        {/* Per-apparatus strips */}
-                        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                          {compData.apparatus.map(app => {
-                            const n = eJudgeCount(app);
-                            const appTotal = getAppTotal(g.id, app);
-                            const eAvg = getEAvg(g.id, app);
-                            const penalties = getPenaltyTotal(g.id, app);
-                            const hasPen = penalties > 0;
-                            const open = !!showPenalties[`${g.id}__${app}`];
-                            const queried = isQueried(g.id, app);
-                            const resolved = isResolved(g.id, app);
-                            const note = getQueryNote(g.id, app);
-
+      <div className="si-body" style={{ marginTop: 24 }}>
+        {/* ── Sheet Received Tracker ─────────────────────────── */}
+        {allGroups.length > 0 && appCount > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div className="page-title" style={{ fontSize: 22 }}>Sheet Tracker</div>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  {sheetsIn(activeRound)} of {totalSheets} received
+                </span>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowTracker(v => !v)}>
+                {showTracker ? "Hide" : "Show"}
+              </button>
+            </div>
+            {showTracker && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Group</th>
+                      {(compData.apparatus || []).map(a => <th key={a} style={{ textAlign: "center" }}>{APPARATUS_ICONS[a] || ""} {a}</th>)}
+                      <th style={{ textAlign: "center" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allGroups.map(({ key, level, group }) => {
+                      const groupDone = (compData.apparatus || []).every(a => isSheetIn(activeRound, key, a));
+                      const groupCount = (compData.apparatus || []).filter(a => isSheetIn(activeRound, key, a)).length;
+                      return (
+                        <tr key={key}>
+                          <td style={{ fontWeight: 600, fontSize: 12 }}>{level} · {group}</td>
+                          {(compData.apparatus || []).map(app => {
+                            const received = isSheetIn(activeRound, key, app);
                             return (
-                              <div key={app} style={{ background: "var(--surface2)", borderRadius: 6,
-                                border: `1px solid ${queried ? "rgba(240,173,78,0.5)" : appTotal > 0 ? "var(--border)" : "transparent"}`,
-                                padding: "8px 10px" }}>
-
-                                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
-                                  <div style={{ minWidth: 60, fontSize: 12, fontWeight: 700, paddingBottom: 6 }}>
-                                    {APPARATUS_ICONS[app] || "🏅"} {app}
-                                  </div>
-
-                                  {!isDns && <React.Fragment>
-                                    <SF gid={g.id} app={app} sub="dv"  label="DV"    max={10} />
-                                    <SF gid={g.id} app={app} sub="bon" label="Bonus" max={2}  />
-                                    <div style={{ width: 1, height: 36, background: "var(--border)", alignSelf: "center" }} />
-                                    {n === 0
-                                      ? <div style={{ fontSize: 11, color: "#f0ad4e", alignSelf: "center", paddingBottom: 6 }}>⚠ No E judges</div>
-                                      : Array.from({ length: n }, (_, i) => (
-                                          <SF key={i} gid={g.id} app={app} sub={`e${i+1}`} label={`E${i+1}`} max={10} />
-                                        ))
-                                    }
-                                    {n > 0 && <SF gid={g.id} app={app} sub={null} label={n > 1 ? "eAvg" : "Exec"} readOnly value={eAvg} />}
-                                    <div style={{ width: 1, height: 36, background: "var(--border)", alignSelf: "center" }} />
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                      <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: 0.5,
-                                        color: hasPen ? "#f0ad4e" : "var(--muted)", fontWeight: 600 }}>Pen</span>
-                                      <button onClick={() => togglePenalties(g.id, app)}
-                                        style={{ width: 54, height: 30, background: open ? "rgba(240,173,78,0.15)" : "var(--surface2)",
-                                          border: `1px solid ${hasPen ? "rgba(240,173,78,0.6)" : "var(--border)"}`,
-                                          borderRadius: 5, fontSize: 11, cursor: "pointer",
-                                          color: hasPen ? "#f0ad4e" : "var(--muted)", fontWeight: hasPen ? 700 : 400 }}>
-                                        {hasPen ? `−${penalties.toFixed(2)}` : open ? "▴" : "▾"}
-                                      </button>
-                                    </div>
-                                    <div style={{ width: 1, height: 36, background: "var(--border)", alignSelf: "center" }} />
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                      <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--accent)", fontWeight: 700 }}>Total</span>
-                                      <div style={{ width: 64, height: 30, display: "flex", alignItems: "center",
-                                        justifyContent: "center", background: appTotal > 0 ? "rgba(0,13,255,0.06)" : "var(--surface2)",
-                                        borderRadius: 5, fontSize: 13, fontWeight: 800,
-                                        color: appTotal > 0 ? "var(--accent)" : "var(--muted)",
-                                        border: `1px solid ${appTotal > 0 ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
-                                        {appTotal > 0 ? appTotal.toFixed(3) : "—"}
-                                      </div>
-                                    </div>
-                                    <div style={{ width: 1, height: 36, background: "var(--border)", alignSelf: "center" }} />
-                                    {/* Query flag */}
-                                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                      <span style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: 0.5, color: queried ? "#f0ad4e" : "var(--muted)", fontWeight: 600 }}>Query</span>
-                                      <button
-                                        onClick={() => queried ? resolveQuery(g.id, app) : openQueryModal(g.id, app)}
-                                        title={queried ? "Click to resolve query" : "Flag a coach query on this score"}
-                                        style={{ width: 54, height: 30, borderRadius: 5, border: "none", cursor: "pointer",
-                                          background: queried ? "rgba(240,173,78,0.2)" : "var(--surface2)",
-                                          color: queried ? "#f0ad4e" : "var(--muted)", fontSize: 11, fontWeight: queried ? 700 : 400 }}>
-                                        {queried ? "⚠ Clear" : "+ Flag"}
-                                      </button>
-                                    </div>
-                                  </React.Fragment>}
-                                  {isDns && <div style={{ fontSize: 11, color: "var(--muted)", paddingBottom: 6, fontStyle: "italic" }}>Did Not Start</div>}
-                                </div>
-
-                                {open && !isDns && (
-                                  <div style={{ display: "flex", gap: 8, marginTop: 8, paddingTop: 8,
-                                    borderTop: "1px dashed var(--border)", flexWrap: "wrap" }}>
-                                    <SF gid={g.id} app={app} sub="tf"   label="Time fault" warn max={1} />
-                                    <SF gid={g.id} app={app} sub="oob"  label="OOB"        warn max={1} />
-                                    <SF gid={g.id} app={app} sub="fall" label="Fall"        warn max={1} />
-                                    <SF gid={g.id} app={app} sub="nd"   label="Neutral ded" warn max={1} />
-                                    <SF gid={g.id} app={app} sub={null} label="Total pen" readOnly warn
-                                      value={penalties > 0 ? penalties : null} />
-                                  </div>
-                                )}
-                                {queried && note && (
-                                  <div style={{ marginTop: 6, fontSize: 11, color: "#f0ad4e", borderTop: "1px dashed rgba(240,173,78,0.3)", paddingTop: 6 }}>
-                                    ⚠ Query: {note}
-                                  </div>
-                                )}
-                              </div>
+                              <td key={app} style={{ textAlign: "center", padding: "6px 8px" }}>
+                                <button onClick={() => toggleSheet(activeRound, key, app)}
+                                  style={{
+                                    width: 28, height: 24, borderRadius: 4, border: "none", cursor: "pointer",
+                                    background: received ? "var(--success)" : "var(--surface2)",
+                                    color: received ? "#fff" : "var(--muted)",
+                                    fontSize: 12, fontWeight: 700, transition: "all 0.15s",
+                                    display: "inline-flex", alignItems: "center", justifyContent: "center"
+                                  }}>
+                                  {received ? "\u2713" : ""}
+                                </button>
+                              </td>
                             );
                           })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* ── Simple mode ── */
+                          <td style={{ textAlign: "center", fontSize: 11, fontWeight: 600, padding: "6px 8px", color: groupDone ? "var(--success)" : "var(--muted)" }}>
+                            {groupDone ? "Complete" : `${groupCount}/${appCount}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="page-title" style={{ fontSize: 22, marginBottom: 16 }}>Scores</div>
+
+        {/* ── Search + Round Tabs ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+          <input
+            className="input si-search"
+            type="text"
+            placeholder="Search by name, number, or club..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ marginBottom: 0 }}
+          />
+          <div style={{ flex: 1 }} />
+          <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+            {compData.rounds.map(r => (
+              <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
+                onClick={() => setActiveRound(r.id)}>{r.name}</button>
+            ))}
+          </div>
+        </div>
+
+        {Object.keys(grouped).length === 0 && <div className="empty">{searchQuery ? "No gymnasts match your search" : "No gymnasts in this round"}</div>}
+
+        {/* ── Grouped Tables ── */}
+        {Object.entries(grouped).map(([level, groups]) => (
+          <div key={level}>
+            <div className="group-header">
+              <span className="group-label">{level}</span>
+              <div className="group-line" />
+            </div>
+            {Object.entries(groups).map(([grp, glist]) => (
+              <div key={grp} style={{ marginBottom: 24 }}>
+                <div className="sub-group-label">{grp}</div>
                 <div className="table-wrap">
-                  <table>
+                  <table className="si-table" style={{ minWidth: 388 + compData.apparatus.length * 100 + 140 }}>
+                    <colgroup>
+                      <col className="si-col-num" />
+                      <col className="si-col-name" />
+                      <col className="si-col-club" />
+                      <col className="si-col-age" />
+                      {compData.apparatus.map(a => <col key={a} className="si-col-app" />)}
+                      <col className="si-col-total" />
+                      <col className="si-col-flag" />
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th>#</th><th>Gymnast</th>
-                        {compData.apparatus.map(a => <th key={a}>{a}</th>)}
-                        <th>Total</th><th>Query</th>
+                        <th>#</th>
+                        <th>Gymnast</th>
+                        <th>Club</th>
+                        <th>Age</th>
+                        {compData.apparatus.map(a => <th key={a}>{APPARATUS_ICONS[a] || ""} {a}</th>)}
+                        <th>Total</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4842,29 +4970,37 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
                         const hasQuery = compData.apparatus.some(a => isQueried(g.id, a));
                         return (
                           <tr key={g.id} style={{ opacity: isDns ? 0.45 : 1 }}>
-                            <td style={{ color: "var(--muted)" }}>{g.number}</td>
+                            <td style={{ color: "var(--muted)", fontWeight: 600 }}>{g.number}</td>
                             <td>
                               <strong style={{ textDecoration: isDns ? "line-through" : "none" }}>{g.name}</strong>
-                              <br /><span style={{ color: "var(--muted)", fontSize: 11 }}>{g.club}</span>
                               {isDns && <span style={{ display: "block", fontSize: 9, color: "var(--danger)", fontWeight: 700, letterSpacing: 0.5 }}>DNS</span>}
                             </td>
-                            {compData.apparatus.map(a => (
-                              <td key={a}>
-                                {isDns ? <span style={{ color: "var(--muted)" }}>—</span> : (
-                                  <input
-                                    key={`${g.id}_${a}_${scores[baseKey(g.id, a)] ?? ""}`}
-                                    className="score-input"
-                                    type="number" step="0.01" min="0"
-                                    placeholder="—"
-                                    defaultValue={scores[baseKey(g.id, a)] ?? ""}
-                                    onBlur={e => commitField(g.id, a, null, e.target.value)}
-                                  />
-                                )}
-                              </td>
-                            ))}
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "\u2014"}</td>
+                            {compData.apparatus.map(a => {
+                              const appScore = getAppTotal(g.id, a);
+                              const queried = isQueried(g.id, a);
+                              return (
+                                <td key={a}>
+                                  {isDns ? (
+                                    <span style={{ color: "var(--muted)" }}>\u2014</span>
+                                  ) : appScore > 0 ? (
+                                    <div className="si-score-cell">
+                                      <span className="si-score-val si-score-clickable" style={{ color: queried ? "#f0ad4e" : undefined }}
+                                        title="Click to edit score"
+                                        onClick={() => openScoreModal(g.id, a, true)}>
+                                        {fig ? appScore.toFixed(3) : appScore.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <button className="si-add-btn" onClick={() => openScoreModal(g.id, a, false)}>+ Add</button>
+                                  )}
+                                </td>
+                              );
+                            })}
                             <td>
-                              <strong style={{ color: "var(--accent)" }}>
-                                {gymTotal > 0 ? gymTotal.toFixed(2) : "—"}
+                              <strong style={{ color: gymTotal > 0 ? "var(--accent)" : "var(--muted)", fontSize: 14 }}>
+                                {gymTotal > 0 ? (fig ? gymTotal.toFixed(3) : gymTotal.toFixed(2)) : "\u2014"}
                               </strong>
                             </td>
                             <td>
@@ -4883,7 +5019,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
                                     if (hasQuery) resolveQuery(g.id, firstApp);
                                     else openQueryModal(g.id, firstApp);
                                   }}>
-                                  {hasQuery ? "⚠ Clear" : "+ Flag"}
+                                  {hasQuery ? "Clear" : "Flag"}
                                 </button>
                               )}
                             </td>
@@ -4893,21 +5029,139 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores }) {
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ))}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
 
-      {/* Query Modal */}
+      {/* ── Score Modal ── */}
+      {scoreModal && (() => {
+        const g = gymnasts.find(x => x.id === scoreModal.gid);
+        if (!g) return null;
+        const modalTotal = calcModalTotal();
+        const n = eJudgeCount(scoreModal.app);
+        return (
+          <div className="modal-backdrop" onClick={() => setScoreModal(null)}>
+            <div className="modal-box" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{scoreModal.isEdit ? "Edit Score" : "Add Score"}</div>
+                <button className="btn-icon" onClick={() => setScoreModal(null)} style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
+              </div>
+
+              <div className="si-modal-readonly">
+                <strong style={{ fontSize: 18 }}>#{g.number}</strong>
+                <span>{g.name}</span>
+                {g.club && <span style={{ marginLeft: "auto" }}>{g.club}</span>}
+              </div>
+
+              <div className="field">
+                <label className="label">Apparatus</label>
+                <div className="input" style={{ cursor: "default", background: "var(--surface2)", color: "var(--text)", fontWeight: 600 }}>
+                  {APPARATUS_ICONS[scoreModal.app] || ""} {scoreModal.app}
+                </div>
+              </div>
+
+              {fig ? (
+                <>
+                  <div className="si-modal-fields">
+                    <div className="si-modal-field">
+                      <label>DV</label>
+                      {scoreInput("dv", 10, true)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>Bonus</label>
+                      {scoreInput("bon", 2)}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6 }}>
+                    E Judges {n === 0 && <span style={{ color: "#f0ad4e" }}>(none configured)</span>}
+                  </div>
+                  <div className="si-modal-fields">
+                    {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                      <div className="si-modal-field" key={i}>
+                        <label>E{i + 1}</label>
+                        {scoreInput(`e${i + 1}`, 10)}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6, marginTop: 8 }}>
+                    Penalties
+                  </div>
+                  <div className="si-modal-fields">
+                    <div className="si-modal-field">
+                      <label>Time</label>
+                      {scoreInput("tf", 1)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>OOB</label>
+                      {scoreInput("oob", 1)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>Fall</label>
+                      {scoreInput("fall", 1)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>ND</label>
+                      {scoreInput("nd", 1)}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="field">
+                  <label className="label">Score</label>
+                  {scoreInput("score", 99, true, true)}
+                </div>
+              )}
+
+              <div className="si-modal-total">
+                {modalTotal > 0 ? (fig ? modalTotal.toFixed(3) : modalTotal.toFixed(2)) : "\u2014"}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                {scoreModal.isEdit && (
+                  <button className="btn btn-danger btn-sm" style={{ marginRight: "auto" }}
+                    onClick={() => setDeleteConfirm({ gid: scoreModal.gid, app: scoreModal.app })}>
+                    Delete Score
+                  </button>
+                )}
+                <button className="btn btn-ghost" onClick={() => setScoreModal(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={submitScoreModal}>
+                  {scoreModal.isEdit ? "Update Score" : "Submit Score"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Delete Confirm ── */}
+      {deleteConfirm && (
+        <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Delete Score?</div>
+            <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
+              This will remove the {deleteConfirm.app} score for {gymnasts.find(x => x.id === deleteConfirm.gid)?.name || "this gymnast"}. This cannot be undone.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteScore(deleteConfirm.gid, deleteConfirm.app)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Query Modal ── */}
       {queryModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 5000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 28, width: "100%", maxWidth: 420 }}>
+        <div className="modal-backdrop" onClick={() => setQueryModal(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Flag Coach Query</div>
             <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
-              {gymnasts.find(g => g.id === queryModal.gid)?.name} · {queryModal.app}
+              {gymnasts.find(g => g.id === queryModal.gid)?.name} \u00B7 {queryModal.app}
             </div>
-            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", display: "block", marginBottom: 6 }}>Note (optional)</label>
+            <label className="label">Note (optional)</label>
             <input
               className="input"
               placeholder="e.g. Coach disputes E score"
@@ -4937,8 +5191,33 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("apparatus");
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [levelFilter, setLevelFilter] = useState("all");
+  const [ageFilter, setAgeFilter] = useState("all");
 
   const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
+
+  // Unique levels in this round
+  const uniqueLevels = [...new Set(roundGymnasts.map(g => {
+    const lo = compData.levels.find(l => l.id === g.level);
+    return lo?.name || "Unknown";
+  }))].sort();
+
+  // Check if selected level uses level+age ranking
+  const selectedLevelObj = levelFilter !== "all" ? compData.levels.find(l => l.name === levelFilter) : null;
+  const showAgeFilter = selectedLevelObj && selectedLevelObj.rankBy === "level+age";
+
+  // Unique ages for the selected level
+  const uniqueAges = showAgeFilter
+    ? [...new Set(roundGymnasts.filter(g => {
+        const lo = compData.levels.find(l => l.id === g.level);
+        return (lo?.name || "Unknown") === levelFilter;
+      }).map(g => g.age || "Unknown age"))].sort()
+    : [];
+
+  // Reset age filter when level changes to one without age ranking
+  React.useEffect(() => {
+    if (!showAgeFilter) setAgeFilter("all");
+  }, [showAgeFilter]);
 
   const getScore = (gid, apparatus) => {
     const v = parseFloat(scores[gymnast_key(activeRound, gid, apparatus)]);
@@ -4963,7 +5242,23 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
       .map(([key, val]) => ({ key, ...val }));
   };
 
-  const rankGroups = buildRankGroups();
+  const allRankGroups = buildRankGroups();
+  const rankGroups = allRankGroups.filter(rg => {
+    if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
+    if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
+    return true;
+  });
+
+  // ── Hide-on-scroll topbar ──
+  const [topbarHidden, setTopbarHidden] = useState(false);
+  React.useEffect(() => {
+    const el = document.querySelector(".app-main");
+    if (!el) return;
+    let last = el.scrollTop;
+    const onScroll = () => { const t = el.scrollTop; setTopbarHidden(t > 60 && t > last); last = t; };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   const rankBadge = (rank) => {
     if (rank === null) return <span className="badge" style={{ background: "rgba(107,107,133,0.15)", color: "var(--muted)" }}>DNS</span>;
@@ -4975,35 +5270,66 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-title">Competition <span>Results</span></div>
-        <div className="page-sub">Dense ranking · ties share rank · grouped by level</div>
+      <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`} style={{ margin: "0 24px" }}>
+        <div className="setup-topbar-left">
+          {compData.name && <span className="setup-topbar-name">{compData.name}</span>}
+          {compData.date && <span className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+          {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
+        </div>
+        <div className="setup-topbar-right">
+          {onComplete && (
+            <button className="btn btn-sm" style={{ background: "#15803d", color: "#fff", border: "none", fontWeight: 600 }}
+              onClick={() => setShowCompleteConfirm(true)}>Complete Competition</button>
+          )}
+        </div>
       </div>
 
-      <div className="tabs">
-        {compData.rounds.map(r => (
-          <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
-            onClick={() => setActiveRound(r.id)}>{r.name}</button>
-        ))}
-      </div>
+      <div style={{ padding: "24px 40px 40px", maxWidth: 1200 }}>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
-        <button className={`btn ${view === "apparatus" ? "btn-primary" : "btn-secondary"}`}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28, flexWrap: "wrap" }}>
+        <button className={`btn ${view === "apparatus" ? "btn-tertiary" : "btn-secondary"}`}
           onClick={() => setView("apparatus")}>Per Apparatus</button>
-        <button className={`btn ${view === "overall" ? "btn-primary" : "btn-secondary"}`}
+        <button className={`btn ${view === "overall" ? "btn-tertiary" : "btn-secondary"}`}
           onClick={() => setView("overall")}>Overall</button>
+        <div style={{ flex: 1 }} />
+        <div className="tabs" style={{ marginBottom: 0 }}>
+          {compData.rounds.map(r => (
+            <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
+              onClick={() => setActiveRound(r.id)}>{r.name}</button>
+          ))}
+        </div>
       </div>
 
       {/* PER APPARATUS VIEW
           Structure: Level (& Age) card → Apparatus sub-sections → ranked table */}
       {view === "apparatus" && (
         <div>
-          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }) => {
+          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
             const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
             return (
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
-                  {levelName}{ageLabel ? <span> — {ageLabel}</span> : null}
+                  {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
+                  {idx === 0 && <>
+                    <div style={{ flex: 1 }} />
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
+                        style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
+                        <option value="all">All Levels</option>
+                        {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <select className="select" value={showAgeFilter ? ageFilter : "all"} onChange={e => setAgeFilter(e.target.value)}
+                        disabled={!showAgeFilter}
+                        style={{ width: "auto", minWidth: 90, fontSize: 12, padding: "6px 32px 6px 14px", opacity: showAgeFilter ? 1 : 0.45, cursor: showAgeFilter ? "pointer" : "not-allowed" }}>
+                        <option value="all">All Ages</option>
+                        {uniqueAges.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      {(levelFilter !== "all" || ageFilter !== "all") && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setLevelFilter("all"); setAgeFilter("all"); }}
+                          style={{ fontSize: 11 }}>Clear</button>
+                      )}
+                    </div>
+                  </>}
                 </div>
                 {compData.apparatus.map(apparatus => {
                   const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
@@ -5011,7 +5337,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                   const dns = withScores.filter(g => g.score === 0 || g.dns);
                   return (
                     <div key={apparatus} style={{ marginBottom: 24 }}>
-                      <div className="sub-group-label">{APPARATUS_ICONS[apparatus] || "🏅"} {apparatus}</div>
+                      <div className="sub-group-label">{apparatus}</div>
                       <div className="table-wrap">
                         <table>
                           <thead>
@@ -5022,8 +5348,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                               <tr key={g.id}>
                                 <td>{rankBadge(g.rank)}</td>
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
-                                <td>{g.name}</td>
-                                <td style={{ color: "var(--muted)" }}>{g.club}</td>
+                                <td style={{ fontWeight: 500 }}>{g.name}</td>
+                                <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                                 <td><strong>{g.score.toFixed(2)}</strong></td>
                               </tr>
                             ))}
@@ -5031,8 +5357,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                               <tr key={g.id} style={{ opacity: 0.45 }}>
                                 <td>{rankBadge(null)}</td>
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
-                                <td>{g.name}</td>
-                                <td style={{ color: "var(--muted)" }}>{g.club}</td>
+                                <td style={{ fontWeight: 500 }}>{g.name}</td>
+                                <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                                 <td style={{ color: "var(--muted)" }}>—</td>
                               </tr>
                             ))}
@@ -5053,14 +5379,34 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
           Structure: Level (& Age) card → cumulative ranked table */}
       {view === "overall" && (
         <div>
-          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }) => {
+          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
             const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }));
             const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
             const dns = withTotals.filter(g => g.total === 0 || g.dns);
             return (
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
-                  {levelName}{ageLabel ? <span> — {ageLabel}</span> : null}
+                  {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
+                  {idx === 0 && <>
+                    <div style={{ flex: 1 }} />
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
+                        style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
+                        <option value="all">All Levels</option>
+                        {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <select className="select" value={showAgeFilter ? ageFilter : "all"} onChange={e => setAgeFilter(e.target.value)}
+                        disabled={!showAgeFilter}
+                        style={{ width: "auto", minWidth: 90, fontSize: 12, padding: "6px 32px 6px 14px", opacity: showAgeFilter ? 1 : 0.45, cursor: showAgeFilter ? "pointer" : "not-allowed" }}>
+                        <option value="all">All Ages</option>
+                        {uniqueAges.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      {(levelFilter !== "all" || ageFilter !== "all") && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setLevelFilter("all"); setAgeFilter("all"); }}
+                          style={{ fontSize: 11 }}>Clear</button>
+                      )}
+                    </div>
+                  </>}
                 </div>
                 <div className="table-wrap">
                   <table>
@@ -5076,8 +5422,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                         <tr key={g.id}>
                           <td>{rankBadge(g.rank)}</td>
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
-                          <td>{g.name}</td>
-                          <td style={{ color: "var(--muted)" }}>{g.club}</td>
+                          <td style={{ fontWeight: 500 }}>{g.name}</td>
+                          <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                           {compData.apparatus.map(a => (
                             <td key={a} style={{ color: "var(--muted)" }}>
                               {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(2) : "—"}
@@ -5090,8 +5436,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                         <tr key={g.id} style={{ opacity: 0.45 }}>
                           <td>{rankBadge(null)}</td>
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
-                          <td>{g.name}</td>
-                          <td style={{ color: "var(--muted)" }}>{g.club}</td>
+                          <td style={{ fontWeight: 500 }}>{g.name}</td>
+                          <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                           {compData.apparatus.map(a => <td key={a} style={{ color: "var(--muted)" }}>—</td>)}
                           <td style={{ color: "var(--muted)" }}>—</td>
                         </tr>
@@ -5106,22 +5452,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
         </div>
       )}
 
-      {/* ── COMPLETE COMPETITION CTA ─────────────────────────── */}
-      {onComplete && (
-        <div style={{ marginTop: 40, padding: "28px 32px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Finished scoring?</div>
-            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              Mark this competition as complete. Results will be finalised and the event moved to your completed list.
-            </div>
-          </div>
-          <button className="btn btn-primary"
-            style={{ fontSize: 15, padding: "12px 32px", letterSpacing: 0.5, background: "#15803d", flexShrink: 0 }}
-            onClick={() => setShowCompleteConfirm(true)}>
-            Complete Competition
-          </button>
-        </div>
-      )}
+      </div>{/* end body wrapper */}
 
       {showCompleteConfirm && (
         <ConfirmModal
@@ -8076,10 +8407,13 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     home: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
   };
 
-  const NavItem = ({ icon, label, active, done, onClick, count, title: tip }) => (
-    <button className={`as-nav-item${active ? " active" : ""}${done ? " done" : ""}`} onClick={onClick} title={collapsed ? (tip || label) : undefined}>
+  const NavItem = ({ icon, label, active, done, onClick, count, title: tip, disabled, badge }) => (
+    <button className={`as-nav-item${active ? " active" : ""}${done ? " done" : ""}${disabled ? " disabled" : ""}`}
+      onClick={disabled ? undefined : onClick} title={collapsed ? (tip || label) : undefined}
+      style={disabled ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
       {icon}
       <span className="as-label">{label}</span>
+      {badge && <span style={{ fontSize: 9, fontWeight: 700, background: "var(--brand-03)", color: "var(--brand-01)", padding: "2px 8px", borderRadius: 99, marginLeft: "auto", whiteSpace: "nowrap" }}>{badge}</span>}
       {count !== undefined && count > 0 && <span className="as-count">{count}</span>}
     </button>
   );
@@ -8113,7 +8447,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     { label: "Score Input", icon: icons.score, step: 1 },
     { label: "Results", icon: icons.trophy, step: 2 },
     { label: "Exports", icon: icons.doc, step: 3 },
-    { label: "MC Mode", icon: icons.mic, step: 4 },
+    { label: "MC Mode", icon: icons.mic, step: 4, disabled: true, badge: "Coming Soon" },
   ];
 
   const initial = (account?.name || account?.email || "?")[0].toUpperCase();
@@ -8189,6 +8523,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
             {phase2Steps.map(s => (
               <NavItem key={s.step} icon={s.icon} label={s.label}
                 active={step === s.step}
+                disabled={s.disabled} badge={s.badge}
                 onClick={() => setStep(s.step)} />
             ))}
           </>)}
@@ -8734,11 +9069,20 @@ export default function App() {
     setScreen("active");
   };
 
-  // ---- Share link ----
-  const handleShare = async () => {
+  // ---- Share links ----
+  const handleSharePublic = async () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     await pushToSupabase(compData, gymnasts, scores);
     const url = `${window.location.origin}/results.html?comp=${compId}`;
+    setShareUrl(url);
+    try { await navigator.clipboard.writeText(url); } catch {}
+    setShowShareToast(true);
+    setTimeout(() => setShowShareToast(false), 4000);
+  };
+  const handleShareCoach = async () => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    await pushToSupabase(compData, gymnasts, scores);
+    const url = `${window.location.origin}/coach.html?comp=${compId}`;
     setShareUrl(url);
     try { await navigator.clipboard.writeText(url); } catch {}
     setShowShareToast(true);
@@ -8868,8 +9212,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Nav bar — hidden during setup (phase 1), dashboard, and gymnast management for organisers */}
-      {!(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts")) && (
+      {/* Nav bar — hidden during setup (phase 1), dashboard, gymnast management, and phase 2 for organisers */}
+      {!(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts" || phase === 2)) && (
         <nav className="nav">
           {!currentAccount && (
             <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => setScreen("auth-login")}>GYMCOMP<span>.</span></div>
@@ -8898,7 +9242,7 @@ export default function App() {
                 <button className="btn btn-secondary btn-sm" onClick={() => exportResultsPDF(compData, gymnasts, scores)}>
                   Export PDF
                 </button>
-                <button className="btn btn-primary btn-sm" onClick={handleShare}>
+                <button className="btn btn-primary btn-sm" onClick={handleSharePublic}>
                   Share Results
                 </button>
               </>
@@ -8967,14 +9311,21 @@ export default function App() {
       )}
 
       {/* COMPETITION phase 2 — no old sidebar, just content */}
-      {phase === 2 && (
+      {phase === 2 && (step === 1 ? (
+        <div style={{ flex: 1 }}>
+          <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} setStep={setStep}
+            onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />
+        </div>
+      ) : step === 2 ? (
+        <div style={{ flex: 1 }}>
+          <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} onComplete={handleCompleteComp} />
+        </div>
+      ) : (
         <main className="content" style={{ maxWidth: 1200 }}>
-          {step === 1 && <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} />}
-          {step === 2 && <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} onComplete={handleCompleteComp} />}
-          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} />}
+          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
-      )}
+      ))}
     </>
   );
 

@@ -4,33 +4,39 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GYMCOMP — Live Results</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
+    @font-face {
+      font-family: 'Saans';
+      src: url('./SaansVF.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0f;
-      --surface: #13131a;
-      --surface2: #1a1a24;
-      --border: #252533;
-      --text: #f0f0f5;
-      --muted: #6b6b85;
-      --accent: #c8f53a;
-      --accent2: #7c5af5;
+      --bg: #f5f5f5;
+      --surface: #ffffff;
+      --surface2: #f0f0f0;
+      --border: #e4e4e4;
+      --text: #2e2e2e;
+      --muted: #909090;
+      --accent: #000dff;
+      --accent2: #625FD1;
+      --accent3: #d4d3ff;
       --success: #22c55e;
       --gold: #f59e0b;
       --silver: #94a3b8;
       --bronze: #b45309;
       --radius: 12px;
-      --font-display: 'Bebas Neue', sans-serif;
-      --font-body: 'DM Sans', system-ui, sans-serif;
+      --font: 'Saans', system-ui, -apple-system, sans-serif;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 14px;
       line-height: 1.5;
       min-height: 100vh;
@@ -38,8 +44,7 @@
 
     /* ── Header ─────────────────────────────────────────────── */
     .site-header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      background: var(--accent);
       padding: 0 20px;
       position: sticky;
       top: 0;
@@ -48,26 +53,23 @@
     .site-header-inner {
       max-width: 960px;
       margin: 0 auto;
-      height: 60px;
+      height: 56px;
       display: flex;
       align-items: center;
       gap: 16px;
     }
     .logo {
-      font-family: var(--font-display);
-      font-size: 26px;
-      letter-spacing: 2px;
-      color: var(--accent);
+      font-family: var(--font);
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
       flex-shrink: 0;
     }
     .view-badge {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
+      background: rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.9);
+      font-size: 11px;
+      font-weight: 600;
       padding: 3px 10px;
       border-radius: 20px;
     }
@@ -77,7 +79,7 @@
       gap: 6px;
       font-size: 11px;
       font-weight: 600;
-      color: var(--success);
+      color: rgba(255,255,255,0.9);
       margin-left: auto;
     }
     .live-dot {
@@ -105,10 +107,10 @@
       margin-bottom: 28px;
     }
     .comp-title {
-      font-family: var(--font-display);
-      font-size: 52px;
-      letter-spacing: 2px;
-      line-height: 1;
+      font-family: var(--font);
+      font-size: 36px;
+      font-weight: 800;
+      line-height: 1.1;
       margin-bottom: 10px;
     }
     .comp-meta {
@@ -130,11 +132,11 @@
     }
     .tab-btn {
       padding: 8px 18px;
-      border-radius: 8px;
+      border-radius: 56px;
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--muted);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
@@ -144,7 +146,7 @@
     .tab-btn.active {
       background: var(--accent);
       border-color: var(--accent);
-      color: #000;
+      color: #fff;
     }
 
     /* ── View toggle ─────────────────────────────────────────── */
@@ -156,20 +158,20 @@
     }
     .toggle-btn {
       padding: 7px 16px;
-      border-radius: 8px;
+      border-radius: 56px;
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--muted);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s;
     }
     .toggle-btn.active {
-      border-color: var(--accent2);
-      background: rgba(124, 90, 245, 0.15);
-      color: var(--text);
+      border-color: transparent;
+      background: var(--accent3);
+      color: var(--accent);
     }
 
     /* ── Level card ──────────────────────────────────────────── */
@@ -181,27 +183,21 @@
       margin-bottom: 16px;
     }
     .level-card-header {
-      padding: 12px 20px;
-      background: var(--surface2);
+      padding: 14px 20px;
       border-bottom: 1px solid var(--border);
-      font-size: 11px;
+      font-size: 18px;
       font-weight: 700;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--muted);
+      color: var(--text);
     }
 
     /* ── Apparatus sub-section ───────────────────────────────── */
     .app-section { padding: 16px 20px 0; }
     .app-section:last-child { padding-bottom: 16px; }
     .app-label {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--muted);
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--accent);
+      margin-bottom: 12px;
     }
 
     /* ── Results table ───────────────────────────────────────── */
@@ -214,17 +210,17 @@
     th {
       padding: 8px 12px;
       text-align: left;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 1px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
       color: var(--muted);
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
     td {
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(37, 37, 51, 0.6);
+      border-bottom: 1px solid var(--border);
       vertical-align: middle;
     }
     tr:last-child td { border-bottom: none; }
@@ -241,25 +237,27 @@
       font-weight: 700;
       white-space: nowrap;
     }
-    .badge-gold { background: rgba(245, 158, 11, 0.18); color: #f59e0b; }
-    .badge-silver { background: rgba(148, 163, 184, 0.18); color: #94a3b8; }
-    .badge-bronze { background: rgba(180, 83, 9, 0.18); color: #d97706; }
+    .badge-gold { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+    .badge-silver { background: rgba(148, 163, 184, 0.12); color: #64748b; }
+    .badge-bronze { background: rgba(180, 83, 9, 0.12); color: #b45309; }
     .badge-rank { background: var(--surface2); color: var(--muted); }
-    .badge-dns { background: rgba(107,107,133,0.12); color: var(--muted); }
+    .badge-dns { background: rgba(144,144,144,0.1); color: var(--muted); }
 
     .score-val {
       font-weight: 700;
-      font-size: 15px;
+      font-size: 14px;
     }
     .score-total {
-      font-family: var(--font-display);
-      font-size: 18px;
+      font-weight: 800;
+      font-size: 16px;
       color: var(--accent);
     }
     .app-score {
       color: var(--muted);
       font-size: 12px;
     }
+    .gymnast-name { font-weight: 500; }
+    .gymnast-club { font-weight: 500; color: var(--muted); }
 
     /* ── Empty / loading / error states ─────────────────────── */
     .state-full {
@@ -288,7 +286,7 @@
 
     .last-updated {
       font-size: 11px;
-      color: var(--muted);
+      color: rgba(255,255,255,0.6);
     }
     .empty-row td {
       color: var(--muted);
@@ -298,7 +296,7 @@
     }
 
     @media (max-width: 600px) {
-      .comp-title { font-size: 38px; }
+      .comp-title { font-size: 26px; }
       td, th { padding: 8px; font-size: 12px; }
     }
   </style>
@@ -393,7 +391,7 @@
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
     return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
-      const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+      const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
       const appSections = apparatus.map(app => {
         const withScores = glist.map(g => ({ ...g, score: getScore(rid, g.id, app) }));
         const hasSomeScore = withScores.some(g => g.score > 0);
@@ -405,8 +403,8 @@
             <tr>
               <td>${rankBadge(g.rank)}</td>
               <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
-              <td><strong>${escHtml(g.name)}</strong></td>
-              <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+              <td class="gymnast-name">${escHtml(g.name)}</td>
+              <td class="gymnast-club">${escHtml(g.club || "")}</td>
               <td><span class="score-val">${g.score.toFixed(2)}</span></td>
             </tr>
           `),
@@ -438,7 +436,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${escHtml(groupLabel)}</div>
+          <div class="level-card-header">${groupLabel}</div>
           ${appSections}
         </div>
       `;
@@ -452,7 +450,7 @@
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
     return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
-      const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+      const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
       const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
       const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns);
@@ -469,8 +467,8 @@
             <tr>
               <td>${rankBadge(g.rank)}</td>
               <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
-              <td><strong>${escHtml(g.name)}</strong></td>
-              <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+              <td class="gymnast-name">${escHtml(g.name)}</td>
+              <td class="gymnast-club">${escHtml(g.club || "")}</td>
               ${appCells}
               <td><span class="score-total">${g.total.toFixed(2)}</span></td>
             </tr>
@@ -493,7 +491,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${escHtml(groupLabel)}</div>
+          <div class="level-card-header">${groupLabel}</div>
           <div style="padding:16px 20px">
             <div class="table-wrap">
               <table>
@@ -519,7 +517,7 @@
     const rounds = compData.rounds || [];
     if (!activeRound && rounds.length) activeRound = rounds[0].id;
 
-    const colour = compData.brandColour || "#c8f53a";
+    const colour = compData.brandColour || "#000dff";
     const dateStr = compData.date
       ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
       : "";
