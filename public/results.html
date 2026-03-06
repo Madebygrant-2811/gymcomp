@@ -714,12 +714,44 @@
     return rows[0] || null;
   }
 
+  // Fetch scores from the dedicated scores table (anon key)
+  async function fetchTableScores() {
+    if (!compId) return [];
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/scores?comp_id=eq.${compId}&select=*`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      if (!res.ok) return [];
+      return await res.json();
+    } catch { return []; }
+  }
+
+  // Convert scores table rows → flat object
+  function scoresToFlat(rows) {
+    const flat = {};
+    for (const row of rows) {
+      const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
+      flat[bk] = row.final_score != null ? String(row.final_score) : "";
+      if (row.d_score != null) flat[`${bk}__dv`] = String(row.d_score);
+      if (row.bonus != null && row.bonus !== 0) flat[`${bk}__bon`] = String(row.bonus);
+      if (row.penalty != null && row.penalty !== 0) flat[`${bk}__pen`] = String(row.penalty);
+      const eScores = row.e_scores || [];
+      for (let i = 0; i < eScores.length; i++) {
+        if (eScores[i] != null) flat[`${bk}__e${i + 1}`] = String(eScores[i]);
+      }
+    }
+    return flat;
+  }
+
   async function poll() {
-    const row = await fetchData();
+    const [row, tableRows] = await Promise.all([fetchData(), fetchTableScores()]);
     if (!row || !row.data) return;
     compData = row.data.compData || {};
     gymnasts = row.data.gymnasts || [];
     scores = row.data.scores || {};
+    // Merge table scores (table wins if present)
+    if (tableRows.length > 0) Object.assign(scores, scoresToFlat(tableRows));
     renderPage();
     updateTimestamp();
   }
@@ -735,7 +767,7 @@
       return;
     }
 
-    const row = await fetchData();
+    const [row, tableRows] = await Promise.all([fetchData(), fetchTableScores()]);
     if (!row || !row.data) {
       document.getElementById("main").innerHTML = `
         <div class="state-full">
@@ -749,6 +781,8 @@
     compData = row.data.compData || {};
     gymnasts = row.data.gymnasts || [];
     scores = row.data.scores || {};
+    // Merge table scores (table wins if present)
+    if (tableRows.length > 0) Object.assign(scores, scoresToFlat(tableRows));
 
     renderPage();
     updateTimestamp();
