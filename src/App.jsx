@@ -6403,7 +6403,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         .od-card-clubs-title{font-size:12px;font-weight:600;color:var(--text-primary);line-height:1.1;margin-bottom:8px;}
         .od-card-clubs-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;}
         .od-card-clubs-item{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-tertiary);font-family:var(--font-display);}
-        .od-card-clubs-badge{width:18px;height:18px;border-radius:36px;background:var(--brand-01);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0;}
+        .od-card-clubs-badge{min-width:18px;height:18px;padding:0 5px;border-radius:36px;background:var(--brand-01);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0;}
         .od-card-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:40px;}
         .od-card-btn-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:5px 11px;border-radius:80px;background:var(--brand-01);border:none;cursor:pointer;font-family:var(--font-display);font-size:12px;font-weight:600;color:white;letter-spacing:0.3px;}
         .od-card-btn-open:hover{opacity:0.9;}
