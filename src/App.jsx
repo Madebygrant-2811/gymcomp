@@ -10534,23 +10534,23 @@ export default function App() {
       {phase === 1 && (
         <div style={{ flex: 1 }}>
           <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "draft")}
-            onSaveExit={() => {
+            onSaveExit={async () => {
               // Partial save — persist and go back to organiser dashboard (event list)
               if (syncTimer.current) clearTimeout(syncTimer.current);
-              pushToSupabase(compData, gymnasts, scores);
               if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+              await pushToSupabase(compData, gymnasts, scores);
               setScreen("org-dashboard");
             }}
-            onNext={() => {
+            onNext={async () => {
               // Full save — all mandatory fields complete
               if (syncTimer.current) clearTimeout(syncTimer.current);
               const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
               const isDraft = ev && ev.status === "draft";
-              pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
               if (currentEventId) {
                 events.snapshot(currentEventId, compData, gymnasts, scores);
                 if (isDraft) events.update(currentEventId, { status: "active" });
               }
+              await pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
               if (!compPin) {
                 pinModalCallback.current = () => setPhase("dashboard");
                 setShowPinModal(true);
