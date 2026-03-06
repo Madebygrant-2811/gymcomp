@@ -367,8 +367,15 @@ function migrateCompData(cd) {
   if (migrated.apparatus) migrated.apparatus = migrateApparatus(migrated.apparatus);
   if (migrated.judges) migrated.judges = migrated.judges.map(j => ({
     ...j,
+    id: j.id || generateId(),
     apparatus: APPARATUS_OPTIONS.includes(j.apparatus) ? j.apparatus : (APPARATUS_MIGRATE[j.apparatus] || j.apparatus)
   }));
+  // Ensure clubs have IDs
+  if (migrated.clubs) migrated.clubs = migrated.clubs.map(c =>
+    typeof c === "string" ? { id: generateId(), name: c } : { ...c, id: c.id || generateId() }
+  );
+  // Clean stray keys from duplicate
+  delete migrated.gymnasts;
   return migrated;
 }
 function migrateScoreKeys(sc) {
