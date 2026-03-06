@@ -7448,27 +7448,31 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             Judges
           </div>
           {hasJudges ? (
-            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
-              {compData.apparatus.map((app, ai) => {
-                const appJudges = judges.filter(j => j.apparatus === app);
-                if (appJudges.length === 0) return null;
-                return (
-                  <div key={app}>
-                    <div style={{ padding: "10px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", background: "rgba(0,0,0,0.03)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
-                      {app}
-                      <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-tertiary)" }}>{appJudges.length} judge{appJudges.length !== 1 ? "s" : ""}</span>
-                    </div>
-                    {appJudges.map((j, ji) => (
-                      <div key={j.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, padding: "10px 16px", fontSize: 13, borderBottom: "1px solid var(--border)", background: ji % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)" }}>
-                        <div style={{ fontWeight: 600 }}>{j.name}</div>
-                        <div style={{ color: "var(--muted)" }}>{j.club || "—"}</div>
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                {compData.apparatus.map(app => {
+                  const appJudges = judges.filter(j => j.apparatus === app);
+                  if (appJudges.length === 0) return null;
+                  return (
+                    <div key={app} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+                      <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", background: "var(--surface2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>{app}</span>
+                        <span style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--brand-01)", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{appJudges.length}</span>
                       </div>
-                    ))}
-                  </div>
-                );
-              })}
+                      <div style={{ padding: "8px 14px" }}>
+                        {appJudges.map(j => (
+                          <div key={j.id} style={{ padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--border)" }}>
+                            <div style={{ fontWeight: 400, color: "var(--text)" }}>{j.name}</div>
+                            {j.club && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{j.club}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               {!completed && (
-              <div style={{ padding: "12px 16px" }}>
+              <div style={{ marginTop: 14 }}>
                 <button onClick={onEditSetup} style={{
                   display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
                   background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
