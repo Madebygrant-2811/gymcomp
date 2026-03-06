@@ -386,6 +386,10 @@ function migrateScoreKeys(sc) {
   }
   return migrated;
 }
+function migrateGymnasts(list) {
+  if (!list || !list.length) return list;
+  return list.map(g => ({ ...g, name: normalizeStr(g.name), age: normalizeStr(g.age), group: normalizeStr(g.group), club: normalizeStr(g.club) }));
+}
 
 // UK Gymnastics levels — grouped by pathway
 const UK_LEVELS = [
@@ -1595,9 +1599,12 @@ function buildRotations(groups, apparatus, existingRotations) {
 }
 
 // Parse CSV text into array of objects
+// Collapse multiple spaces and trim
+const normalizeStr = (s) => (s || "").replace(/\s+/g, " ").trim();
+
 function parseCSV(text) {
   const lines = text.trim().split("\n").map(l =>
-    l.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+    l.split(",").map(c => normalizeStr(c.replace(/^"|"$/g, "")))
   );
   if (lines.length < 2) return [];
   const headers = lines[0].map(h => h.toLowerCase());
@@ -2264,7 +2271,7 @@ const css = `
 // ============================================================
 // PHASE 1 STEP 1
 // ============================================================
-function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [editingClubId, setEditingClubId] = useState(null);
   const [editingClubVal, setEditingClubVal] = useState("");
@@ -2434,7 +2441,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         <span className="setup-topbar-sync">Draft</span>
         <button className="btn btn-sm" onClick={handleSaveAndExit} disabled={!canSave}
           style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.15)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.3)" }}>
-          {canProceed ? "Save & Create →" : "Save & Exit →"}
+          {canProceed ? (isExisting ? "Save & Update →" : "Save & Create →") : "Save & Exit →"}
         </button>
       </div>
     </div>
@@ -2940,7 +2947,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
       <div className="step-nav">
         <div />
         <button className="btn btn-primary" onClick={handleSaveAndExit} disabled={!canSave}>
-          {canProceed ? "Save & Create →" : "Save & Exit →"}
+          {canProceed ? (isExisting ? "Save & Update →" : "Save & Create →") : "Save & Exit →"}
         </button>
       </div>
 
@@ -4185,7 +4192,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   };
 
   const commit = () => {
-    const gymnast = { ...newG, club: selectedClub, id: generateId() };
+    const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), group: normalizeStr(newG.group), club: selectedClub, id: generateId() };
     setData(d => {
       const updated = [...d, gymnast];
       setNewG(blankForm(updated));
@@ -4214,7 +4221,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     setEditModalErrors({});
     const warns = validateGymnast(em, em.id);
     if (warns.length && editModalWarnings.length === 0) { setEditModalWarnings(warns); return; }
-    setData(d => d.map(g => g.id === em.id ? { ...em } : g));
+    const normalized = { ...em, name: normalizeStr(em.name), age: normalizeStr(em.age), group: normalizeStr(em.group) };
+    setData(d => d.map(g => g.id === em.id ? normalized : g));
     setEditModal(null);
     setEditModalWarnings([]);
   };
@@ -7318,7 +7326,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           )}
           {hasGymnasts ? (<>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr 60px 28px", gap: 0, borderBottom: "1px solid var(--border)", padding: "8px 16px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--muted)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 1fr 1fr 60px 28px", gap: 0, borderBottom: "1px solid var(--border)", padding: "8px 16px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--muted)", position: "sticky", top: 0, background: "var(--surface)", zIndex: 1 }}>
                 <div>#</div>
                 <div>Name</div>
                 <div>Club</div>
@@ -7327,6 +7335,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                 <div>Age</div>
                 <div></div>
               </div>
+              <div style={{ maxHeight: 500, overflowY: "auto" }}>
               {[...competingGymnasts].sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)).map((g, i) => {
                 const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level || "—";
                 const roundName = compData.rounds.find(r => r.id === g.round)?.name || g.round || "—";
@@ -7343,6 +7352,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </div>
                 );
               })}
+              </div>
               {!completed && (
               <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -9444,8 +9454,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
-      setGymnasts(snapshot.gymnasts || []);
+      const consentGiven = ev.status !== "draft";
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
       setScores(migrateScoreKeys(snapshot.scores || {}));
       // Draft events open in edit mode; live opens into competition; others to dashboard
       if (ev.status === "draft") { setPhase(1); setStep(1); }
@@ -9475,8 +9486,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
-      setGymnasts(snapshot.gymnasts || []);
+      const consentGiven = ev.status !== "draft";
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
       setScores(migrateScoreKeys(snapshot.scores || {}));
       setSyncStatus("saved");
     } else {
@@ -9499,8 +9511,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
-      setGymnasts(snapshot.gymnasts || []);
+      const consentGiven = ev.status !== "draft";
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
       setScores(migrateScoreKeys(snapshot.scores || {}));
       setSyncStatus("saved");
     }
@@ -9669,12 +9682,34 @@ export default function App() {
   };
 
   // ---- Share links ----
+  const copyOrShare = async (url, title) => {
+    // Try native share on mobile first
+    if (navigator.share) {
+      try { await navigator.share({ title: title || "GymComp", url }); return true; } catch {}
+    }
+    // Try clipboard API
+    if (navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(url); return true; } catch {}
+    }
+    // Fallback: temporary textarea for older browsers
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch {}
+    return false;
+  };
   const handleSharePublic = async () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     await pushToSupabase(compData, gymnasts, scores);
     const url = `${window.location.origin}/results.html?comp=${compId}`;
     setShareUrl(url);
-    try { await navigator.clipboard.writeText(url); } catch {}
+    await copyOrShare(url, `${compData.name || "Competition"} — Live Results`);
     setShareToastType("public");
     setShowShareToast(true);
     setTimeout(() => setShowShareToast(false), 4000);
@@ -9684,7 +9719,7 @@ export default function App() {
     await pushToSupabase(compData, gymnasts, scores);
     const url = `${window.location.origin}/coach.html?comp=${compId}`;
     setShareUrl(url);
-    try { await navigator.clipboard.writeText(url); } catch {}
+    await copyOrShare(url, `${compData.name || "Competition"} — Coach View`);
     setShareToastType("coaches");
     setShowShareToast(true);
     setTimeout(() => setShowShareToast(false), 4000);
@@ -9902,7 +9937,7 @@ export default function App() {
       {/* SETUP phase 1 */}
       {phase === 1 && (
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup}
+          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "draft")}
             onSaveExit={() => {
               // Partial save — persist and go back to organiser dashboard (event list)
               if (syncTimer.current) clearTimeout(syncTimer.current);
