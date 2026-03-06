@@ -351,6 +351,42 @@ const APPARATUS_GROUPS = [
 ];
 const APPARATUS_OPTIONS = APPARATUS_GROUPS.flatMap(g => g.items.map(a => `${a} (${g.label.split(" ")[0]})`));
 
+// Migrate old bare apparatus names (e.g. "Beam") → new format ("Beam (WAG)")
+const APPARATUS_MIGRATE = {};
+APPARATUS_GROUPS.forEach(g => {
+  const tag = g.label.split(" ")[0];
+  g.items.forEach(a => { if (!APPARATUS_MIGRATE[a]) APPARATUS_MIGRATE[a] = `${a} (${tag})`; });
+});
+function migrateApparatus(list) {
+  if (!list || !list.length) return list;
+  return list.map(a => APPARATUS_OPTIONS.includes(a) ? a : (APPARATUS_MIGRATE[a] || a));
+}
+function migrateCompData(cd) {
+  if (!cd) return cd;
+  const migrated = { ...cd };
+  if (migrated.apparatus) migrated.apparatus = migrateApparatus(migrated.apparatus);
+  if (migrated.judges) migrated.judges = migrated.judges.map(j => ({
+    ...j,
+    apparatus: APPARATUS_OPTIONS.includes(j.apparatus) ? j.apparatus : (APPARATUS_MIGRATE[j.apparatus] || j.apparatus)
+  }));
+  return migrated;
+}
+function migrateScoreKeys(sc) {
+  if (!sc) return sc;
+  const migrated = {};
+  for (const [key, val] of Object.entries(sc)) {
+    let newKey = key;
+    for (const [bare, full] of Object.entries(APPARATUS_MIGRATE)) {
+      // Only replace bare name at the end of key segment (after __)
+      if (newKey.includes(`__${bare}`) && !newKey.includes(`__${full}`)) {
+        newKey = newKey.replace(`__${bare}`, `__${full}`);
+      }
+    }
+    migrated[newKey] = val;
+  }
+  return migrated;
+}
+
 // UK Gymnastics levels — grouped by pathway
 const UK_LEVELS = [
   { group: "Classic Challenge", options: ["Tin", "Zinc", "Copper", "Bronze", "Silver", "Gold"] },
@@ -4240,10 +4276,12 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
   // Rotation schedule
   const [rotations, setRotations] = useState({});
-  const allGroups2 = [...new Set(data.map(g => g.group).filter(Boolean))];
+  const allGroups2 = [...new Set(data.map(g => g.group).filter(Boolean))].sort();
   useEffect(() => {
     if (allGroups2.length && compData.apparatus.length) {
       setRotations(prev => buildRotations(allGroups2, compData.apparatus, prev));
+    } else {
+      setRotations({});
     }
   }, [JSON.stringify(allGroups2), JSON.stringify(compData.apparatus)]);
 
@@ -4405,37 +4443,46 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
               <div className="group-line" />
             </div>
             {Object.entries(groups).map(([grp, gymnasts]) => (
-              <div key={grp}>
-                <div className="sub-group-label">{grp}</div>
-                <div className="table-wrap" style={{ marginBottom: 12 }}>
+              <div key={grp} style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{grp}</div>
+                <div className="table-wrap">
                   <table>
-                    <thead><tr><th>#</th><th>Name</th><th>Club</th><th>Age</th><th style={{ width: 60, textAlign: "center" }}>DNS</th><th></th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 52 }}>#</th>
+                        <th>Name</th>
+                        <th>Club</th>
+                        <th style={{ width: 80 }}>Age</th>
+                        <th style={{ width: 56, textAlign: "center" }}>DNS</th>
+                        <th style={{ width: 140, textAlign: "right" }}>Actions</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {gymnasts.map(g => (
-                        <tr key={g.id} style={{ opacity: g.dns ? 0.5 : 1 }}>
-                          <td style={{ color: "var(--muted)" }}>{g.number}</td>
-                          <td style={{ textDecoration: g.dns ? "line-through" : "none" }}>{g.name}</td>
-                          <td>{g.club}</td>
-                          <td>{g.age}</td>
+                        <tr key={g.id} style={{ opacity: g.dns ? 0.45 : 1 }}>
+                          <td style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12 }}>{g.number}</td>
+                          <td style={{ fontWeight: 600, textDecoration: g.dns ? "line-through" : "none" }}>{g.name}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age}</td>
                           <td style={{ textAlign: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <button
                                 title={g.dns ? "Mark as competing" : "Mark as DNS (Did Not Start)"}
                                 onClick={() => setData(d => d.map(x => x.id === g.id ? { ...x, dns: !x.dns } : x))}
                                 style={{
-                                  width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
+                                  width: 26, height: 26, borderRadius: 6, border: "none", cursor: "pointer",
                                   background: g.dns ? "var(--danger)" : "var(--surface2)",
-                                  color: g.dns ? "#fff" : "var(--muted)", fontSize: 13, fontWeight: 700,
+                                  color: g.dns ? "#fff" : "var(--muted)", fontSize: 12, fontWeight: 700,
                                   display: "flex", alignItems: "center", justifyContent: "center"
                                 }}>
                                 {g.dns ? "✕" : "—"}
                               </button>
                             </div>
                           </td>
-                          <td>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button className="btn btn-sm btn-secondary" onClick={() => startEdit(g)}>Edit</button>
-                              <button className="btn btn-sm btn-danger"
+                          <td style={{ textAlign: "right" }}>
+                            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                              <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => startEdit(g)}>Edit</button>
+                              <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 10px" }}
                                 onClick={() => setPendingRemove({ id: g.id, msg: `Remove gymnast "${g.name}"?` })}>Remove</button>
                             </div>
                           </td>
@@ -4463,18 +4510,18 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                 <span className="group-label">{round.name}</span>
                 <div className="group-line" />
               </div>
-              <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <div className="table-wrap" style={{ marginBottom: 20 }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Group</th>
+                      <th style={{ width: 120 }}>Group</th>
                       {compData.apparatus.map((_, i) => <th key={i}>Position {i + 1}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {allGroups2.map((group, gi) => (
                       <tr key={group}>
-                        <td><strong>{group}</strong></td>
+                        <td style={{ fontWeight: 600 }}>{group}</td>
                         {compData.apparatus.map((_, i) => (
                           <td key={i}>
                             {gi === 0 ? (
@@ -4493,7 +4540,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                                 {compData.apparatus.map(a => <option key={a} value={a}>{a}</option>)}
                               </select>
                             ) : (
-                              <span style={{ fontSize: 12, color: "var(--text)", padding: "4px 8px" }}>
+                              <span style={{ fontSize: 12, color: "var(--muted)" }}>
                                 {rotations[group]?.[i] || "—"}
                               </span>
                             )}
@@ -9393,9 +9440,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
       setGymnasts(snapshot.gymnasts || []);
-      setScores(snapshot.scores || {});
+      setScores(migrateScoreKeys(snapshot.scores || {}));
       // Draft events open in edit mode; live opens into competition; others to dashboard
       if (ev.status === "draft") { setPhase(1); setStep(1); }
       else if (ev.status === "live") { setPhase(2); setStep(1); }
@@ -9424,9 +9471,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
       setGymnasts(snapshot.gymnasts || []);
-      setScores(snapshot.scores || {});
+      setScores(migrateScoreKeys(snapshot.scores || {}));
       setSyncStatus("saved");
     } else {
       setCompId(ev.compId);
@@ -9448,9 +9495,9 @@ export default function App() {
       setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
+      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: false }));
       setGymnasts(snapshot.gymnasts || []);
-      setScores(snapshot.scores || {});
+      setScores(migrateScoreKeys(snapshot.scores || {}));
       setSyncStatus("saved");
     }
     setPhase("dashboard"); setStep(1);
@@ -9468,7 +9515,7 @@ export default function App() {
     const baseData = snapshot?.compData
       ? { ...snapshot.compData, name: `${snapshot.compData.name || "Competition"} (Copy)`, date: "", dataConsentConfirmed: false, gymnasts: [], judges: [] }
       : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
-    setCompDataRaw(baseData);
+    setCompDataRaw(migrateCompData(baseData));
     setGymnasts([]);
     setScores({});
     setPhase(1); setStep(1);
