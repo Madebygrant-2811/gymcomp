@@ -9535,10 +9535,19 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    // Copy comp setup but clear date and reset gymnasts/scores
-    const baseData = snapshot?.compData
-      ? { ...snapshot.compData, name: `${snapshot.compData.name || "Competition"} (Copy)`, date: "", dataConsentConfirmed: false, gymnasts: [], judges: [] }
-      : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+    // Copy comp setup but clear date, regenerate all IDs, reset gymnasts/scores/judges
+    let baseData;
+    if (snapshot?.compData) {
+      const src = snapshot.compData;
+      const newClubs = (src.clubs || []).map(c => ({ ...c, id: generateId() }));
+      const roundIdMap = {};
+      const newRounds = (src.rounds || []).map(r => { const nid = generateId(); roundIdMap[r.id] = nid; return { ...r, id: nid }; });
+      const levelIdMap = {};
+      const newLevels = (src.levels || []).map(l => { const nid = generateId(); levelIdMap[l.id] = nid; return { ...l, id: nid }; });
+      baseData = { ...src, name: `${src.name || "Competition"} (Copy)`, date: "", dataConsentConfirmed: false, clubs: newClubs, rounds: newRounds, levels: newLevels, judges: [] };
+    } else {
+      baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+    }
     setCompDataRaw(migrateCompData(baseData));
     setGymnasts([]);
     setScores({});
