@@ -5016,6 +5016,10 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       {/* ── Topbar ── */}
       <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`} style={{ margin: "0 24px" }}>
         <div className="setup-topbar-left">
+          {compData.logo
+            ? <img src={compData.logo} alt="" style={{ height: 28, maxWidth: 80, objectFit: "contain", borderRadius: 4, flexShrink: 0 }} />
+            : <img src={GymCompLogomark} alt="GymComp" style={{ height: 22, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9 }} />
+          }
           {compData.name && <span className="setup-topbar-name">{compData.name}</span>}
           {compData.date && <span className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
           {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
