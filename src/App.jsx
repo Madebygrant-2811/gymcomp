@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import * as XLSX from "xlsx";
 import GymCompLogo from "./assets/GymComp-Logo.svg";
 import GymCompLogotype from "./assets/Logotype.svg";
 import GymCompLogomark from "./assets/Logomark.svg";
@@ -69,11 +70,14 @@ const supabase = {
     if (!res.ok) return { data: [], error: await res.text() };
     return { data: await res.json(), error: null };
   },
-  // Fetch submissions for a competition
+  // Fetch submissions for a competition (requires user JWT — RLS checks comp ownership)
   async fetchSubmissions(compId) {
     const { data: { session } } = await supabaseAuth.auth.getSession();
-    const token = session?.access_token || SUPABASE_KEY;
-    console.log("[fetchSubmissions] compId:", compId, "| auth:", session ? "user JWT" : "anon key");
+    if (!session) {
+      console.warn("[fetchSubmissions] no session — cannot fetch submissions without auth");
+      return { data: [], error: "Not authenticated" };
+    }
+    const token = session.access_token;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions?comp_id=eq.${compId}&order=submitted_at.desc&select=*`, {
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` },
     });
@@ -83,7 +87,6 @@ const supabase = {
       return { data: [], error: err };
     }
     const data = await res.json();
-    console.log("[fetchSubmissions] rows returned:", data.length, data);
     return { data, error: null };
   },
   // Insert a new club submission
@@ -101,10 +104,14 @@ const supabase = {
     if (!res.ok) { const err = await res.text(); return { error: err }; }
     return { error: null };
   },
-  // Update a submission status
+  // Update a submission status (requires user JWT — RLS checks comp ownership)
   async updateSubmission(id, patch) {
     const { data: { session } } = await supabaseAuth.auth.getSession();
-    const token = session?.access_token || SUPABASE_KEY;
+    if (!session) {
+      console.error("[updateSubmission] no session — cannot update without auth");
+      return { error: "Not authenticated" };
+    }
+    const token = session.access_token;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/submissions?id=eq.${id}`, {
       method: "PATCH",
       headers: {
@@ -118,8 +125,8 @@ const supabase = {
     if (!res.ok) { const err = await res.text(); console.error("[updateSubmission] HTTP error:", err); return { error: err }; }
     const rows = await res.json();
     if (!rows.length) {
-      console.error("[updateSubmission] 0 rows updated for id:", id, "— check Supabase RLS policies allow UPDATE on submissions");
-      return { error: "No rows updated — the status could not be saved. Check Supabase RLS policies." };
+      console.error("[updateSubmission] 0 rows updated for id:", id, "— RLS may have blocked the update");
+      return { error: "No rows updated — you may not own this competition." };
     }
     return { error: null };
   },
@@ -163,6 +170,18 @@ const supabase = {
     return { error: null };
   },
 };
+
+// ============================================================
+// PIN HASHING (SHA-256 via Web Crypto API — no dependencies)
+// ============================================================
+async function hashPin(pin) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin.toString().trim());
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const isHashed = (pin) => typeof pin === "string" && pin.length === 64 && /^[0-9a-f]+$/.test(pin);
 
 // ============================================================
 // UTILITIES
@@ -281,6 +300,30 @@ const events = {
   },
 };
 
+// ── Offline sync queue ───────────────────────────────────────────────────
+const SYNC_QUEUE_KEY = "gymcomp_sync_queue";
+const syncQueue = {
+  get: () => { try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]"); } catch { return []; } },
+  save: (q) => localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)),
+  push: (record, token) => {
+    const q = syncQueue.get();
+    // Replace any existing entry for the same comp ID (only latest matters)
+    const idx = q.findIndex(e => e.record.id === record.id);
+    if (idx !== -1) q.splice(idx, 1);
+    q.push({ record, token, ts: Date.now() });
+    syncQueue.save(q);
+  },
+  clear: (compId) => {
+    if (compId) {
+      const q = syncQueue.get().filter(e => e.record.id !== compId);
+      syncQueue.save(q);
+    } else {
+      syncQueue.save([]);
+    }
+  },
+  size: () => syncQueue.get().length,
+};
+
 const EVENT_STATUSES = [
   { value: "draft",     label: "Draft",     color: "var(--muted)" },
   { value: "active",    label: "Active",    color: "var(--accent)" },
@@ -302,7 +345,11 @@ const denseRank = (items, scoreKey) => {
   return result;
 };
 
-const APPARATUS_OPTIONS = ["Beam", "Bar", "Vault", "Floor", "Range"];
+const APPARATUS_GROUPS = [
+  { label: "WAG (Women's)", items: ["Floor", "Bars", "Beam", "Vault", "Range"] },
+  { label: "MAG (Men's)", items: ["Floor", "Pommel Horse", "Rings", "Vault", "Parallel Bars", "Horizontal Bar"] },
+];
+const APPARATUS_OPTIONS = APPARATUS_GROUPS.flatMap(g => g.items.map(a => `${a} (${g.label.split(" ")[0]})`));
 
 // UK Gymnastics levels — grouped by pathway
 const UK_LEVELS = [
@@ -1502,11 +1549,11 @@ function gymnast_key(roundId, gymnastId, apparatus) {
 // Auto-rotate apparatus for all groups: group gi starts at offset gi
 function buildRotations(groups, apparatus, existingRotations) {
   if (!groups.length || !apparatus.length) return existingRotations;
-  const updated = { ...existingRotations };
+  // Use Group 1's order as the base; cascade remaining groups by shifting
+  const base = existingRotations[groups[0]] || apparatus.map((_, ai) => apparatus[ai % apparatus.length]);
+  const updated = {};
   groups.forEach((group, gi) => {
-    if (!updated[group]) {
-      updated[group] = apparatus.map((_, ai) => apparatus[(ai + gi) % apparatus.length]);
-    }
+    updated[group] = base.map((_, ai) => base[(ai + gi) % base.length]);
   });
   return updated;
 }
@@ -1760,7 +1807,7 @@ function ClubSearch({ value, onChange, onAdd }) {
 // ============================================================
 // CLUB PICKER — single-value typeahead over UK_CLUBS (for organiser club field)
 // ============================================================
-function ClubPicker({ value, onChange, placeholder }) {
+function ClubPicker({ value, onChange, onSelect, placeholder, onKeyDown: externalKeyDown, style, autoFocus }) {
   const [query, setQuery] = useState(value || "");
   const [suggestions, setSuggestions] = useState([]);
   const wrapRef = useRef(null);
@@ -1775,7 +1822,7 @@ function ClubPicker({ value, onChange, placeholder }) {
 
   const handleChange = (val) => {
     setQuery(val);
-    onChange(val);
+    if (onChange) onChange(val);
     if (val.trim().length < 2) { setSuggestions([]); return; }
     const q = val.toLowerCase();
     const startsWith = UK_CLUBS.filter(c => c.name.toLowerCase().startsWith(q));
@@ -1783,13 +1830,13 @@ function ClubPicker({ value, onChange, placeholder }) {
     setSuggestions([...startsWith, ...contains].slice(0, 8));
   };
 
-  const pick = (name) => { setQuery(name); onChange(name); setSuggestions([]); };
+  const pick = (name) => { setQuery(onSelect ? "" : name); if (onChange) onChange(name); if (onSelect) onSelect(name); setSuggestions([]); };
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
+    <div ref={wrapRef} style={{ position: "relative", ...(style || {}) }}>
       <input className="input" placeholder={placeholder || "Type to search clubs…"}
-        value={query} onChange={e => handleChange(e.target.value)}
-        onKeyDown={e => { if (e.key === "Escape") setSuggestions([]); }} />
+        value={query} onChange={e => handleChange(e.target.value)} autoFocus={autoFocus}
+        onKeyDown={e => { if (e.key === "Escape") setSuggestions([]); if (externalKeyDown) externalKeyDown(e); }} />
       {suggestions.length > 0 && (
         <div className="pc-dropdown" style={{ maxHeight: 240, overflowY: "auto" }}>
           {suggestions.map(c => (
@@ -1988,7 +2035,7 @@ const css = `
   .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-bottom: -1px; border-radius: 0; }
   .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-  .list-item { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; margin-bottom: 6px; }
+  .list-item { display: flex; align-items: center; gap: 10px; padding: 11px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 56px; margin-bottom: 6px; }
   .list-item-content { flex: 1; font-size: 14px; }
 
   .table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid var(--border); }
@@ -2079,8 +2126,8 @@ const css = `
 
   .empty { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
 
-  .apparatus-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
-  .apparatus-section-header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .apparatus-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; }
+  .apparatus-section-header { padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-bottom: 1px solid var(--border); border-radius: 16px 16px 0 0; }
   .apparatus-section-body { padding: 12px 16px; }
 
   .results-body { padding: 24px 40px 40px; max-width: 1200px; }
@@ -2173,6 +2220,7 @@ const css = `
     .tab-btn { flex-shrink: 0; padding: 10px 14px; }
 
     .list-item { flex-wrap: wrap; gap: 6px; }
+    .list-item-level .list-item-content { flex: 1 1 100%; }
     .chip { font-size: 12px; padding: 4px 10px; }
   }
 `;
@@ -2212,6 +2260,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   }, []);
   const [customLevel, setCustomLevel] = useState("");
   const [newJudge, setNewJudge] = useState({ name: "", club: "", targetApparatus: "" });
+  const [editingJudge, setEditingJudge] = useState(null);
   const [dateError, setDateError] = useState("");
 
   const handleDate = (val) => {
@@ -2307,14 +2356,14 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   };
 
   const canProceed = data.name && data.date && !dateError &&
-    data.clubs.length > 0 && data.rounds.length > 0 &&
-    data.apparatus.length > 0 && data.levels.length > 0;
+    data.rounds.length > 0 &&
+    data.apparatus.length > 0 && data.levels.length > 0 &&
+    data.dataConsentConfirmed;
 
   const missingFields = [
     ...(!data.name ? ["Competition name"] : []),
     ...(!data.date ? ["Date"] : []),
     ...(dateError ? ["Valid date (must be today or future)"] : []),
-    ...(data.clubs.length === 0 ? ["At least one club"] : []),
     ...(data.rounds.length === 0 ? ["At least one round"] : []),
     ...(data.apparatus.length === 0 ? ["At least one apparatus"] : []),
     ...(data.levels.length === 0 ? ["At least one level"] : []),
@@ -2349,7 +2398,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         <span className="setup-topbar-sync">Draft</span>
         <button className="btn btn-sm" onClick={handleSaveAndExit} disabled={!canSave}
           style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.15)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.3)" }}>
-          {canProceed ? "Save & Continue →" : "Save & Exit →"}
+          {canProceed ? "Save & Create →" : "Save & Exit →"}
         </button>
       </div>
     </div>
@@ -2491,7 +2540,13 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
               )}
             </div>
           ))}
-          {!data.clubs.length && <span style={{ color: "var(--muted)", fontSize: 13 }}>No clubs added yet</span>}
+          {!data.clubs.length && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ color: "var(--muted)", fontSize: 13 }}>No clubs added yet</span>
+              <span style={{ color: "var(--muted)", fontSize: 12 }}>·</span>
+              <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "default" }}>You can add clubs later from the Event Dashboard</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2534,20 +2589,31 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
       {/* Apparatus */}
       <div className="card" id="setup-apparatus">
         <div className="card-title">Apparatus</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {APPARATUS_OPTIONS.map(a => {
-            const checked = data.apparatus.includes(a);
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {APPARATUS_GROUPS.map(group => {
+            const tag = group.label.split(" ")[0]; // WAG or MAG
             return (
-              <label key={a} style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
-                background: checked ? "rgba(0,13,255,0.04)" : "var(--bg)",
-                border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
-                borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
-                color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
-              }}>
-                <input type="checkbox" checked={checked} onChange={() => toggleApparatus(a, checked)} style={{ display: "none" }} />
-                <span style={{ fontSize: 16 }}>{APPARATUS_ICONS[a] || "🏅"}</span> {a}
-              </label>
+              <div key={group.label}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", fontFamily: "var(--font-display)", marginBottom: 8 }}>{group.label}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {group.items.map(a => {
+                    const key = `${a} (${tag})`;
+                    const checked = data.apparatus.includes(key);
+                    return (
+                      <label key={key} style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+                        background: checked ? "rgba(0,13,255,0.04)" : "var(--bg)",
+                        border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
+                        borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
+                        color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
+                      }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleApparatus(key, checked)} style={{ display: "none" }} />
+                        <span style={{ fontSize: 16 }}>{getApparatusIcon(key)}</span> {a}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -2584,11 +2650,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             </div>
         }
         {data.levels.map(l => (
-          <div className="list-item" key={l.id} style={{ flexWrap: "wrap" }}>
-            <div className="list-item-content" style={{ flex: "1 1 100%" }}><strong>{l.name}</strong></div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flex: "1 1 auto" }}>
+          <div className="list-item list-item-level" key={l.id}>
+            <div className="list-item-content" style={{ flex: "1 1 auto", minWidth: 0 }}><strong>{l.name}</strong></div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
               <span style={{ fontSize: 12, color: "var(--muted)" }}>Rank by:</span>
-              <select className="select" style={{ width: "auto", padding: "4px 10px", fontSize: 12 }}
+              <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
                 value={l.rankBy} onChange={e => updateLevelRank(l.id, e.target.value)}>
                 <option value="level">Level only</option>
                 <option value="level+age">Level + Age</option>
@@ -2652,9 +2718,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         </div>
       </div>
 
-      {/* Club Submissions */}
+      {/* Gymnast Submissions */}
       <div className="card" id="setup-submissions">
-        <div className="card-title">Club Submissions <span style={{ fontSize: 11, fontWeight: 400, color: "var(--accent)", marginLeft: 8 }}>Optional</span></div>
+        <div className="card-title">Gymnast Submissions <span style={{ fontSize: 11, fontWeight: 400, color: "var(--accent)", marginLeft: 8 }}>Optional</span></div>
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
           Allow clubs to submit their gymnast lists online before the competition. You review and approve each submission — nothing is added automatically.
         </div>
@@ -2705,6 +2771,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
               </span>
             )}
           </div>
+          {(data.judges || []).length === 0 && (
+            <div style={{ marginBottom: 12, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>
+              You can add judges later from the Event Dashboard
+            </div>
+          )}
           {data.apparatus.map(apparatus => {
             const allJudges = data.judges.filter(j => j.apparatus === apparatus);
             const isAdding = newJudge.targetApparatus === apparatus;
@@ -2712,7 +2783,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             return (
               <div className="apparatus-section" key={apparatus}>
                 <div className="apparatus-section-header">
-                  <strong style={{ fontSize: 14 }}>{APPARATUS_ICONS[apparatus] || "🏅"} {apparatus}</strong>
+                  <strong style={{ fontSize: 14 }}>{getApparatusIcon(apparatus)} {apparatus}</strong>
                   <span style={{ fontSize: 12, color: missingJudge ? "#f0ad4e" : "var(--muted)" }}>
                     {`${allJudges.length} Judge${allJudges.length !== 1 ? "s" : ""}${missingJudge ? " ⚠ No judges" : ""}`}
                   </span>
@@ -2722,13 +2793,50 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                     <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>No judges assigned yet</div>
                   )}
 
-                  {allJudges.map(j => (
+                  {allJudges.map(j => editingJudge?.id === j.id ? (
+                    <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, flexWrap: "wrap" }}>
+                        <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120, padding: "6px 12px", fontSize: 13 }}
+                          value={editingJudge.name}
+                          onChange={e => setEditingJudge(ej => ({ ...ej, name: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && editingJudge.name.trim()) {
+                              setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
+                              setEditingJudge(null);
+                            }
+                            if (e.key === "Escape") setEditingJudge(null);
+                          }}
+                          autoFocus />
+                        <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
+                          value={editingJudge.club}
+                          onChange={val => setEditingJudge(ej => ({ ...ej, club: val }))}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && editingJudge.name.trim()) {
+                              setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
+                              setEditingJudge(null);
+                            }
+                            if (e.key === "Escape") setEditingJudge(null);
+                          }} />
+                        <button className="btn btn-sm btn-primary" onClick={() => {
+                          if (!editingJudge.name.trim()) return;
+                          setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
+                          setEditingJudge(null);
+                        }}>Save</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setEditingJudge(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
                     <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
                       <div className="list-item-content">
                         <span style={{ fontSize: 13 }}>{j.name}</span>
                         {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
                       </div>
-                      <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="btn-icon" onClick={() => setEditingJudge({ id: j.id, name: j.name, club: j.club || "" })} title="Edit">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                        </button>
+                        <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
+                      </div>
                     </div>
                   ))}
 
@@ -2740,9 +2848,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                         onChange={e => setNewJudge(j => ({ ...j, name: e.target.value }))}
                         onKeyDown={e => e.key === "Enter" && addJudge(apparatus)}
                         autoFocus />
-                      <input className="input" placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
+                      <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
                         value={newJudge.club}
-                        onChange={e => setNewJudge(j => ({ ...j, club: e.target.value }))}
+                        onChange={val => setNewJudge(j => ({ ...j, club: val }))}
                         onKeyDown={e => e.key === "Enter" && addJudge(apparatus)} />
                       <button className="btn btn-sm btn-primary" onClick={() => addJudge(apparatus)}>Add</button>
                       <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", targetApparatus: "" })}>Cancel</button>
@@ -2778,10 +2886,25 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         </div>
       )}
 
+      {/* Data consent */}
+      <label style={{
+        display: "flex", alignItems: "flex-start", gap: 10, padding: "16px 18px",
+        background: data.dataConsentConfirmed ? "rgba(0,13,255,0.03)" : "var(--surface2)",
+        border: `1px solid ${data.dataConsentConfirmed ? "var(--accent)" : "var(--border)"}`,
+        borderRadius: 12, cursor: "pointer", userSelect: "none", marginBottom: 16, transition: "all 0.2s"
+      }}>
+        <input type="checkbox" checked={!!data.dataConsentConfirmed}
+          onChange={e => setData(d => ({ ...d, dataConsentConfirmed: e.target.checked }))}
+          style={{ accentColor: "var(--accent)", marginTop: 2, flexShrink: 0, width: 16, height: 16 }} />
+        <span style={{ fontSize: 13, color: "var(--text)", fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
+          I confirm I have obtained permission to enter competitor data for this event in accordance with data protection requirements.
+        </span>
+      </label>
+
       <div className="step-nav">
         <div />
         <button className="btn btn-primary" onClick={handleSaveAndExit} disabled={!canSave}>
-          {canProceed ? "Save & Continue →" : "Save & Exit →"}
+          {canProceed ? "Save & Create →" : "Save & Exit →"}
         </button>
       </div>
 
@@ -2800,9 +2923,20 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 const APPARATUS_ICONS = {
   Beam: "🤸",
   Bar: "🏋️",
+  Bars: "🏋️",
   Vault: "⚡",
   Floor: "🌟",
   Range: "🎯",
+  "Pommel Horse": "🐴",
+  Rings: "⭕",
+  "Parallel Bars": "🤸‍♂️",
+  "Horizontal Bar": "🏋️",
+};
+// Resolve icon for apparatus names like "Floor (WAG)" — strip the group suffix
+const getApparatusIcon = (name) => {
+  if (APPARATUS_ICONS[name]) return APPARATUS_ICONS[name];
+  const base = name.replace(/\s*\((WAG|MAG)\)$/, "");
+  return APPARATUS_ICONS[base] || "🏅";
 };
 
 function formatDate(dateStr) {
@@ -3059,7 +3193,7 @@ function buildJudgeSheetsHTML(compData, gymnasts) {
       html += getPrintHeader(compData, `Judge Score Sheet — ${app}`);
 
       html += `<div class="round-header" style="border-left:4px solid ${colour};">
-        <span>${round.name} · ${APPARATUS_ICONS[app] || ""} ${app}</span>
+        <span>${round.name} · ${getApparatusIcon(app)} ${app}</span>
         <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
       </div>`;
 
@@ -3658,7 +3792,7 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
           <tbody>
             ${diag.appData.map(a => {
               if (!a.scored) return `<tr style="opacity:0.4;">
-                <td>${APPARATUS_ICONS[a.app] || ""} ${a.app}</td>
+                <td>${getApparatusIcon(a.app)} ${a.app}</td>
                 <td colspan="9" style="color:#aaa;font-size:10px;">DNS</td>
               </tr>`;
 
@@ -3668,7 +3802,7 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
               const totalDelta = a.avgTotal !== null ? a.total - a.avgTotal : null;
 
               return `<tr style="${q ? `background:${q.bg};` : ""}">
-                <td style="font-weight:600;">${APPARATUS_ICONS[a.app] || ""} ${a.app}</td>
+                <td style="font-weight:600;">${getApparatusIcon(a.app)} ${a.app}</td>
                 <td style="text-align:right;">${a.dv > 0 ? a.dv.toFixed(2) : "—"}</td>
                 <td style="text-align:right;">${a.bonus > 0 ? a.bonus.toFixed(2) : "—"}</td>
                 <td style="text-align:right;">${a.eAvg > 0 ? a.eAvg.toFixed(2) : "—"}</td>
@@ -3713,7 +3847,7 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
                 const fmtVal = v => v > 0 ? v.toFixed(2) : "—";
                 const fmtAvg = v => v !== null ? v.toFixed(2) : "—";
                 return `<tr>
-                  <td style="font-weight:600;">${APPARATUS_ICONS[a.app] || ""} ${a.app}</td>
+                  <td style="font-weight:600;">${getApparatusIcon(a.app)} ${a.app}</td>
                   <td style="text-align:right;">${fmtVal(a.dv)}</td>
                   <td style="text-align:right;color:#777;">${fmtAvg(a.avgDV)}</td>
                   ${fmtDim(a.dims.dv.delta, false)}
@@ -3742,7 +3876,7 @@ function buildDiagnosticHTML(compData, gymnasts, scores) {
             ${diag.appData.filter(a => a.scored && a.advice).map(a => {
               const q = quadrantStyles[a.quadrant];
               return `<div style="flex:1;min-width:180px;border-left:3px solid ${q.border};padding:6px 10px;background:${q.bg};border-radius:0 4px 4px 0;">
-                <div style="font-size:10px;font-weight:700;margin-bottom:3px;">${APPARATUS_ICONS[a.app] || ""} ${a.app}</div>
+                <div style="font-size:10px;font-weight:700;margin-bottom:3px;">${getApparatusIcon(a.app)} ${a.app}</div>
                 <div style="font-size:10px;line-height:1.5;color:#333;">${a.advice}</div>
               </div>`;
             }).join("")}
@@ -3883,7 +4017,7 @@ function buildResultsHTML(compData, gymnasts, scores) {
     const rankGroups = buildRankGroups(round.id);
     apparatus.forEach((app, ai) => {
       if (ai > 0) html += `<div style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;"></div>`;
-      html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${APPARATUS_ICONS[app] || "🏅"} ${app}</h2>`;
+      html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${getApparatusIcon(app)} ${app}</h2>`;
 
       rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
         const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
@@ -3933,6 +4067,9 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   const [selectedClub, setSelectedClub] = useState(compData.clubs[0]?.name || "");
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [editId, setEditId] = useState(null);
+  const [editModal, setEditModal] = useState(null); // { ...gymnast fields } or null
+  const [editModalErrors, setEditModalErrors] = useState({});
+  const [editModalWarnings, setEditModalWarnings] = useState([]);
   const [pendingRemove, setPendingRemove] = useState(null);
   const [formWarnings, setFormWarnings] = useState([]);
   const [csvWarnings, setCsvWarnings] = useState({ errors: [], warns: [] });
@@ -3971,6 +4108,17 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   const allAges = [...new Set(data.map(g => g.age).filter(Boolean))];
   const allGroups = [...new Set(data.map(g => g.group).filter(Boolean))];
 
+  // Helper: pick or add a club, auto-adding to compData.clubs if new
+  const pickClub = (clubName, selectCb) => {
+    if (!clubName) return;
+    const exists = compData.clubs.some(c => c.name === clubName);
+    if (!exists) {
+      const newClub = { id: Math.random().toString(36).slice(2, 10), name: clubName };
+      setCompDataFn(d => ({ ...d, clubs: [...d.clubs, newClub] }));
+    }
+    selectCb(clubName);
+  };
+
   const validateGymnast = (g, excludeId = null) => {
     const others = data.filter(x => x.id !== excludeId);
     const warns = [];
@@ -3995,33 +4143,44 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     if (!selectedClub) errs.club = true;
     if (Object.keys(errs).length) { setFieldErrors(errs); return; }
     setFieldErrors({});
-    const warns = validateGymnast(newG, editId);
+    const warns = validateGymnast(newG);
     if (warns.length) { setFormWarnings(warns); return; }
     commit();
   };
 
   const commit = () => {
-    const gymnast = { ...newG, club: selectedClub, id: editId || generateId() };
-    if (editId) {
-      setData(d => d.map(g => g.id === editId ? gymnast : g));
-      setEditId(null);
-      setNewG(blankForm(data));
-    } else {
-      setData(d => {
-        const updated = [...d, gymnast];
-        setNewG(blankForm(updated));
-        return updated;
-      });
-    }
+    const gymnast = { ...newG, club: selectedClub, id: generateId() };
+    setData(d => {
+      const updated = [...d, gymnast];
+      setNewG(blankForm(updated));
+      return updated;
+    });
     setFormWarnings([]);
     setFieldErrors({});
   };
 
   const startEdit = (g) => {
-    setSelectedClub(g.club);
-    setEditId(g.id);
-    setNewG({ name: g.name, level: g.level, round: g.round, number: g.number, age: g.age, group: g.group });
-    setFormWarnings([]);
+    setEditModal({ id: g.id, name: g.name, level: g.level, round: g.round, number: g.number, age: g.age, group: g.group, club: g.club });
+    setEditModalErrors({});
+    setEditModalWarnings([]);
+  };
+
+  const saveEditModal = () => {
+    const em = editModal;
+    const errs = {};
+    if (!em.name?.trim()) errs.name = true;
+    if (!em.level) errs.level = true;
+    if (!em.round) errs.round = true;
+    if (!em.age?.trim()) errs.age = true;
+    if (!em.group?.trim()) errs.group = true;
+    if (!em.club) errs.club = true;
+    if (Object.keys(errs).length) { setEditModalErrors(errs); return; }
+    setEditModalErrors({});
+    const warns = validateGymnast(em, em.id);
+    if (warns.length && editModalWarnings.length === 0) { setEditModalWarnings(warns); return; }
+    setData(d => d.map(g => g.id === em.id ? { ...em } : g));
+    setEditModal(null);
+    setEditModalWarnings([]);
   };
 
   const cancelEdit = () => { setEditId(null); setNewG(blankForm()); setFormWarnings([]); setFieldErrors({}); };
@@ -4154,15 +4313,19 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
       {/* Manual Add */}
       <div className="card">
-        <div className="card-title">{editId ? "Edit Gymnast" : "Add Gymnast Manually"}</div>
+        <div className="card-title">Add Gymnast Manually</div>
         <div style={{ marginBottom: 12 }}>
           <label className="label">Club <span style={{ color: "#e53e3e" }}>*</span></label>
-          <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
-            {compData.clubs.map(c => (
-              <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
-            ))}
-          </div>
+          {compData.clubs.length > 0 && (
+            <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
+              {compData.clubs.map(c => (
+                <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
+              ))}
+            </div>
+          )}
+          <ClubPicker value="" placeholder="Search & add a club…" onSelect={name => { pickClub(name, n => { setSelectedClub(n); setFieldErrors(e => { const ne = { ...e }; delete ne.club; return ne; }); }); }} />
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Clubs can be managed in your Event Dashboard</div>
           {fieldErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
         </div>
         <div className="grid-3" style={{ marginBottom: 8 }}>
@@ -4218,8 +4381,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
         {formWarnings.length === 0 && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" onClick={attemptAdd}>{editId ? "Save Changes" : "Add Gymnast"}</button>
-            {editId && <button className="btn btn-ghost" onClick={cancelEdit}>Cancel</button>}
+            <button className="btn btn-primary" onClick={attemptAdd}>Add Gymnast</button>
           </div>
         )}
       </div>
@@ -4256,16 +4418,19 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                           <td>{g.club}</td>
                           <td>{g.age}</td>
                           <td style={{ textAlign: "center" }}>
-                            <button
-                              title={g.dns ? "Mark as competing" : "Mark as DNS (Did Not Start)"}
-                              onClick={() => setData(d => d.map(x => x.id === g.id ? { ...x, dns: !x.dns } : x))}
-                              style={{
-                                width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
-                                background: g.dns ? "var(--danger)" : "var(--surface2)",
-                                color: g.dns ? "#fff" : "var(--muted)", fontSize: 13, fontWeight: 700
-                              }}>
-                              {g.dns ? "✕" : "—"}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <button
+                                title={g.dns ? "Mark as competing" : "Mark as DNS (Did Not Start)"}
+                                onClick={() => setData(d => d.map(x => x.id === g.id ? { ...x, dns: !x.dns } : x))}
+                                style={{
+                                  width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
+                                  background: g.dns ? "var(--danger)" : "var(--surface2)",
+                                  color: g.dns ? "#fff" : "var(--muted)", fontSize: 13, fontWeight: 700,
+                                  display: "flex", alignItems: "center", justifyContent: "center"
+                                }}>
+                                {g.dns ? "✕" : "—"}
+                              </button>
+                            </div>
                           </td>
                           <td>
                             <div style={{ display: "flex", gap: 6 }}>
@@ -4290,7 +4455,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
         <div className="card">
           <div className="card-title">Apparatus Rotation Schedule</div>
           <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
-            Auto-populated with standard rotation — adjust manually if needed
+            Set the rotation for {allGroups2[0] || "Group 1"} — remaining groups cascade automatically
           </p>
           {compData.rounds.map(round => (
             <div key={round.id}>
@@ -4307,23 +4472,31 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                     </tr>
                   </thead>
                   <tbody>
-                    {allGroups2.map(group => (
+                    {allGroups2.map((group, gi) => (
                       <tr key={group}>
                         <td><strong>{group}</strong></td>
                         {compData.apparatus.map((_, i) => (
                           <td key={i}>
-                            <select className="select" style={{ padding: "4px 8px", fontSize: 12 }}
-                              value={rotations[group]?.[i] || ""}
-                              onChange={e => setRotations(r => ({
-                                ...r,
-                                [group]: Object.assign(
-                                  [...(r[group] || compData.apparatus)],
-                                  { [i]: e.target.value }
-                                )
-                              }))}>
-                              <option value="">—</option>
-                              {compData.apparatus.map(a => <option key={a} value={a}>{a}</option>)}
-                            </select>
+                            {gi === 0 ? (
+                              <select className="select" style={{ padding: "4px 8px", fontSize: 12 }}
+                                value={rotations[group]?.[i] || ""}
+                                onChange={e => {
+                                  const newBase = [...(rotations[group] || compData.apparatus)];
+                                  newBase[i] = e.target.value;
+                                  const cascaded = {};
+                                  allGroups2.forEach((g, gIdx) => {
+                                    cascaded[g] = newBase.map((_, ai) => newBase[(ai + gIdx) % newBase.length]);
+                                  });
+                                  setRotations(cascaded);
+                                }}>
+                                <option value="">—</option>
+                                {compData.apparatus.map(a => <option key={a} value={a}>{a}</option>)}
+                              </select>
+                            ) : (
+                              <span style={{ fontSize: 12, color: "var(--text)", padding: "4px 8px" }}>
+                                {rotations[group]?.[i] || "—"}
+                              </span>
+                            )}
                           </td>
                         ))}
                       </tr>
@@ -4336,12 +4509,92 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
         </div>
       )}
 
-      <div className="step-nav">
-        <button className="btn btn-secondary" onClick={onBack}>← Dashboard</button>
+      <div className="step-nav" style={{ justifyContent: "flex-end" }}>
         <button className="btn btn-primary" onClick={onNext}>
           Done — Back to Dashboard →
         </button>
       </div>
+
+      {/* Edit Gymnast Modal */}
+      {editModal && (
+        <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setEditModal(null); }}>
+          <div className="modal-box" style={{ maxWidth: 520, width: "100%", padding: 28 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Edit Gymnast</div>
+              <button onClick={() => setEditModal(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", padding: 4 }}>×</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="label">Club <span style={{ color: "#e53e3e" }}>*</span></label>
+              {compData.clubs.length > 0 && (
+                <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, ...(editModalErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
+                  {compData.clubs.map(c => (
+                    <button key={c.id} className={`btn btn-sm ${editModal.club === c.name ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => { setEditModal(m => ({ ...m, club: c.name })); setEditModalErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
+                  ))}
+                </div>
+              )}
+              <ClubPicker value="" placeholder="Search & add a club…" onSelect={name => { pickClub(name, n => { setEditModal(m => ({ ...m, club: n })); setEditModalErrors(e => { const ne = { ...e }; delete ne.club; return ne; }); }); }} />
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Clubs can be managed in your Event Dashboard</div>
+              {editModalErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
+            </div>
+            <div className="grid-3" style={{ marginBottom: 8 }}>
+              <div className="field">
+                <label className="label">Name <span style={{ color: "#e53e3e" }}>*</span></label>
+                <input className="input" value={editModal.name} style={editModalErrors.name ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, name: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.name; return n; }); }} autoFocus />
+              </div>
+              <div className="field">
+                <label className="label">Number</label>
+                <input className="input" value={editModal.number}
+                  onChange={e => setEditModal(m => ({ ...m, number: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label className="label">Level <span style={{ color: "#e53e3e" }}>*</span></label>
+                <select className="select" value={editModal.level} style={editModalErrors.level ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, level: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.level; return n; }); }}>
+                  <option value="">Select…</option>
+                  {compData.levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">Round <span style={{ color: "#e53e3e" }}>*</span></label>
+                <select className="select" value={editModal.round} style={editModalErrors.round ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, round: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.round; return n; }); }}>
+                  <option value="">Select…</option>
+                  {compData.rounds.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">Age <span style={{ color: "#e53e3e" }}>*</span></label>
+                <input className="input" list="edit-ages-list" value={editModal.age} style={editModalErrors.age ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, age: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }} />
+                <datalist id="edit-ages-list">{allAges.map(a => <option key={a} value={a} />)}</datalist>
+              </div>
+              <div className="field">
+                <label className="label">Group <span style={{ color: "#e53e3e" }}>*</span></label>
+                <input className="input" list="edit-groups-list" value={editModal.group} style={editModalErrors.group ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, group: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.group; return n; }); }} />
+                <datalist id="edit-groups-list">{allGroups.map(g => <option key={g} value={g} />)}</datalist>
+              </div>
+            </div>
+            {editModalWarnings.length > 0 && (
+              <div className="warn-box" style={{ marginBottom: 12 }}>
+                {editModalWarnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                  <button className="btn btn-warn btn-sm" onClick={() => { setData(d => d.map(g => g.id === editModal.id ? { ...editModal } : g)); setEditModal(null); setEditModalWarnings([]); }}>Save anyway</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditModalWarnings([])}>Go back</button>
+                </div>
+              </div>
+            )}
+            {editModalWarnings.length === 0 && (
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost" onClick={() => setEditModal(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveEditModal}>Save Changes</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {pendingRemove && (
         <ConfirmModal message={pendingRemove.msg} onConfirm={doRemove} onCancel={() => setPendingRemove(null)} />
@@ -4354,7 +4607,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 // ============================================================
 // PHASE 2 STEP 1 — Score Input (upgraded: sheet tracker + query flags + DNS)
 // ============================================================
-function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach }) {
+function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [queryModal, setQueryModal] = useState(null); // { gid, app }
   const [queryNote, setQueryNote] = useState("");
@@ -4708,16 +4961,31 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         </div>
         <div className="setup-topbar-right">
           {fig && <span className="setup-topbar-sync">FIG Scoring</span>}
+          {isOnline === false && (
+            <span className="setup-topbar-sync" style={{ color: "#fbbf24" }}>Offline — saved locally</span>
+          )}
+          {isOnline !== false && pendingSyncCount > 0 && syncStatus === "pending" && (
+            <button className="setup-topbar-sync" onClick={onRetrySync}
+              style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 48, padding: "3px 10px", cursor: "pointer", color: "#fbbf24" }}>
+              {pendingSyncCount} pending — retry
+            </button>
+          )}
+          {isOnline !== false && syncStatus === "saved" && (
+            <span className="setup-topbar-sync" style={{ color: "rgba(255,255,255,0.7)" }}>Saved</span>
+          )}
+          {isOnline !== false && syncStatus === "saving" && (
+            <span className="setup-topbar-sync" style={{ color: "rgba(255,255,255,0.5)" }}>Saving…</span>
+          )}
           {onSharePublic && (
             <button className="btn btn-sm" onClick={onSharePublic}
               style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
-              Share Results — Public
+              Share Live Scores — Public
             </button>
           )}
           {onShareCoach && (
             <button className="btn btn-sm" onClick={onShareCoach}
               style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
-              Share Results — Coaches
+              Share Live Scores — Coaches
             </button>
           )}
         </div>
@@ -4744,7 +5012,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                   <thead>
                     <tr>
                       <th>Group</th>
-                      {(compData.apparatus || []).map(a => <th key={a} style={{ textAlign: "center" }}>{APPARATUS_ICONS[a] || ""} {a}</th>)}
+                      {(compData.apparatus || []).map(a => <th key={a} style={{ textAlign: "center" }}>{getApparatusIcon(a)} {a}</th>)}
                       <th style={{ textAlign: "center" }}>Status</th>
                     </tr>
                   </thead>
@@ -4834,7 +5102,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                         <th>Gymnast</th>
                         <th>Club</th>
                         <th>Age</th>
-                        {compData.apparatus.map(a => <th key={a}>{APPARATUS_ICONS[a] || ""} {a}</th>)}
+                        {compData.apparatus.map(a => <th key={a}>{getApparatusIcon(a)} {a}</th>)}
                         <th>Total</th>
                         <th></th>
                       </tr>
@@ -4934,7 +5202,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
               <div className="field">
                 <label className="label">Apparatus</label>
                 <div className="input" style={{ cursor: "default", background: "var(--surface2)", color: "var(--text)", fontWeight: 600 }}>
-                  {APPARATUS_ICONS[scoreModal.app] || ""} {scoreModal.app}
+                  {getApparatusIcon(scoreModal.app)} {scoreModal.app}
                 </div>
               </div>
 
@@ -5140,7 +5408,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
           {compData.date && <span className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
           {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
         </div>
-        <div className="setup-topbar-right">
+        <div className="setup-topbar-right" style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>Export Spreadsheet</button>
           {onComplete && (
             <button className="btn btn-sm" style={{ background: "#15803d", color: "#fff", border: "none", fontWeight: 600 }}
               onClick={() => setShowCompleteConfirm(true)}>Complete Competition</button>
@@ -5729,6 +5998,9 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
   const [sortBy, setSortBy] = useState("recent");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   // Guard: track recently-patched comp IDs so syncFromSupabase won't overwrite them before the PATCH lands
   const recentPatches = useRef({});
 
@@ -5816,6 +6088,14 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [syncFromSupabase]);
 
+  // Reset select mode when leaving archived filter
+  useEffect(() => {
+    if (statusFilter !== "archived") {
+      setSelectMode(false);
+      setSelected(new Set());
+    }
+  }, [statusFilter]);
+
   const handleStatusChange = (eventId, newStatus) => {
     events.update(eventId, { status: newStatus });
     const ev = events.getAll().find(e => e.id === eventId);
@@ -5842,6 +6122,21 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
       }
     }
     events.remove(ev.id);
+    reload();
+  };
+
+  const confirmBulkDelete = async () => {
+    const { data: { session } } = await supabaseAuth.auth.getSession();
+    for (const id of selected) {
+      const ev = myEvents.find(e => e.id === id);
+      if (ev?.compId && session) {
+        await supabase.deleteCompetition(ev.compId, session.access_token);
+      }
+      events.remove(id);
+    }
+    setSelected(new Set());
+    setSelectMode(false);
+    setBulkDeleteConfirm(false);
     reload();
   };
 
@@ -5904,10 +6199,31 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
 
     const isArchived = ev.status === "archived";
     const isDraft = ev.status === "draft";
+    const isSelectable = selectMode && isArchived;
+    const isSelected = isSelectable && selected.has(ev.id);
+
+    const toggleSelect = () => {
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(ev.id)) next.delete(ev.id);
+        else next.add(ev.id);
+        return next;
+      });
+    };
 
     return (
       <div key={ev.id} className="od-card-wrap">
-        <div className={`od-card${isDraft ? " od-card-draft" : ""}`} style={{ borderLeftColor: sc.border, position: "relative" }}>
+        <div
+          className={`od-card${isDraft ? " od-card-draft" : ""}${isSelected ? " od-card-selected" : ""}`}
+          style={{ borderLeftColor: isSelected ? "var(--brand-01)" : sc.border, position: "relative", cursor: isSelectable ? "pointer" : undefined }}
+          onClick={isSelectable ? toggleSelect : undefined}
+        >
+          {/* Selection checkbox */}
+          {isSelectable && (
+            <div className="od-select-check" style={{ background: isSelected ? "var(--brand-01)" : "transparent", borderColor: isSelected ? "var(--brand-01)" : "var(--text-tertiary)" }}>
+              {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+          )}
           {/* Delete button — top right (hidden for archived since CTA handles it) */}
           {!isArchived && (
             <button onClick={() => handleDelete(ev)}
@@ -5969,39 +6285,41 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
               </div>
             </div>
           </div>
-          <div className="od-card-actions">
-            {isDraft ? (
-              <button className="od-card-btn-open" onClick={() => onOpen(ev)}
-                style={{ background: "#f59e0b" }}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
-                Finish Setup
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4l4 4-4 4"/></svg>
-              </button>
-            ) : (
-              <button className={`od-card-btn-open`} onClick={() => isArchived ? handleDelete(ev) : onOpen(ev)}
-                style={isArchived ? { background: "#e53e3e" } : ev.status === "live" ? { background: "#22c55e" } : undefined}>
-                {ev.status === "live" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>}
-                {{ active: "Open Comp", live: "Resume Comp", completed: "View Results", archived: "Delete Event" }[ev.status] || "Open Comp"}
-                {ev.status !== "live" && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(-90deg)" }}><path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              </button>
-            )}
-            <div style={{ display: "flex", gap: 8 }}>
-              {ev.status === "live" && (
-                <button className="od-card-btn-open outlined" onClick={() => onView(ev)}
-                  style={{ background: "none", border: "1.5px solid var(--border)", color: "var(--text-primary)" }}>
-                  View Comp
+          {!isSelectable && (
+            <div className="od-card-actions">
+              {isDraft ? (
+                <button className="od-card-btn-open" onClick={() => onOpen(ev)}
+                  style={{ background: "#f59e0b" }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                  Finish Setup
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4l4 4-4 4"/></svg>
+                </button>
+              ) : (
+                <button className={`od-card-btn-open`} onClick={() => isArchived ? handleDelete(ev) : onOpen(ev)}
+                  style={isArchived ? { background: "#e53e3e" } : ev.status === "live" ? { background: "#22c55e" } : undefined}>
+                  {ev.status === "live" && <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5,3 13,8 5,13"/></svg>}
+                  {{ active: "Open Comp", live: "Resume Comp", completed: "View Results", archived: "Delete Event" }[ev.status] || "Open Comp"}
+                  {ev.status !== "live" && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: "rotate(-90deg)" }}><path d="M4 6l4 4 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 </button>
               )}
-              {ev.status === "active" && (
-                <button className="od-card-btn-icon" onClick={() => onEdit(ev)} title="Edit Comp">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+              <div style={{ display: "flex", gap: 8 }}>
+                {ev.status === "live" && (
+                  <button className="od-card-btn-open outlined" onClick={() => onView(ev)}
+                    style={{ background: "none", border: "1.5px solid var(--border)", color: "var(--text-primary)" }}>
+                    View Comp
+                  </button>
+                )}
+                {ev.status === "active" && (
+                  <button className="od-card-btn-icon" onClick={() => onEdit(ev)} title="Edit Comp">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                  </button>
+                )}
+                <button className="od-card-btn-icon" onClick={() => onDuplicate(ev)} title="Duplicate">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3.5A.5.5 0 013.5 3H11"/></svg>
                 </button>
-              )}
-              <button className="od-card-btn-icon" onClick={() => onDuplicate(ev)} title="Duplicate">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3.5A.5.5 0 013.5 3H11"/></svg>
-              </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -6030,7 +6348,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         .od-card-clubs-title{font-size:12px;font-weight:600;color:var(--text-primary);line-height:1.1;margin-bottom:8px;}
         .od-card-clubs-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;}
         .od-card-clubs-item{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-tertiary);font-family:var(--font-display);}
-        .od-card-clubs-badge{width:16px;height:16px;border-radius:36px;background:var(--brand-03);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;color:var(--text-alternate);flex-shrink:0;}
+        .od-card-clubs-badge{width:18px;height:18px;border-radius:36px;background:var(--brand-01);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0;}
         .od-card-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:40px;}
         .od-card-btn-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:5px 11px;border-radius:80px;background:var(--brand-01);border:none;cursor:pointer;font-family:var(--font-display);font-size:12px;font-weight:600;color:white;letter-spacing:0.3px;}
         .od-card-btn-open:hover{opacity:0.9;}
@@ -6042,6 +6360,12 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         .od-card-draft-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);font-size:12px;color:#92600a;font-family:var(--font-display);line-height:1.4;}
         .od-card-btn-icon.danger{border:1px solid red;background:none;}
         .od-card-btn-icon.danger:hover{background:#fee;}
+        .od-select-check{position:absolute;top:12px;left:-3px;width:20px;height:20px;border-radius:50%;border:2px solid var(--text-tertiary);display:flex;align-items:center;justify-content:center;z-index:1;transition:background 0.15s,border-color 0.15s;}
+        .od-card-selected{background:rgba(0,13,255,0.03)!important;}
+        .od-bulk-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:48px;border:1.5px solid var(--border);background:var(--background-light);font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);cursor:pointer;white-space:nowrap;}
+        .od-bulk-btn:hover{background:#f0f0f0;}
+        .od-bulk-btn-danger{background:#e53e3e;color:white;border-color:#e53e3e;}
+        .od-bulk-btn-danger:hover{background:#c53030;}
         .od-empty-box{flex:1;min-height:322px;border:1px dashed #080808;background:#f2f2f2;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:16px 18px;}
         .od-empty-box-btn{padding:16px 32px;border-radius:56px;background:var(--brand-01);border:none;cursor:pointer;font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--text-alternate);}
         .od-empty-box-btn:hover{opacity:0.92;}
@@ -6093,12 +6417,34 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         <div className="od-content">
           {/* Filter pill + sort toggle row */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: myEvents.length > 0 ? -8 : 0 }}>
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {statusFilter !== "all" && (
                 <button className="od-active-filter" style={{ marginBottom: 0 }} onClick={() => setStatusFilter("all")}>
                   {sidebarFilters.find(f => f.value === statusFilter)?.label || statusFilter}
                   <span className="od-active-filter-x">✕</span>
                 </button>
+              )}
+              {statusFilter === "archived" && filtered.length > 0 && (
+                <>
+                  <button className="od-bulk-btn" onClick={() => { if (selectMode) { setSelectMode(false); setSelected(new Set()); } else { setSelectMode(true); } }}>
+                    {selectMode ? "Cancel" : "Select"}
+                  </button>
+                  {selectMode && (
+                    <>
+                      <button className="od-bulk-btn" onClick={() => {
+                        const archivedIds = filtered.map(e => e.id);
+                        setSelected(prev => prev.size === archivedIds.length ? new Set() : new Set(archivedIds));
+                      }}>
+                        {selected.size === filtered.length ? "Deselect All" : "Select All"}
+                      </button>
+                      {selected.size > 0 && (
+                        <button className="od-bulk-btn od-bulk-btn-danger" onClick={() => setBulkDeleteConfirm(true)}>
+                          Delete ({selected.size})
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </div>
             {myEvents.length > 1 && (
@@ -6192,6 +6538,15 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
           onCancel={() => setDeleteConfirm(null)}
         />
       )}
+      {bulkDeleteConfirm && (
+        <ConfirmModal
+          message={`Permanently delete ${selected.size} archived event${selected.size === 1 ? "" : "s"}? This cannot be undone.`}
+          confirmLabel={`Delete ${selected.size} event${selected.size === 1 ? "" : "s"}`}
+          isDanger={true}
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setBulkDeleteConfirm(false)}
+        />
+      )}
     </>
   );
 }
@@ -6212,7 +6567,8 @@ function AccountSettingsModal({ account, profile, onSave, onLogout, onClose }) {
     if (!fullName.trim()) { setError("Name cannot be empty."); return; }
     setSaving(true);
     const { data: { session } } = await supabaseAuth.auth.getSession();
-    const token = session?.access_token ?? SUPABASE_KEY;
+    if (!session) { setError("Session expired — please sign in again."); setSaving(false); return; }
+    const token = session.access_token;
     const updated = { id: account.id, full_name: fullName.trim(), club_name: clubName.trim(), location: location.trim() };
     const { error: err } = await supabase.upsertProfile(updated, token);
     setSaving(false);
@@ -6506,10 +6862,10 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
     <>
       <div style={{ marginBottom: 32 }}>
         <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--muted)", marginBottom: 14, fontFamily: "var(--font-display)" }}>
-          Club Submissions
+          Gymnast Submissions
         </div>
         <div
-          title={!enabled ? "Enable Club Submissions in Setup to use this feature" : undefined}
+          title={!enabled ? "Enable Gymnast Submissions in Setup to use this feature" : undefined}
           style={{
             background: "var(--background-light)", border: "1px solid var(--border)", borderRadius: 16, padding: "24px 28px",
             position: "relative",
@@ -6571,7 +6927,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap"
           }}>
             <div style={{ fontSize: 13, color: "#664d03", fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
-              Club Submissions is currently disabled. Enable it in <strong>Setup</strong> to allow clubs to submit gymnast lists.
+              Gymnast Submissions is currently disabled. Enable it in <strong>Setup</strong> to allow clubs to submit gymnast lists.
             </div>
             <button onClick={() => setShowDisabledWarning(false)} style={{
               flexShrink: 0, padding: "6px 14px", borderRadius: 56, border: "1px solid #c9a706", background: "none",
@@ -6597,12 +6953,13 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   );
 }
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus, onUpdateCompData }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
   const [showSubmReview, setShowSubmReview] = useState(false);
   const [pendingCount, setPendingCount] = useState(null);
   const [topbarHidden, setTopbarHidden] = useState(false);
+  const [newClubName, setNewClubName] = useState("");
   const lastScrollY = useRef(0);
 
   const inSandbox = typeof window !== "undefined" &&
@@ -6667,6 +7024,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const competingGymnasts = gymnasts.filter(g => !g.dns);
   const dnsGymnasts = gymnasts.filter(g => !!g.dns);
   const colour = compData.brandColour || "#000dff";
+  const completed = eventStatus === "completed";
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
   const coachUrl = `${origin}/coach.html?comp=${compId}`;
@@ -6715,26 +7073,32 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             {compData.location && <div className="setup-topbar-meta">{compData.location}</div>}
           </div>
           <div className="setup-topbar-right" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={onEditSetup} style={{
-              padding: "7px 18px", borderRadius: 56, border: "1.5px solid rgba(255,255,255,0.3)", background: "none",
-              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "var(--text-alternate)"
-            }}>
-              Edit Setup
-            </button>
-            <button
-              onClick={canStart ? onStartComp : undefined}
-              disabled={!canStart}
-              title={!canStart ? `${[!hasGymnasts && "Add gymnasts", !hasJudges && "Add judges", !allGymnastsComplete && "Complete incomplete gymnast data"].filter(Boolean).join(", ")} to start` : undefined}
-              style={{
-                padding: "7px 18px", borderRadius: 56, border: "none",
-                background: canStart ? (eventStatus === "live" ? "#22c55e" : "rgba(255,255,255,0.95)") : "rgba(255,255,255,0.2)",
-                cursor: canStart ? "pointer" : "not-allowed",
-                fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
-                color: canStart ? (eventStatus === "live" ? "#fff" : "var(--brand-01)") : "rgba(255,255,255,0.5)"
-              }}
-            >
-              {eventStatus === "live" ? "Resume Competition →" : "Start Competition →"}
-            </button>
+            {completed ? (
+              <div style={{ padding: "7px 18px", borderRadius: 56, background: "rgba(255,255,255,0.15)", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "var(--text-alternate)", letterSpacing: 0.5 }}>
+                Completed
+              </div>
+            ) : (<>
+              <button onClick={onEditSetup} style={{
+                padding: "7px 18px", borderRadius: 56, border: "1.5px solid rgba(255,255,255,0.3)", background: "none",
+                cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "var(--text-alternate)"
+              }}>
+                Edit Setup
+              </button>
+              <button
+                onClick={canStart ? onStartComp : undefined}
+                disabled={!canStart}
+                title={!canStart ? `${[!hasGymnasts && "Add gymnasts", !hasJudges && "Add judges", !allGymnastsComplete && "Complete incomplete gymnast data"].filter(Boolean).join(", ")} to start` : undefined}
+                style={{
+                  padding: "7px 18px", borderRadius: 56, border: "none",
+                  background: canStart ? (eventStatus === "live" ? "#22c55e" : "rgba(255,255,255,0.95)") : "rgba(255,255,255,0.2)",
+                  cursor: canStart ? "pointer" : "not-allowed",
+                  fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
+                  color: canStart ? (eventStatus === "live" ? "#fff" : "var(--brand-01)") : "rgba(255,255,255,0.5)"
+                }}
+              >
+                {eventStatus === "live" ? "Resume Competition →" : "Start Competition →"}
+              </button>
+            </>)}
           </div>
       </div>
 
@@ -6757,6 +7121,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             </span>}
           </div>
         </div>
+
+        {completed && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "var(--radius)", marginBottom: 24, fontSize: 13, color: "#166534", fontWeight: 600 }}>
+            <span style={{ fontSize: 16 }}>✓</span>
+            This competition has been completed. The dashboard is view-only.
+          </div>
+        )}
 
         {/* ── COMPETITION DETAILS — ROUNDS ─────────────────────────── */}
         {compData.rounds.length > 0 && (
@@ -6799,13 +7170,79 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           {statCard("Apparatus", compData.apparatus.length)}
         </div>
 
+        {/* ── CLUBS SECTION ──────────────────────────────────────── */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+            Clubs
+          </div>
+          {(compData.clubs || []).length > 0 ? (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "16px 18px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: !completed ? 12 : 0 }}>
+                {compData.clubs.map(c => (
+                  <div key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", background: "var(--surface2)", borderRadius: 56, fontSize: 13, fontWeight: 500 }}>
+                    <span>{c.name}</span>
+                    {!completed && (
+                      <button onClick={() => onUpdateCompData(d => ({ ...d, clubs: d.clubs.filter(cl => cl.id !== c.id) }))}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!completed && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <ClubPicker placeholder="Add a club…" style={{ flex: 1 }}
+                    value={newClubName}
+                    onChange={val => setNewClubName(val)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && newClubName.trim()) {
+                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                        setNewClubName("");
+                      }
+                    }} />
+                  <button className="btn btn-sm btn-primary" onClick={() => {
+                    if (!newClubName.trim()) return;
+                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                    setNewClubName("");
+                  }}>Add</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "32px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>🏟️</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No clubs added{completed ? "" : " yet"}</div>
+              {!completed && (<>
+                <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, maxWidth: 400, margin: "0 auto 16px" }}>
+                  Add participating clubs so gymnasts can be assigned to them.
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", maxWidth: 400, margin: "0 auto" }}>
+                  <ClubPicker placeholder="Search clubs…" style={{ flex: 1 }}
+                    value={newClubName}
+                    onChange={val => setNewClubName(val)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && newClubName.trim()) {
+                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                        setNewClubName("");
+                      }
+                    }} />
+                  <button className="btn btn-sm btn-primary" onClick={() => {
+                    if (!newClubName.trim()) return;
+                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                    setNewClubName("");
+                  }}>Add</button>
+                </div>
+              </>)}
+            </div>
+          )}
+        </div>
+
         {/* ── GYMNASTS SECTION ───────────────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
             Gymnasts
           </div>
           {/* Submissions bar */}
-          {compData.allowSubmissions && compId && (
+          {!completed && compData.allowSubmissions && compId && (
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
               padding: "14px 18px", background: "var(--surface)", border: "1px solid var(--border)",
@@ -6826,7 +7263,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               </button>
             </div>
           )}
-          {incompleteGymnasts.length > 0 && (
+          {!completed && incompleteGymnasts.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", background: "#fef3c7", border: "1px solid #f59e0b44", borderRadius: "var(--radius)", marginBottom: 12, fontSize: 13, color: "#92400e", fontWeight: 600 }}>
               <span style={{ fontSize: 16 }}>⚠</span>
               {incompleteGymnasts.length} gymnast{incompleteGymnasts.length !== 1 ? "s" : ""} have incomplete data — fill in all fields before starting
@@ -6859,6 +7296,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </div>
                 );
               })}
+              {!completed && (
               <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button onClick={onManageGymnasts} style={{
@@ -6893,6 +7331,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </button>
                 )}
               </div>
+              )}
             </div>
           {dnsGymnasts.length > 0 && (
             <div style={{ marginTop: 16, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden", opacity: 0.7 }}>
@@ -6916,12 +7355,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </>) : (
             <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center" }}>
               <div style={{ fontSize: 44, marginBottom: 14 }}>🤸</div>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No gymnasts added yet</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No gymnasts added{completed ? "" : " yet"}</div>
+              {!completed && (<>
               <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
                 You need to add gymnasts before the competition can start. Add them manually or share the submission link so clubs can send their own lists.
               </div>
               <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-                <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: colour, color: "#fff" }}
+                <button className="btn btn-primary" style={{ fontSize: 14, padding: "12px 24px", background: "var(--brand-01)", color: "var(--text-alternate)" }}
                   onClick={onManageGymnasts}>
                   + Add Gymnasts Manually
                 </button>
@@ -6950,6 +7390,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </button>
                 </div>
               )}
+              </>)}
             </div>
           )}
         </div>
@@ -6979,6 +7420,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   </div>
                 );
               })}
+              {!completed && (
               <div style={{ padding: "12px 16px" }}>
                 <button onClick={onEditSetup} style={{
                   display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
@@ -6988,21 +7430,24 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   + Manage Judges
                 </button>
               </div>
+              )}
             </div>
           ) : (
             <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center" }}>
               <div style={{ fontSize: 44, marginBottom: 14 }}>⚖️</div>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No judges added yet</div>
-              <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
-                Add judges in Setup before starting the competition. This ensures your score sheets and judge assignments are accurate.
-              </div>
-              <button onClick={() => { onEditSetup(); setTimeout(() => document.getElementById("setup-judges")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "12px 24px", borderRadius: 56,
-                background: colour, color: "#fff", border: "none", cursor: "pointer",
-                fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600
-              }}>
-                + Add Judges in Setup
-              </button>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No judges added{completed ? "" : " yet"}</div>
+              {!completed && (<>
+                <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
+                  Add judges in Setup before starting the competition. This ensures your score sheets and judge assignments are accurate.
+                </div>
+                <button onClick={() => { onEditSetup(); setTimeout(() => document.getElementById("setup-judges")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} style={{
+                  display: "inline-flex", alignItems: "center", gap: 6, padding: "12px 24px", borderRadius: 56,
+                  background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
+                  fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600
+                }}>
+                  + Add Judges in Setup
+                </button>
+              </>)}
             </div>
           )}
         </div>
@@ -7054,6 +7499,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         )}
 
         {/* ── START CTA ─────────────────────────────────────────── */}
+        {!completed && (
         <div style={{ background: canStart ? (eventStatus === "live" ? "#22c55e12" : `${colour}12`) : "var(--surface)", border: `1px solid ${canStart ? (eventStatus === "live" ? "#22c55e33" : colour + "33") : "var(--border)"}`, borderRadius: "var(--radius)", padding: "28px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
@@ -7081,6 +7527,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             )}
           </div>
         </div>
+        )}
 
         {/* ── COMP ID + PIN ─────────────────────────────────────── */}
         {compId && (
@@ -7103,7 +7550,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               <div style={{ fontSize: 13, color: compPin ? "var(--success)" : "var(--muted)", marginBottom: 6 }}>
                 {compPin ? "🔒 PIN set" : "🔓 No PIN"}
               </div>
-              {onSetPin && (
+              {onSetPin && !completed && (
                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 10 }} onClick={onSetPin}>
                   {compPin ? "Change PIN" : "Set PIN"}
                 </button>
@@ -7470,7 +7917,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
         {/* Header */}
         <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 18 }}>Club Submissions</div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Gymnast Submissions</div>
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
               {pending.length} pending · {accepted.length} accepted
             </div>
@@ -7623,9 +8070,14 @@ function HomeScreen({ onNew, onResume }) {
     }
   };
 
-  const handlePinSubmit = () => {
+  const handlePinSubmit = async () => {
     if (!fetchedData) return;
-    if (fetchedData.pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
+    const storedPin = fetchedData.pin;
+    // Legacy plaintext PINs: compare directly; hashed PINs: hash input first
+    const match = isHashed(storedPin)
+      ? storedPin === await hashPin(resumePin)
+      : storedPin === resumePin;
+    if (!match) { setResumeError("Incorrect PIN."); return; }
     onResume(resumeId.trim(), fetchedData);
   };
 
@@ -7734,10 +8186,13 @@ function JudgePinModal({ onResume, onClose }) {
   };
 
   // Step 2: verify PIN
-  const handlePinSubmit = () => {
+  const handlePinSubmit = async () => {
     if (!fetchedData) return;
-    const pin = fetchedData.pin;
-    if (pin !== resumePin) { setResumeError("Incorrect PIN."); return; }
+    const storedPin = fetchedData.pin;
+    const match = isHashed(storedPin)
+      ? storedPin === await hashPin(resumePin)
+      : storedPin === resumePin;
+    if (!match) { setResumeError("Incorrect PIN."); return; }
     onResume(resumeId.trim(), fetchedData);
   };
 
@@ -7852,10 +8307,10 @@ function PinSetupModal({ onSet, onSkip }) {
   const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState("");
 
-  const handleSet = () => {
+  const handleSet = async () => {
     if (!/^\d{4}$/.test(pin)) { setErr("PIN must be exactly 4 digits."); return; }
     if (pin !== confirm) { setErr("PINs don't match."); return; }
-    onSet(pin);
+    onSet(await hashPin(pin));
   };
 
   return (
@@ -7913,7 +8368,8 @@ function PinSetupModal({ onSet, onSkip }) {
 // PRINT / PDF EXPORT
 // ============================================================
 function exportResultsPDF(compData, gymnasts, scores) {
-  const APPARATUS_ICONS_PLAIN = { Beam:"🤸", Bar:"🏋️", Vault:"⚡", Floor:"🌟", Range:"🎯" };
+  const APPARATUS_ICONS_PLAIN = { Beam:"🤸", Bar:"🏋️", Bars:"🏋️", Vault:"⚡", Floor:"🌟", Range:"🎯", "Pommel Horse":"🐴", Rings:"⭕", "Parallel Bars":"🤸‍♂️", "Horizontal Bar":"🏋️" };
+  const getPlainIcon = (name) => APPARATUS_ICONS_PLAIN[name] || APPARATUS_ICONS_PLAIN[name.replace(/\s*\((WAG|MAG)\)$/, "")] || "";
 
   const getScore = (roundId, gid, app) => {
     const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
@@ -7960,7 +8416,7 @@ function exportResultsPDF(compData, gymnasts, scores) {
       const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
       const dns = withTotals.filter(g => g.total === 0);
 
-      const appHeaders = compData.apparatus.map(a => `<th>${APPARATUS_ICONS_PLAIN[a] || ""} ${a}</th>`).join("");
+      const appHeaders = compData.apparatus.map(a => `<th>${getPlainIcon(a)} ${a}</th>`).join("");
 
       body += `<table><thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>${appHeaders}<th>Total</th></tr></thead><tbody>`;
       [...ranked, ...dns.map(g=>({...g,rank:null}))].forEach(g => {
@@ -8006,6 +8462,140 @@ ${body}
 </body></html>`;
 
   generatePDF(html, "gymcomp-results.pdf");
+}
+
+// ============================================================
+// XLSX SPREADSHEET EXPORT
+// ============================================================
+function exportResultsXLSX(compData, gymnasts, scores) {
+  const getScore = (roundId, gid, app) => {
+    const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
+    return isNaN(v) ? 0 : v;
+  };
+  const getTotal = (roundId, gid) => compData.apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const denseRankLocal = (items, key) => {
+    const sorted = [...items].sort((a, b) => b[key] - a[key]);
+    const result = [];
+    let rank = 1;
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank++;
+      result.push({ ...sorted[i], rank });
+    }
+    return result;
+  };
+
+  const fig = !!compData.useDEScoring;
+  const judgeCount = (app) => (compData.judges || []).filter(j => j.apparatus === app).length;
+
+  // ── Sheet 1: Results ──
+  const resultsRows = [];
+  resultsRows.push([compData.name || "Competition Results"]);
+  const dateFmt = compData.date
+    ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+    : "";
+  resultsRows.push([[dateFmt, compData.location, compData.holder].filter(Boolean).join("  ·  ")]);
+  resultsRows.push([]);
+
+  compData.rounds.forEach(round => {
+    const roundGymnasts = gymnasts.filter(g => g.round === round.id);
+    const map = {};
+    roundGymnasts.forEach(g => {
+      const levelObj = compData.levels.find(l => l.id === g.level);
+      const levelName = levelObj?.name || "Unknown";
+      const rankBy = levelObj?.rankBy || "level";
+      const ageLabel = rankBy === "level+age" ? (g.age || "") : "";
+      const key = `${levelName}|||${ageLabel}`;
+      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
+      map[key].gymnasts.push(g);
+    });
+
+    resultsRows.push([`${round.name}  ·  ${round.start} – ${round.end}`]);
+    const appHeaders = compData.apparatus;
+    const header = ["Position", "#", "Gymnast", "Club", "Age Category", ...appHeaders, "Total"];
+    resultsRows.push(header);
+
+    Object.values(map).sort((a, b) => (a.levelName + a.ageLabel).localeCompare(b.levelName + b.ageLabel)).forEach(({ levelName, ageLabel, gymnasts: glist }) => {
+      const label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+      resultsRows.push([label]);
+
+      const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
+      const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
+      const dns = withTotals.filter(g => g.total === 0);
+
+      [...ranked, ...dns.map(g => ({ ...g, rank: null }))].forEach(g => {
+        const appScores = compData.apparatus.map(a => {
+          const s = getScore(round.id, g.id, a);
+          return s > 0 ? parseFloat(s.toFixed(2)) : "";
+        });
+        resultsRows.push([
+          g.rank === null ? "DNS" : g.rank,
+          g.number || "",
+          g.name,
+          g.club || "",
+          ageLabel || "",
+          ...appScores,
+          g.total > 0 ? parseFloat(g.total.toFixed(2)) : ""
+        ]);
+      });
+      resultsRows.push([]);
+    });
+  });
+
+  // ── Sheet 2: Raw Scores ──
+  const rawRows = [];
+  const maxJudges = fig ? Math.max(1, ...compData.apparatus.map(a => judgeCount(a))) : 0;
+  const rawHeader = ["#", "Gymnast", "Round", "Apparatus"];
+  if (fig) {
+    rawHeader.push("D Score");
+    for (let i = 1; i <= maxJudges; i++) rawHeader.push(`E Judge ${i}`);
+    rawHeader.push("Avg E", "Bonus", "Penalty");
+  }
+  rawHeader.push("Final Score");
+  rawRows.push(rawHeader);
+
+  compData.rounds.forEach(round => {
+    const roundGymnasts = gymnasts.filter(g => g.round === round.id);
+    roundGymnasts.sort((a, b) => (a.number || "").localeCompare(b.number || "", undefined, { numeric: true }));
+    roundGymnasts.forEach(g => {
+      compData.apparatus.forEach(app => {
+        const finalScore = getScore(round.id, g.id, app);
+        if (finalScore === 0 && !fig) return;
+        const row = [g.number || "", g.name, round.name, app];
+        if (fig) {
+          const bk = `${round.id}__${g.id}__${app}`;
+          const dv = parseFloat(scores[`${bk}__dv`]) || 0;
+          row.push(dv || "");
+          const n = judgeCount(app);
+          let eSum = 0, eCount = 0;
+          for (let i = 1; i <= maxJudges; i++) {
+            if (i <= Math.max(n, 1)) {
+              const v = parseFloat(scores[`${bk}__e${i}`]);
+              if (!isNaN(v)) { eSum += (10 - v); eCount++; row.push(v); }
+              else row.push("");
+            } else {
+              row.push("");
+            }
+          }
+          const eAvg = eCount > 0 ? parseFloat((eSum / eCount).toFixed(3)) : "";
+          const bon = parseFloat(scores[`${bk}__bon`]) || "";
+          const pen = parseFloat(scores[`${bk}__pen`]) || "";
+          row.push(eAvg, bon, pen);
+        }
+        row.push(finalScore > 0 ? parseFloat(finalScore.toFixed(2)) : "");
+        rawRows.push(row);
+      });
+    });
+  });
+
+  // ── Build workbook ──
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(resultsRows);
+  const ws2 = XLSX.utils.aoa_to_sheet(rawRows);
+  XLSX.utils.book_append_sheet(wb, ws1, "Results");
+  XLSX.utils.book_append_sheet(wb, ws2, "Raw Scores");
+
+  const filename = `${(compData.name || "competition").replace(/[^a-zA-Z0-9]/g, "_")}_results.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
 
 // ============================================================
@@ -8120,7 +8710,7 @@ function MCMode({ compData, gymnasts, scores }) {
           {compData.apparatus.map(a => (
             <button key={a} className={`btn btn-sm ${view === "apparatus" && activeApparatus === a ? "btn-primary" : "btn-secondary"}`}
               onClick={() => { setView("apparatus"); setActiveApparatus(a); setCurrentIdx(0); }}>
-              {APPARATUS_ICONS[a] || "🏅"} {a}
+              {getApparatusIcon(a)} {a}
             </button>
           ))}
         </div>
@@ -8356,6 +8946,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
           {/* ── active / dashboard ── */}
           {screen === "active" && phase === "dashboard" && (<>
             <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            {eventStatus !== "completed" && (<>
             <div className="as-divider" />
             <NavItem icon={icons.edit} label="Edit Setup" onClick={onEditSetup} />
             <NavItem icon={icons.users} label="Manage Gymnasts" onClick={onManageGymnasts} />
@@ -8369,6 +8960,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
                 </div>
               );
             })()}
+            </>)}
           </>)}
 
           {/* ── active / gymnasts ── */}
@@ -8437,7 +9029,7 @@ function MobileLogoHeader({ onGoHome }) {
 // ============================================================
 // MOBILE TAB BAR
 // ============================================================
-function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onSave, saveLabel }) {
+function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onSave, saveLabel, eventStatus }) {
   const icons = {
     plus: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>,
     account: <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="5" r="3"/><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>,
@@ -8477,12 +9069,14 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
 
       {screen === "active" && phase === "dashboard" && (<>
         <Tab icon={icons.home} label="My Events" onClick={onMyEvents} />
-        <D />
-        <Tab icon={icons.edit} label="Edit" onClick={onEditSetup} />
-        <D />
-        <Tab icon={icons.users} label="Gymnasts" onClick={onManageGymnasts} />
-        <D />
-        <Tab icon={icons.play} label="Start" onClick={onStartComp} />
+        {eventStatus !== "completed" && (<>
+          <D />
+          <Tab icon={icons.edit} label="Edit" onClick={onEditSetup} />
+          <D />
+          <Tab icon={icons.users} label="Gymnasts" onClick={onManageGymnasts} />
+          <D />
+          <Tab icon={icons.play} label="Start" onClick={onStartComp} />
+        </>)}
       </>)}
 
       {screen === "active" && phase === "gymnasts" && (<>
@@ -8541,13 +9135,17 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState(null);
   const [showShareToast, setShowShareToast] = useState(false);
+  const [shareToastType, setShareToastType] = useState("public");
   const [showCompId, setShowCompId] = useState(false);
   const syncTimer = useRef(null);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [pendingSyncCount, setPendingSyncCount] = useState(() => syncQueue.size());
+  const flushingRef = useRef(false);
 
   const [compData, setCompDataRaw] = useState({
     name: "", location: "", date: "", holder: "",
     organiserName: "", venue: "", brandColour: "#000dff", logo: "",
-    useDEScoring: false, allowSubmissions: false,
+    useDEScoring: false, allowSubmissions: false, dataConsentConfirmed: false,
     clubs: [], rounds: [], apparatus: [], levels: [], judges: []
   });
   const [gymnasts, setGymnasts] = useState([]);
@@ -8604,28 +9202,81 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- Supabase sync ----
+  // ---- Supabase sync (with offline queue) ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin, status) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     if (!currentUser) { console.error("pushToSupabase: no authenticated user"); setSyncStatus("error"); return; }
     setSyncStatus("saving");
+    const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
+    const record = { id: compId, data: payload, user_id: currentUser.id };
+    const localEv = events.getAll().find(e => e.compId === compId);
+    record.status = status || localEv?.status || "draft";
     try {
       const { data: { session } } = await supabaseAuth.auth.getSession();
-      if (!session) { console.error("pushToSupabase: no active session"); setSyncStatus("error"); return; }
+      if (!session) throw new Error("no active session");
       const token = session.access_token;
-      const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
-      const record = { id: compId, data: payload, user_id: currentUser.id };
-      // Always include status — use explicit param, or look up from local events by compId (not currentEventId which may be stale in closure)
-      const localEv = events.getAll().find(e => e.compId === compId);
-      record.status = status || localEv?.status || "draft";
       const { error } = await supabase.upsert("competitions", record, token);
       if (error) throw new Error(error);
+      // Success — clear any queued entry for this comp
+      syncQueue.clear(compId);
+      setPendingSyncCount(syncQueue.size());
       setSyncStatus("saved");
     } catch (e) {
-      console.error("Supabase sync failed:", e.message);
-      setSyncStatus("error");
+      console.error("Supabase sync failed, queuing locally:", e.message);
+      syncQueue.push(record);
+      setPendingSyncCount(syncQueue.size());
+      setSyncStatus("pending");
     }
   }, [compId, compPin, inSandbox, currentUser]);
+
+  // Flush all queued syncs — called when back online
+  const flushSyncQueue = useCallback(async () => {
+    if (flushingRef.current) return;
+    const queue = syncQueue.get();
+    if (queue.length === 0) return;
+    flushingRef.current = true;
+    setSyncStatus("saving");
+    try {
+      const { data: { session } } = await supabaseAuth.auth.getSession();
+      if (!session) { flushingRef.current = false; return; }
+      const token = session.access_token;
+      const remaining = [];
+      for (const entry of queue) {
+        try {
+          const { error } = await supabase.upsert("competitions", entry.record, token);
+          if (error) throw new Error(error);
+        } catch {
+          remaining.push(entry);
+        }
+      }
+      syncQueue.save(remaining);
+      setPendingSyncCount(remaining.length);
+      setSyncStatus(remaining.length > 0 ? "pending" : "saved");
+    } catch {
+      setSyncStatus("pending");
+    }
+    flushingRef.current = false;
+  }, []);
+
+  // Online/offline detection + auto-flush
+  useEffect(() => {
+    const goOnline = () => { setIsOnline(true); flushSyncQueue(); };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    // Also try to flush on mount if there's a pending queue
+    if (navigator.onLine && syncQueue.size() > 0) flushSyncQueue();
+    return () => { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, [flushSyncQueue]);
+
+  // Also flush when tab regains focus (catches cases where online event was missed)
+  useEffect(() => {
+    const handleVis = () => {
+      if (document.visibilityState === "visible" && navigator.onLine && syncQueue.size() > 0) flushSyncQueue();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => document.removeEventListener("visibilitychange", handleVis);
+  }, [flushSyncQueue]);
 
   const scheduleSync = useCallback((cd, g, s) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
@@ -8718,7 +9369,7 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
     setGymnasts([]);
     setScores({});
     setPhase(1); setStep(1);
@@ -8736,12 +9387,13 @@ export default function App() {
   };
 
   // Open an existing event from the organiser dashboard
-  const handleOpenEvent = (ev) => {
+  const handleOpenEvent = async (ev) => {
     const snapshot = ev.snapshot;
     if (snapshot) {
       setCompId(ev.compId);
-      setCompPin(snapshot.compData?.pin || null);
-      setCompDataRaw(snapshot.compData || {});
+      const rawPin = snapshot.compData?.pin || null;
+      setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
       setGymnasts(snapshot.gymnasts || []);
       setScores(snapshot.scores || {});
       // Draft events open in edit mode; live opens into competition; others to dashboard
@@ -8754,7 +9406,7 @@ export default function App() {
       // No snapshot yet — start fresh setup
       setCompId(ev.compId);
       setCompPin(null);
-      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
       setGymnasts([]);
       setScores({});
       setPhase(1); setStep(1);
@@ -8766,19 +9418,20 @@ export default function App() {
   };
 
   // Open an existing event directly into edit mode (phase 1)
-  const handleEditEvent = (ev) => {
+  const handleEditEvent = async (ev) => {
     const snapshot = ev.snapshot;
     if (snapshot) {
       setCompId(ev.compId);
-      setCompPin(snapshot.compData?.pin || null);
-      setCompDataRaw(snapshot.compData || {});
+      const rawPin = snapshot.compData?.pin || null;
+      setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
       setGymnasts(snapshot.gymnasts || []);
       setScores(snapshot.scores || {});
       setSyncStatus("saved");
     } else {
       setCompId(ev.compId);
       setCompPin(null);
-      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
       setGymnasts([]);
       setScores({});
       setSyncStatus("idle");
@@ -8789,12 +9442,13 @@ export default function App() {
   };
 
   // Open an existing event into the dashboard overview (comp details + PDFs)
-  const handleViewEvent = (ev) => {
+  const handleViewEvent = async (ev) => {
     const snapshot = ev.snapshot;
     if (snapshot) {
       setCompId(ev.compId);
-      setCompPin(snapshot.compData?.pin || null);
-      setCompDataRaw(snapshot.compData || {});
+      const rawPin = snapshot.compData?.pin || null;
+      setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+      setCompDataRaw({ ...(snapshot.compData || {}), dataConsentConfirmed: false });
       setGymnasts(snapshot.gymnasts || []);
       setScores(snapshot.scores || {});
       setSyncStatus("saved");
@@ -8812,8 +9466,8 @@ export default function App() {
     setCompPin(null);
     // Copy comp setup but clear date and reset gymnasts/scores
     const baseData = snapshot?.compData
-      ? { ...snapshot.compData, name: `${snapshot.compData.name || "Competition"} (Copy)`, date: "", gymnasts: [], judges: [] }
-      : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+      ? { ...snapshot.compData, name: `${snapshot.compData.name || "Competition"} (Copy)`, date: "", dataConsentConfirmed: false, gymnasts: [], judges: [] }
+      : { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     setCompDataRaw(baseData);
     setGymnasts([]);
     setScores({});
@@ -8862,8 +9516,9 @@ export default function App() {
   };
 
   const setupCanProceed = compData.name && compData.date &&
-    (compData.clubs || []).length > 0 && (compData.rounds || []).length > 0 &&
-    (compData.apparatus || []).length > 0 && (compData.levels || []).length > 0;
+    (compData.rounds || []).length > 0 &&
+    (compData.apparatus || []).length > 0 && (compData.levels || []).length > 0 &&
+    compData.dataConsentConfirmed;
   const setupCanSave = !!compData.name;
 
   const handleMobileSave = () => {
@@ -8948,9 +9603,10 @@ export default function App() {
   }, [screen, phase]);
 
   // ---- Resume competition (PIN-only path for judges / no-account users) ----
-  const handleResume = (id, savedData) => {
+  const handleResume = async (id, savedData) => {
     setCompId(id);
-    setCompPin(savedData.pin || null);
+    const rawPin = savedData.pin || null;
+    setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
     setCompDataRaw(savedData.compData || {});
     setGymnasts(savedData.gymnasts || []);
     setScores(savedData.scores || {});
@@ -8968,6 +9624,7 @@ export default function App() {
     const url = `${window.location.origin}/results.html?comp=${compId}`;
     setShareUrl(url);
     try { await navigator.clipboard.writeText(url); } catch {}
+    setShareToastType("public");
     setShowShareToast(true);
     setTimeout(() => setShowShareToast(false), 4000);
   };
@@ -8977,6 +9634,7 @@ export default function App() {
     const url = `${window.location.origin}/coach.html?comp=${compId}`;
     setShareUrl(url);
     try { await navigator.clipboard.writeText(url); } catch {}
+    setShareToastType("coaches");
     setShowShareToast(true);
     setTimeout(() => setShowShareToast(false), 4000);
   };
@@ -8988,8 +9646,8 @@ export default function App() {
     { label: "MC Mode", done: false },
   ];
 
-  const syncDot = { idle:null, saving:"🟡", saved:"🟢", error:"🔴", sandbox:"⚪" }[syncStatus];
-  const syncLabel = { idle:"", saving:"Saving…", saved:"Saved ✓", error:"Sync error", sandbox:"Preview mode" }[syncStatus];
+  const syncDot = { idle:null, saving:"🟡", saved:"🟢", error:"🔴", pending:"🟠", sandbox:"⚪" }[syncStatus];
+  const syncLabel = { idle:"", saving:"Saving…", saved:"Saved ✓", error:"Sync error", pending:`${pendingSyncCount} pending`, sandbox:"Preview mode" }[syncStatus];
 
   // ---- LOADING — blank dark screen while session resolves ----
   if (authLoading) {
@@ -9099,8 +9757,31 @@ export default function App() {
           fontSize: 13, fontWeight: 700, zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
           maxWidth: "90vw", textAlign: "center", lineHeight: 1.6
         }}>
-          Link copied — share with parents<br />
+          Link copied — share with {shareToastType === "coaches" ? "coaches" : "parents"}<br />
           <span style={{ fontWeight: 400, wordBreak: "break-all", fontSize: 11 }}>{shareUrl}</span>
+        </div>
+      )}
+
+      {/* Offline banner */}
+      {!isOnline && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          padding: "8px 16px", background: "#f59e0b", color: "#fff", fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 1l14 14"/><path d="M4.7 4.7A7 7 0 001 8M7 7a4 4 0 00-3 1.5M8 11a1 1 0 100 .01M11 3.5A7 7 0 0115 8M13 5.5"/></svg>
+          You're offline — scores are saved locally and will sync when reconnected
+          {pendingSyncCount > 0 && <span style={{ background: "rgba(0,0,0,0.2)", borderRadius: 48, padding: "2px 10px", fontSize: 11 }}>{pendingSyncCount} pending</span>}
+        </div>
+      )}
+
+      {/* Pending sync indicator (online but queue not empty) */}
+      {isOnline && pendingSyncCount > 0 && syncStatus === "pending" && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          padding: "6px 16px", background: "var(--brand-01)", color: "#fff", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600
+        }}>
+          Syncing {pendingSyncCount} pending update{pendingSyncCount !== 1 ? "s" : ""}…
+          <button onClick={flushSyncQueue} style={{ background: "rgba(255,255,255,0.25)", border: "none", borderRadius: 48, padding: "3px 12px", color: "#fff", fontFamily: "var(--font-display)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Retry now</button>
         </div>
       )}
 
@@ -9120,8 +9801,8 @@ export default function App() {
               </div>
             )}
             {syncStatus !== "idle" && (
-              <div style={{ fontSize: 11, color: syncStatus === "saved" ? "var(--success)" : "var(--muted)", cursor: "pointer" }}
-                onClick={() => setShowCompId(v => !v)}>
+              <div style={{ fontSize: 11, color: syncStatus === "saved" ? "var(--success)" : syncStatus === "pending" ? "#f59e0b" : "var(--muted)", cursor: "pointer" }}
+                onClick={() => syncStatus === "pending" ? flushSyncQueue() : setShowCompId(v => !v)}>
                 {syncDot} {syncLabel}
                 {syncStatus === "saved" && <> · <span style={{ fontFamily: "monospace", fontSize: 10 }}>{showCompId ? compId : "ID"}</span></>}
               </div>
@@ -9131,6 +9812,9 @@ export default function App() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {phase === 2 && (
               <>
+                <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
+                  Export XLSX
+                </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => exportResultsPDF(compData, gymnasts, scores)}>
                   Export PDF
                 </button>
@@ -9153,6 +9837,7 @@ export default function App() {
           onStartComp={handleStartComp}
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
+          onUpdateCompData={setCompDataRaw}
           onSetPin={() => {
             pinModalCallback.current = null;
             setShowPinModal(true);
@@ -9206,11 +9891,13 @@ export default function App() {
       {phase === 2 && (step === 1 ? (
         <div style={{ flex: 1 }}>
           <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} setStep={setStep}
-            onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />
+            onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
+            isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue} />
         </div>
       ) : step === 2 ? (
         <div style={{ flex: 1 }}>
-          <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores} onComplete={handleCompleteComp} />
+          <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores}
+            onComplete={currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "completed" ? handleCompleteComp : undefined} />
         </div>
       ) : (
         <main className="content" style={{ maxWidth: 1200 }}>
@@ -9257,7 +9944,8 @@ export default function App() {
           onDashboard={handleGoToDashboard}
           onSettings={() => setShowAccountSettings(true)}
           onSave={phase === 1 ? handleMobileSave : handleSaveSetup}
-          saveLabel={phase === 1 ? (setupCanProceed ? "Continue" : "Save & Exit") : "Save"} />
+          saveLabel={phase === 1 ? (setupCanProceed ? "Continue" : "Save & Exit") : "Save"}
+          eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined} />
       </>)}
 
       {showAccountSettings && (

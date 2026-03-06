@@ -494,6 +494,16 @@
     return count > 0 ? sum / count : 0;
   };
 
+  const getEDeductionAvg = (rid, gid, app) => {
+    const n = Math.max(judgeCount(app), 1);
+    let sum = 0, count = 0;
+    for (let i = 1; i <= n; i++) {
+      const v = sv(rid, gid, app, `e${i}`);
+      if (!isNaN(v) && v > 0) { sum += v; count++; }
+    }
+    return count > 0 ? sum / count : 0;
+  };
+
   const fmt = (v) => v > 0 ? v.toFixed(3) : "—";
   const fmt2 = (v) => v > 0 ? v.toFixed(2) : "—";
 
@@ -565,7 +575,7 @@
 
     if (fig) {
       const dv = sv(rid, gid, app, "dv");
-      const eAvg = getEAvg(rid, gid, app);
+      const eDeduction = getEDeductionAvg(rid, gid, app);
       const bonus = sv(rid, gid, app, "bon");
       const pen = sv(rid, gid, app, "pen");
 
@@ -573,7 +583,7 @@
         breakdownHtml = `
           <div class="app-breakdown">
             <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val">${bdFmt(dv)}</span></div>
-            <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val">${bdFmt(eAvg)}</span></div>
+            <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val">${bdFmt(eDeduction)}</span></div>
             <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val">${bdFmt(bonus)}</span></div>
             <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val${pen > 0 ? " penalty" : ""}">${pen > 0 ? pen.toFixed(2) : "0"}</span></div>
           </div>

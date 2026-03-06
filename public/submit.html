@@ -3,31 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GYMCOMP — Club Submission</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <title>GYMCOMP — Gymnast Submission</title>
   <style>
+    @font-face {
+      font-family: 'Saans';
+      src: url('/SaansVF.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0f;
-      --surface: #13131a;
-      --surface2: #1a1a24;
-      --border: #252533;
-      --text: #f0f0f5;
-      --muted: #6b6b85;
-      --accent: #c8f53a;
-      --accent2: #7c5af5;
-      --danger: #ef4444;
-      --radius: 12px;
-      --font-display: 'Bebas Neue', sans-serif;
-      --font-body: 'DM Sans', system-ui, sans-serif;
+      --bg: #f5f5f5;
+      --surface: #ffffff;
+      --surface2: #efefef;
+      --border: #e4e4e4;
+      --text: #2e2e2e;
+      --muted: #909090;
+      --accent: #000dff;
+      --accent2: #7178f4;
+      --danger: #e53e3e;
+      --success: #22c55e;
+      --radius: 16px;
+      --font: 'Saans', system-ui, sans-serif;
     }
 
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 14px;
       line-height: 1.5;
       min-height: 100vh;
@@ -36,7 +42,7 @@
     /* ── Header ─────────────────────────────────────────────── */
     .comp-header {
       padding: 0 20px;
-      border-bottom: 3px solid var(--accent);
+      border-bottom: 1px solid var(--border);
       background: var(--surface);
     }
     .comp-header-inner {
@@ -50,13 +56,14 @@
     .comp-logo {
       height: 44px;
       object-fit: contain;
-      border-radius: 6px;
+      border-radius: 8px;
     }
     .comp-name {
-      font-weight: 800;
-      font-size: 20px;
+      font-weight: 700;
+      font-size: 18px;
       line-height: 1.2;
       flex: 1;
+      color: var(--text);
     }
     .comp-sub {
       font-size: 12px;
@@ -69,11 +76,14 @@
     .header-badge {
       flex-shrink: 0;
       padding: 4px 12px;
-      border-radius: 6px;
+      border-radius: 56px;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 1.2px;
       text-transform: uppercase;
+      background: rgba(0,13,255,0.06);
+      border: 1px solid rgba(0,13,255,0.15);
+      color: var(--accent);
     }
 
     /* ── Page content ────────────────────────────────────────── */
@@ -95,6 +105,7 @@
       font-size: 15px;
       font-weight: 700;
       margin-bottom: 18px;
+      color: var(--text);
     }
 
     /* ── Field ───────────────────────────────────────────────── */
@@ -114,14 +125,14 @@
 
     input, select {
       width: 100%;
-      padding: 11px 14px;
-      background: var(--surface2);
+      padding: 11px 16px;
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 56px;
       color: var(--text);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 14px;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
       appearance: none;
       -webkit-appearance: none;
     }
@@ -129,22 +140,22 @@
     input:focus, select:focus {
       outline: none;
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,13,255,0.08);
     }
     select {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b85' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23909090' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
-      background-position: right 12px center;
+      background-position: right 14px center;
       padding-right: 36px;
       cursor: pointer;
     }
-    select option { background: #1a1a24; }
 
     /* ── Gymnast row ─────────────────────────────────────────── */
     .gymnast-list { display: flex; flex-direction: column; gap: 12px; }
     .gymnast-row {
-      background: var(--surface2);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius);
       padding: 14px 16px;
     }
     .gymnast-row-header {
@@ -157,7 +168,7 @@
       width: 26px;
       height: 26px;
       border-radius: 50%;
-      background: var(--surface);
+      background: var(--surface2);
       border: 1px solid var(--border);
       display: flex;
       align-items: center;
@@ -175,7 +186,7 @@
       height: 30px;
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 8px;
       color: var(--muted);
       cursor: pointer;
       font-size: 16px;
@@ -193,6 +204,7 @@
     }
     @media (max-width: 480px) {
       .gymnast-fields { grid-template-columns: 1fr; }
+      input, select { font-size: 16px !important; }
     }
 
     /* ── Add gymnast btn ─────────────────────────────────────── */
@@ -201,9 +213,9 @@
       padding: 12px;
       background: transparent;
       border: 1px dashed var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius);
       color: var(--muted);
-      font-family: var(--font-body);
+      font-family: var(--font);
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
@@ -220,12 +232,12 @@
 
     /* ── Error / submit states ───────────────────────────────── */
     .error-box {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.35);
-      border-radius: 8px;
+      background: rgba(229, 62, 62, 0.06);
+      border: 1px solid rgba(229, 62, 62, 0.25);
+      border-radius: var(--radius);
       padding: 12px 16px;
       font-size: 13px;
-      color: #f87171;
+      color: #c53030;
       margin-bottom: 16px;
     }
 
@@ -233,18 +245,18 @@
       width: 100%;
       padding: 16px;
       background: var(--accent);
-      color: #000;
+      color: #fff;
       border: none;
-      border-radius: 10px;
-      font-family: var(--font-body);
-      font-size: 16px;
-      font-weight: 800;
+      border-radius: 56px;
+      font-family: var(--font);
+      font-size: 15px;
+      font-weight: 700;
       cursor: pointer;
       transition: opacity 0.15s;
       letter-spacing: 0.3px;
     }
-    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .submit-btn:not(:disabled):hover { opacity: 0.9; }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .submit-btn:not(:disabled):hover { opacity: 0.85; }
 
     .footer-note {
       text-align: center;
@@ -266,7 +278,7 @@
       padding: 40px 20px;
     }
     .state-icon { font-size: 56px; margin-bottom: 8px; }
-    .state-title { font-size: 22px; font-weight: 700; }
+    .state-title { font-size: 22px; font-weight: 700; color: var(--text); }
     .state-sub { color: var(--muted); font-size: 14px; max-width: 380px; line-height: 1.7; }
     .state-card {
       background: var(--surface);
@@ -357,12 +369,12 @@
     document.getElementById("app").innerHTML = `
       <div class="state-full">
         <div class="state-icon">🎉</div>
-        <div class="state-title" style="color:${escHtml(colour)}">Submitted!</div>
+        <div class="state-title">Submitted!</div>
         <div class="state-sub">Your gymnast list has been sent to the organiser for review. You will be contacted if any details need to be confirmed.</div>
         <div class="state-card">
           <strong>${escHtml(compName)}</strong>
           ${dateStr ? `<span style="color:var(--muted);font-size:12px">${dateStr}</span>` : ""}
-          <span style="color:${escHtml(colour)};font-weight:700;font-size:14px;display:block;margin-top:10px">
+          <span style="color:var(--accent);font-weight:700;font-size:14px;display:block;margin-top:10px">
             ${count} gymnast${count !== 1 ? "s" : ""} submitted from ${escHtml(club)}
           </span>
         </div>
@@ -393,7 +405,7 @@
 
   // ── Render form ──
   function renderForm() {
-    const colour = compConfig.brandColour || "#c8f53a";
+    const colour = compConfig.brandColour || "#000dff";
     const levels = compConfig.levels || [];
     const compDate = compConfig.date
       ? new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
@@ -444,24 +456,22 @@
     document.getElementById("app").innerHTML = `
       <header class="comp-header">
         <div class="comp-header-inner">
-          ${compConfig.logo ? `<img class="comp-logo" src="${escHtml(compConfig.logo)}" alt="Logo" />` : ""}
+          ${compConfig.logo ? `<img class="comp-logo" src="${escHtml(compConfig.logo)}" alt="Logo" />` : `<img src="/logo.svg" alt="GymComp" style="height:20px;opacity:0.6" />`}
           <div style="flex:1">
-            <div class="comp-name" style="color:${colour}">${escHtml(compConfig.name || "Competition")}</div>
+            <div class="comp-name">${escHtml(compConfig.name || "Competition")}</div>
             <div class="comp-sub">
               ${compDate ? `<span>📅 ${compDate}</span>` : ""}
               ${venue ? `<span>📍 ${escHtml(venue)}</span>` : ""}
             </div>
           </div>
-          <div class="header-badge" style="background:${colour}22;border:1px solid ${colour}44;color:${colour}">
-            Submission
-          </div>
+          <div class="header-badge">Submission</div>
         </div>
       </header>
 
       <div class="page">
 
         <div class="card">
-          <div class="card-title" style="color:${colour}">Club Details</div>
+          <div class="card-title">Club Details</div>
           <div class="field">
             <label>Club Name <span class="req">*</span></label>
             ${buildClubNameField()}
@@ -489,14 +499,9 @@
         </div>
 
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-            <div class="card-title" style="color:${colour};margin-bottom:0">
-              Gymnasts
-              <span style="font-size:12px;font-weight:400;color:var(--muted)"> (${gymnasts.filter(g => g.name.trim()).length} entered)</span>
-            </div>
-            <button onclick="addGymnast()" style="padding:7px 14px;background:${colour};color:#000;border:none;border-radius:7px;font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer">
-              + Add gymnast
-            </button>
+          <div class="card-title">
+            Gymnasts
+            <span style="font-size:12px;font-weight:400;color:var(--muted)"> (${gymnasts.filter(g => g.name.trim()).length} entered)</span>
           </div>
           <datalist id="age-datalist">
             ${existingAgeOptions.map(a => `<option value="${escHtml(a)}"></option>`).join("")}
@@ -504,6 +509,7 @@
           <div class="gymnast-list" id="gymnast-list">
             ${gymnastRows}
           </div>
+          <button onclick="addGymnast()" class="add-btn" style="margin-top:12px">+ Add gymnast</button>
         </div>
 
         ${errorHtml}
@@ -597,7 +603,7 @@
         throw new Error(err);
       }
 
-      const colour = compConfig.brandColour || "#c8f53a";
+      const colour = compConfig.brandColour || "#000dff";
       showSubmitted(colour, compConfig.name || "", compConfig.date || "", filled.length, clubName.trim());
 
     } catch (e) {
