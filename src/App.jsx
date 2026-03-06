@@ -9581,7 +9581,7 @@ export default function App() {
   // ---- Supabase sync (with offline queue) ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin, status) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
-    if (!currentUser) { console.error("pushToSupabase: no authenticated user"); setSyncStatus("error"); return; }
+    if (!currentUser) { return; } // Judge/scorer mode — no Supabase auth, skip silently
     setSyncStatus("saving");
     const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
     const record = { id: compId, data: payload, user_id: currentUser.id };
