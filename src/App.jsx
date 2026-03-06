@@ -9462,9 +9462,9 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
-      setScores(migrateScoreKeys(snapshot.scores || {}));
+      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      setScores(migrateScoreKeys(structuredClone(snapshot.scores || {})));
       // Draft events open in edit mode; live opens into competition; others to dashboard
       if (ev.status === "draft") { setPhase(1); setStep(1); }
       else if (ev.status === "live") { setPhase(2); setStep(1); }
@@ -9494,9 +9494,9 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
-      setScores(migrateScoreKeys(snapshot.scores || {}));
+      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      setScores(migrateScoreKeys(structuredClone(snapshot.scores || {})));
       setSyncStatus("saved");
     } else {
       setCompId(ev.compId);
@@ -9519,9 +9519,9 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(snapshot.gymnasts || []));
-      setScores(migrateScoreKeys(snapshot.scores || {}));
+      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
+      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      setScores(migrateScoreKeys(structuredClone(snapshot.scores || {})));
       setSyncStatus("saved");
     }
     setPhase("dashboard"); setStep(1);
@@ -9535,16 +9535,18 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    // Copy comp setup but clear date, regenerate all IDs, reset gymnasts/scores/judges
+    // Deep copy and regenerate all IDs to fully detach from source
     let baseData;
     if (snapshot?.compData) {
-      const src = snapshot.compData;
-      const newClubs = (src.clubs || []).map(c => ({ ...c, id: generateId() }));
-      const roundIdMap = {};
-      const newRounds = (src.rounds || []).map(r => { const nid = generateId(); roundIdMap[r.id] = nid; return { ...r, id: nid }; });
-      const levelIdMap = {};
-      const newLevels = (src.levels || []).map(l => { const nid = generateId(); levelIdMap[l.id] = nid; return { ...l, id: nid }; });
-      baseData = { ...src, name: `${src.name || "Competition"} (Copy)`, date: "", dataConsentConfirmed: false, clubs: newClubs, rounds: newRounds, levels: newLevels, judges: [] };
+      const src = structuredClone(snapshot.compData);
+      src.clubs = (src.clubs || []).map(c => ({ ...c, id: generateId() }));
+      src.rounds = (src.rounds || []).map(r => ({ ...r, id: generateId() }));
+      src.levels = (src.levels || []).map(l => ({ ...l, id: generateId() }));
+      src.name = `${src.name || "Competition"} (Copy)`;
+      src.date = "";
+      src.dataConsentConfirmed = false;
+      src.judges = [];
+      baseData = src;
     } else {
       baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     }
