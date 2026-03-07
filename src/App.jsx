@@ -2510,8 +2510,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     }
   }, []);
   const [customLevel, setCustomLevel] = useState("");
-  const [newJudge, setNewJudge] = useState({ name: "", club: "", targetApparatus: "" });
-  const [editingJudge, setEditingJudge] = useState(null);
   const [dateError, setDateError] = useState("");
 
   const handleDate = (val) => {
@@ -2580,22 +2578,12 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const updateLevelRank = (id, rankBy) =>
     setData(d => ({ ...d, levels: d.levels.map(l => l.id === id ? { ...l, rankBy } : l) }));
 
-  const addJudge = (apparatus) => {
-    if (!newJudge.name.trim()) return;
-    setData(d => ({
-      ...d,
-      judges: [...d.judges, { id: generateId(), name: newJudge.name.trim(), club: newJudge.club.trim(), apparatus }]
-    }));
-    setNewJudge({ name: "", club: "", targetApparatus: "" });
-  };
-
   const doRemove = () => {
     const { type, id } = pendingRemove;
     if (type === "club") setData(d => ({ ...d, clubs: d.clubs.filter(c => c.id !== id) }));
     if (type === "round") setData(d => ({ ...d, rounds: d.rounds.filter(r => r.id !== id) }));
     if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id) }));
     if (type === "level") setData(d => ({ ...d, levels: d.levels.filter(l => l.id !== id) }));
-    if (type === "judge") setData(d => ({ ...d, judges: d.judges.filter(j => j.id !== id) }));
     setPendingRemove(null);
   };
 
@@ -2920,214 +2908,20 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
       {/* Scoring Settings */}
       <div className="card" id="setup-scoring">
         <div className="card-title">Scoring Format</div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-
-          {/* Simple option */}
-          <div onClick={() => setData(d => ({ ...d, useDEScoring: false }))}
-            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 16, padding: "14px 16px",
-              border: `2px solid ${!data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-              background: !data.useDEScoring ? "rgba(0,13,255,0.04)" : "var(--surface2)",
-              transition: "all 0.15s" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${!data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-                background: !data.useDEScoring ? "var(--accent)" : "transparent", flexShrink: 0 }} />
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Simple Scoring</span>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, paddingLeft: 26 }}>
-              Enter one total score per apparatus per gymnast.
-              Scores are summed across apparatus automatically.
-              Best for club competitions or non-FIG events.
-            </div>
-          </div>
-
-          {/* FIG option */}
-          <div onClick={() => setData(d => ({ ...d, useDEScoring: true }))}
-            style={{ flex: 1, minWidth: 200, cursor: "pointer", borderRadius: 16, padding: "14px 16px",
-              border: `2px solid ${data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-              background: data.useDEScoring ? "rgba(0,13,255,0.04)" : "var(--surface2)",
-              transition: "all 0.15s" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${data.useDEScoring ? "var(--accent)" : "var(--border)"}`,
-                background: data.useDEScoring ? "var(--accent)" : "transparent", flexShrink: 0 }} />
-              <span style={{ fontWeight: 700, fontSize: 14 }}>FIG Artistic Scoring</span>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, paddingLeft: 26 }}>
-              Full component breakdown per apparatus:
-              <strong style={{ color: "var(--text)", display: "block", marginTop: 3 }}>D Score + Bonus + avg(10 − Ded1…DedN) − Penalty</strong>
-              Requires judges to be assigned per apparatus. Unlocks per-gymnast
-              diagnostic reports with quadrant analysis and component breakdown.
-            </div>
-            {data.useDEScoring && (
-              <div style={{ marginTop: 10, marginLeft: 26, padding: "7px 10px", borderRadius: 12,
-                background: "rgba(0,13,255,0.05)", border: "1px solid rgba(0,13,255,0.12)",
-                fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
-                D Score · Bonus · Judge deductions (subtracted from 10) · Penalty
-              </div>
-            )}
-          </div>
-
-        </div>
-      </div>
-
-      {/* Gymnast Submissions */}
-      <div className="card" id="setup-submissions">
-        <div className="card-title">Gymnast Submissions <span style={{ fontSize: 11, fontWeight: 400, color: "var(--accent)", marginLeft: 8 }}>Optional</span></div>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14, lineHeight: 1.6 }}>
-          Allow clubs to submit their gymnast lists online before the competition. You review and approve each submission — nothing is added automatically.
-        </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px",
-          background: "var(--background-neutral)", borderRadius: 12, border: `1px solid ${data.allowSubmissions ? "rgba(0,13,255,0.2)" : "var(--border)"}` }}>
-          <div>
-            <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: "var(--text-primary)" }}>
-              {data.allowSubmissions ? "Submissions open" : "Submissions closed"}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 3, fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
-              {data.allowSubmissions
-                ? "Clubs can submit gymnasts via your submission link. Share the link from your Competition Dashboard."
-                : "Enable this to generate a submission link you can share with clubs."}
-            </div>
-          </div>
-          <button
-            onClick={() => setData(d => ({ ...d, allowSubmissions: !d.allowSubmissions }))}
-            style={{
-              width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer", flexShrink: 0,
-              background: data.allowSubmissions ? "var(--brand-01)" : "var(--background-neutral)",
+          background: "var(--background-neutral)", borderRadius: 12, border: "1px solid var(--border)" }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>FIG Scoring</span>
+          <button onClick={() => setData(d => ({ ...d, useDEScoring: !d.useDEScoring }))}
+            style={{ width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+              background: data.useDEScoring ? "var(--brand-01)" : "var(--background-neutral)",
               position: "relative", transition: "background 0.2s",
-              boxShadow: "inset 0 0 0 1.5px var(--border)"
-            }}>
-            <div style={{
-              width: 20, height: 20, borderRadius: "50%", background: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-              position: "absolute", top: 3, transition: "left 0.2s",
-              left: data.allowSubmissions ? 25 : 3
-            }} />
+              boxShadow: "inset 0 0 0 1.5px var(--border)" }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ffffff",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.15)", position: "absolute", top: 3,
+              transition: "left 0.2s", left: data.useDEScoring ? 25 : 3 }} />
           </button>
         </div>
-        {data.allowSubmissions && (
-          <div style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12,
-            background: "rgba(0,13,255,0.04)", border: "1px solid rgba(0,13,255,0.12)",
-            fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
-            Clubs will see your competition name, date and venue on their submission form. They select from your configured levels and age categories. You assign round and gymnast numbers during review.
-          </div>
-        )}
       </div>
-
-      {/* Judges — per apparatus */}
-      {data.apparatus.length > 0 && (
-        <div className="card" id="setup-judges">
-          <div className="card-title">
-            Judges
-            {data.useDEScoring && (
-              <span style={{ fontSize: 11, fontWeight: 400, color: "var(--muted)", marginLeft: 10 }}>
-                FIG mode — assign judges per apparatus. Judge count drives deduction input columns.
-              </span>
-            )}
-          </div>
-          {(data.judges || []).length === 0 && (
-            <div style={{ marginBottom: 12, fontSize: 12, color: "var(--accent)", fontWeight: 600 }}>
-              You can add judges later from the Event Dashboard
-            </div>
-          )}
-          {data.apparatus.map(apparatus => {
-            const allJudges = data.judges.filter(j => j.apparatus === apparatus);
-            const isAdding = newJudge.targetApparatus === apparatus;
-            const missingJudge = data.useDEScoring && allJudges.length === 0;
-            return (
-              <div className="apparatus-section" key={apparatus}>
-                <div className="apparatus-section-header">
-                  <strong style={{ fontSize: 14 }}>{getApparatusIcon(apparatus)} {apparatus}</strong>
-                  <span style={{ fontSize: 12, color: missingJudge ? "#f0ad4e" : "var(--muted)" }}>
-                    {`${allJudges.length} Judge${allJudges.length !== 1 ? "s" : ""}${missingJudge ? " ⚠ No judges" : ""}`}
-                  </span>
-                </div>
-                <div className="apparatus-section-body">
-                  {allJudges.length === 0 && !isAdding && (
-                    <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>No judges assigned yet</div>
-                  )}
-
-                  {allJudges.map(j => editingJudge?.id === j.id ? (
-                    <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, flexWrap: "wrap" }}>
-                        <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120, padding: "6px 12px", fontSize: 13 }}
-                          value={editingJudge.name}
-                          onChange={e => setEditingJudge(ej => ({ ...ej, name: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && editingJudge.name.trim()) {
-                              setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
-                              setEditingJudge(null);
-                            }
-                            if (e.key === "Escape") setEditingJudge(null);
-                          }}
-                          autoFocus />
-                        <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
-                          value={editingJudge.club}
-                          onChange={val => setEditingJudge(ej => ({ ...ej, club: val }))}
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && editingJudge.name.trim()) {
-                              setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
-                              setEditingJudge(null);
-                            }
-                            if (e.key === "Escape") setEditingJudge(null);
-                          }} />
-                        <button className="btn btn-sm btn-primary" onClick={() => {
-                          if (!editingJudge.name.trim()) return;
-                          setData(d => ({ ...d, judges: d.judges.map(jj => jj.id === j.id ? { ...jj, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : jj) }));
-                          setEditingJudge(null);
-                        }}>Save</button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => setEditingJudge(null)}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="list-item" key={j.id} style={{ padding: "8px 12px" }}>
-                      <div className="list-item-content">
-                        <span style={{ fontSize: 13 }}>{j.name}</span>
-                        {j.club && <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>· {j.club}</span>}
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn-icon" onClick={() => setEditingJudge({ id: j.id, name: j.name, club: j.club || "" })} title="Edit">
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
-                        </button>
-                        <button className="btn-icon" onClick={() => setPendingRemove({ type: "judge", id: j.id, msg: `Remove judge "${j.name}" from ${j.apparatus}?` })}>×</button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Add judge form */}
-                  {isAdding ? (
-                    <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120 }}
-                        value={newJudge.name}
-                        onChange={e => setNewJudge(j => ({ ...j, name: e.target.value }))}
-                        onKeyDown={e => e.key === "Enter" && addJudge(apparatus)}
-                        autoFocus />
-                      <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
-                        value={newJudge.club}
-                        onChange={val => setNewJudge(j => ({ ...j, club: val }))}
-                        onKeyDown={e => e.key === "Enter" && addJudge(apparatus)} />
-                      <button className="btn btn-sm btn-primary" onClick={() => addJudge(apparatus)}>Add</button>
-                      <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", targetApparatus: "" })}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button className="btn btn-sm btn-secondary" style={{ marginTop: 6 }}
-                      onClick={() => setNewJudge({ name: "", club: "", targetApparatus: apparatus })}>
-                      + Add Judge
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* FIG validation warning */}
-          {data.useDEScoring && data.apparatus.some(app => data.judges.filter(j => j.apparatus === app).length === 0) && (
-            <div style={{ margin: "10px 0 0", padding: "10px 14px", borderRadius: 12,
-              background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
-              fontSize: 12, color: "#c8862a" }}>
-              ⚠ FIG scoring is enabled — each apparatus needs at least one judge before scores can be entered.
-              The number of judges determines how many deduction input columns appear in Score Input.
-            </div>
-          )}
-        </div>
-      )}
 
       {showWarnings && missingFields.length > 0 && (
         <div style={{ margin: "0 0 16px", padding: "14px 18px", borderRadius: 12,
@@ -7119,23 +6913,20 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   const [showReview, setShowReview] = useState(false);
   const [pendingCount, setPendingCount] = useState(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [showDisabledWarning, setShowDisabledWarning] = useState(false);
 
-  const enabled = !!compData.allowSubmissions;
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
   const submitUrl = `${origin}/submit.html?comp=${compId}`;
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
   useEffect(() => {
-    if (!enabled) return;
     if (inSandbox) { setPendingCount(2); return; }
     let cancelled = false;
     supabase.fetchSubmissions(compId).then(({ data }) => {
       if (!cancelled && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
     return () => { cancelled = true; };
-  }, [compId, enabled]);
+  }, [compId]);
 
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(submitUrl); } catch {}
@@ -7162,14 +6953,6 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
     refreshCount();
   };
 
-  const handleDisabledClick = (e) => {
-    if (!enabled) {
-      e.preventDefault();
-      e.stopPropagation();
-      setShowDisabledWarning(true);
-    }
-  };
-
   return (
     <>
       <div style={{ marginBottom: 32 }}>
@@ -7177,19 +6960,11 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
           Gymnast Submissions
         </div>
         <div
-          title={!enabled ? "Enable Gymnast Submissions in Setup to use this feature" : undefined}
           style={{
             background: "var(--background-light)", border: "1px solid var(--border)", borderRadius: 16, padding: "24px 28px",
-            position: "relative",
-            ...(enabled ? {} : { opacity: 0.45 })
+            position: "relative"
           }}
         >
-          {/* Disabled overlay — blocks all inner clicks, triggers warning */}
-          {!enabled && (
-            <div onClick={handleDisabledClick} style={{
-              position: "absolute", inset: 0, borderRadius: 16, cursor: "pointer", zIndex: 2
-            }} />
-          )}
           <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* QR + link */}
             <div style={{ flex: 1, minWidth: 200 }}>
@@ -7217,7 +6992,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
           {/* Review button with badge */}
           <div style={{ borderTop: "1px solid var(--border)", marginTop: 20, paddingTop: 20, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}>
-              {!enabled ? "Submissions disabled" : pendingCount === null ? "Loading…" : pendingCount === 0 ? "No pending submissions" : (
+              {pendingCount === null ? "Loading…" : pendingCount === 0 ? "No pending submissions" : (
                 <span style={{ color: "var(--brand-01)", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
               )}
             </div>
@@ -7227,28 +7002,11 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
               display: "inline-flex", alignItems: "center", gap: 8
             }}>
               Review Submissions
-              {enabled && pendingCount > 0 && <span style={{ background: "var(--brand-01)", color: "var(--text-alternate)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>}
+              {pendingCount > 0 && <span style={{ background: "var(--brand-01)", color: "var(--text-alternate)", borderRadius: 10, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>}
             </button>
           </div>
         </div>
 
-        {/* Disabled warning */}
-        {showDisabledWarning && (
-          <div style={{
-            marginTop: 12, background: "#fef3cd", border: "1px solid #f0d78c", borderRadius: 12, padding: "14px 20px",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap"
-          }}>
-            <div style={{ fontSize: 13, color: "#664d03", fontFamily: "var(--font-display)", lineHeight: 1.5 }}>
-              Gymnast Submissions is currently disabled. Enable it in <strong>Setup</strong> to allow clubs to submit gymnast lists.
-            </div>
-            <button onClick={() => setShowDisabledWarning(false)} style={{
-              flexShrink: 0, padding: "6px 14px", borderRadius: 56, border: "1px solid #c9a706", background: "none",
-              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, color: "#664d03"
-            }}>
-              Dismiss
-            </button>
-          </div>
-        )}
       </div>
 
       {showReview && (
@@ -7273,6 +7031,9 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const [topbarHidden, setTopbarHidden] = useState(false);
   const [newClubName, setNewClubName] = useState("");
   const lastScrollY = useRef(0);
+  const [newJudge, setNewJudge] = useState({ name: "", club: "", targetApparatus: "" });
+  const [editingJudge, setEditingJudge] = useState(null);
+  const [judgeRemoveConfirm, setJudgeRemoveConfirm] = useState(null);
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
@@ -7281,19 +7042,19 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
   const fetchPendingCount = useCallback(() => {
-    if (!compData.allowSubmissions || !compId) return;
+    if (!compId) return;
     if (inSandbox) { setPendingCount(2); return; }
     supabase.fetchSubmissions(compId).then(({ data }) => {
       if (mountedRef.current && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
-  }, [compId, compData.allowSubmissions]);
+  }, [compId]);
 
   // Fetch on mount
   useEffect(() => { fetchPendingCount(); }, [fetchPendingCount]);
 
   // Poll every 30s for new submissions
   useEffect(() => {
-    if (!compData.allowSubmissions || !compId) return;
+    if (!compId) return;
     const interval = setInterval(fetchPendingCount, 30000);
     return () => clearInterval(interval);
   }, [fetchPendingCount]);
@@ -7326,6 +7087,30 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     setSubmLinkCopied(true);
     setTimeout(() => setSubmLinkCopied(false), 2500);
   };
+
+  const addJudge = (apparatus) => {
+    if (!newJudge.name.trim()) return;
+    onUpdateCompData(d => ({
+      ...d,
+      judges: [...d.judges, { id: generateId(), name: newJudge.name.trim(), club: newJudge.club.trim(), apparatus }]
+    }));
+    setNewJudge({ name: "", club: "", targetApparatus: "" });
+  };
+
+  const removeJudge = (id) => {
+    onUpdateCompData(d => ({ ...d, judges: d.judges.filter(j => j.id !== id) }));
+    setJudgeRemoveConfirm(null);
+  };
+
+  const saveEditJudge = () => {
+    if (!editingJudge?.name.trim()) return;
+    onUpdateCompData(d => ({
+      ...d,
+      judges: d.judges.map(j => j.id === editingJudge.id ? { ...j, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : j)
+    }));
+    setEditingJudge(null);
+  };
+
   const totalGymnasts = gymnasts.length;
   const clubs = [...new Set(gymnasts.map(g => g.club))].filter(Boolean);
   const judges = compData.judges || [];
@@ -7557,7 +7342,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             Gymnasts
           </div>
           {/* Submissions bar */}
-          {!completed && compData.allowSubmissions && compId && (
+          {!completed && compId && (
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
               padding: "14px 18px", background: "var(--surface)", border: "1px solid var(--border)",
@@ -7624,20 +7409,18 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                     + Manage Gymnasts
                   </button>
                   <button
-                    onClick={compData.allowSubmissions ? copySubmitLink : undefined}
+                    onClick={copySubmitLink}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
-                      border: "1.5px solid var(--border)", background: "none", cursor: compData.allowSubmissions ? "pointer" : "not-allowed",
+                      border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
                       fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600,
-                      color: "var(--text-primary)",
-                      ...(compData.allowSubmissions ? {} : { opacity: 0.4 })
+                      color: "var(--text-primary)"
                     }}
-                    title={!compData.allowSubmissions ? "Enable club submissions in Setup first" : undefined}
                   >
                     {submLinkCopied ? "Copied!" : "Share Submission Link"}
                   </button>
                 </div>
-                {compData.allowSubmissions && compId && pendingCount > 0 && (
+                {compId && pendingCount > 0 && (
                   <button onClick={() => setShowSubmReview(true)} style={{
                     display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 20px", borderRadius: 56,
                     border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
@@ -7682,20 +7465,14 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   onClick={onManageGymnasts}>
                   + Add Gymnasts Manually
                 </button>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <button className="btn btn-secondary" style={{
-                    fontSize: 14, padding: "12px 24px",
-                    ...(compData.allowSubmissions ? {} : { opacity: 0.4, cursor: "not-allowed" })
+                <button className="btn btn-secondary" style={{
+                    fontSize: 14, padding: "12px 24px"
                   }}
-                    onClick={compData.allowSubmissions ? copySubmitLink : undefined}>
+                    onClick={copySubmitLink}>
                     {submLinkCopied ? "✅ Link copied!" : "Share Submission Link with Clubs"}
-                  </button>
-                  {!compData.allowSubmissions && (
-                    <div style={{ fontSize: 11, color: "var(--muted)" }}>Enable club submissions in Setup first</div>
-                  )}
-                </div>
+                </button>
               </div>
-              {compData.allowSubmissions && compId && pendingCount > 0 && (
+              {compId && pendingCount > 0 && (
                 <div style={{ marginTop: 20 }}>
                   <button onClick={() => setShowSubmReview(true)} style={{
                     display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 56,
@@ -7717,61 +7494,106 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
             Judges
           </div>
-          {hasJudges ? (
+          {hasApparatus ? (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
                 {compData.apparatus.map(app => {
                   const appJudges = judges.filter(j => j.apparatus === app);
-                  if (appJudges.length === 0) return null;
+                  const isAdding = newJudge.targetApparatus === app;
                   return (
                     <div key={app} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
                       <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", background: "var(--surface2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span>{app}</span>
-                        <span style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--brand-01)", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{appJudges.length}</span>
+                        <span>{getApparatusIcon(app)} {app}</span>
+                        <span style={{ width: 20, height: 20, borderRadius: "50%", background: appJudges.length > 0 ? "var(--brand-01)" : "var(--border)", color: appJudges.length > 0 ? "#fff" : "var(--muted)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{appJudges.length}</span>
                       </div>
                       <div style={{ padding: "8px 14px" }}>
-                        {appJudges.map(j => (
-                          <div key={j.id} style={{ padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--border)" }}>
-                            <div style={{ fontWeight: 400, color: "var(--text)" }}>{j.name}</div>
-                            {j.club && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{j.club}</div>}
+                        {appJudges.length === 0 && !isAdding && (
+                          <div style={{ color: "var(--muted)", fontSize: 12, padding: "6px 0" }}>No judges assigned</div>
+                        )}
+                        {appJudges.map(j => editingJudge?.id === j.id ? (
+                          <div key={j.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120, padding: "6px 12px", fontSize: 13 }}
+                                value={editingJudge.name}
+                                onChange={e => setEditingJudge(ej => ({ ...ej, name: e.target.value }))}
+                                onKeyDown={e => { if (e.key === "Enter") saveEditJudge(); if (e.key === "Escape") setEditingJudge(null); }}
+                                autoFocus />
+                              <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
+                                value={editingJudge.club}
+                                onChange={val => setEditingJudge(ej => ({ ...ej, club: val }))}
+                                onKeyDown={e => { if (e.key === "Enter") saveEditJudge(); if (e.key === "Escape") setEditingJudge(null); }} />
+                              <button className="btn btn-sm btn-primary" onClick={saveEditJudge}>Save</button>
+                              <button className="btn btn-sm btn-ghost" onClick={() => setEditingJudge(null)}>Cancel</button>
+                            </div>
                           </div>
+                        ) : (
+                          <div key={j.id} style={{ padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                              <div style={{ fontWeight: 400, color: "var(--text)" }}>{j.name}</div>
+                              {j.club && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{j.club}</div>}
+                            </div>
+                            {!completed && (
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button className="btn-icon" onClick={() => setEditingJudge({ id: j.id, name: j.name, club: j.club || "" })} title="Edit">
+                                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
+                                </button>
+                                <button className="btn-icon" onClick={() => setJudgeRemoveConfirm({ id: j.id, name: j.name, apparatus: app })}>×</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Add judge form */}
+                        {!completed && (isAdding ? (
+                          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120 }}
+                              value={newJudge.name}
+                              onChange={e => setNewJudge(j => ({ ...j, name: e.target.value }))}
+                              onKeyDown={e => e.key === "Enter" && addJudge(app)}
+                              autoFocus />
+                            <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
+                              value={newJudge.club}
+                              onChange={val => setNewJudge(j => ({ ...j, club: val }))}
+                              onKeyDown={e => e.key === "Enter" && addJudge(app)} />
+                            <button className="btn btn-sm btn-primary" onClick={() => addJudge(app)}>Add</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", targetApparatus: "" })}>Cancel</button>
+                          </div>
+                        ) : (
+                          <button className="btn btn-sm btn-secondary" style={{ marginTop: 8 }}
+                            onClick={() => setNewJudge({ name: "", club: "", targetApparatus: app })}>
+                            + Add Judge
+                          </button>
                         ))}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {!completed && (
-              <div style={{ marginTop: 14 }}>
-                <button onClick={onEditSetup} style={{
-                  display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
-                  background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
-                  fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
-                }}>
-                  + Manage Judges
-                </button>
-              </div>
+
+              {/* FIG validation warning */}
+              {compData.useDEScoring && compData.apparatus.some(app => judges.filter(j => j.apparatus === app).length === 0) && (
+                <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 12,
+                  background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
+                  fontSize: 12, color: "#c8862a" }}>
+                  ⚠ FIG scoring is enabled — each apparatus needs at least one judge before scores can be entered.
+                </div>
               )}
             </div>
           ) : (
-            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "40px 32px", textAlign: "center" }}>
-              <div style={{ fontSize: 44, marginBottom: 14 }}>⚖️</div>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>No judges added{completed ? "" : " yet"}</div>
-              {!completed && (<>
-                <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto 28px" }}>
-                  Add judges in Setup before starting the competition. This ensures your score sheets and judge assignments are accurate.
-                </div>
-                <button onClick={() => { onEditSetup(); setTimeout(() => document.getElementById("setup-judges")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} style={{
-                  display: "inline-flex", alignItems: "center", gap: 6, padding: "12px 24px", borderRadius: 56,
-                  background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
-                  fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600
-                }}>
-                  + Add Judges in Setup
-                </button>
-              </>)}
+            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "28px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: "var(--muted)" }}>Add apparatus in Setup first</div>
             </div>
           )}
         </div>
+
+        {/* Judge remove confirmation */}
+        {judgeRemoveConfirm && (
+          <ConfirmModal
+            message={`Remove judge "${judgeRemoveConfirm.name}" from ${judgeRemoveConfirm.apparatus}?`}
+            onConfirm={() => removeJudge(judgeRemoveConfirm.id)}
+            onCancel={() => setJudgeRemoveConfirm(null)}
+          />
+        )}
 
         {/* ── PRE-COMPETITION DOCUMENTS ─────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
@@ -7928,7 +7750,6 @@ function ClubSubmissionScreen({ compId }) {
       if (cancelled) return;
       if (error || !data) { setError("Competition not found. Please check your link."); setLoading(false); return; }
       const cd = data.data?.compData;
-      if (!cd?.allowSubmissions) { setError("This competition is not currently accepting submissions."); setLoading(false); return; }
       setCompConfig(cd);
       setLoading(false);
     });
@@ -9222,8 +9043,6 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
     { id: "setup-levels", label: "Levels", icon: icons.layers },
     { id: "setup-scoring", label: "Scoring", icon: icons.gauge },
-    { id: "setup-submissions", label: "Submissions", icon: icons.send },
-    { id: "setup-judges", label: "Judges", icon: icons.judge },
   ];
 
   const phase2Steps = [
@@ -9784,7 +9603,7 @@ export default function App() {
   const [compData, setCompDataRaw] = useState({
     name: "", location: "", date: "", holder: "",
     organiserName: "", venue: "", brandColour: "#000dff", logo: "",
-    useDEScoring: false, allowSubmissions: false, dataConsentConfirmed: false,
+    useDEScoring: true, allowSubmissions: true, dataConsentConfirmed: false,
     clubs: [], rounds: [], apparatus: [], levels: [], judges: []
   });
   const [gymnasts, setGymnasts] = useState([]);
@@ -10093,7 +9912,7 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
     setGymnasts([]);
     setScores({});
     setPhase(1); setStep(1);
@@ -10132,7 +9951,7 @@ export default function App() {
       } else {
         // Truly new — start fresh setup
         setCompPin(null);
-        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
         setGymnasts([]);
         setScores({});
         setPhase(1); setStep(1);
@@ -10196,7 +10015,7 @@ export default function App() {
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
       } else {
         setCompPin(null);
-        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
         setGymnasts([]);
         setScores({});
         setSyncStatus("idle");
@@ -10301,7 +10120,7 @@ export default function App() {
       src.judges = [];
       baseData = src;
     } else {
-      baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+      baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     }
     setCompDataRaw(migrateCompData(baseData));
     setGymnasts([]);
@@ -10423,7 +10242,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
     if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
-    const ids = ["setup-basic","setup-branding","setup-clubs","setup-rounds","setup-apparatus","setup-levels","setup-scoring","setup-submissions","setup-judges"];
+    const ids = ["setup-basic","setup-branding","setup-clubs","setup-rounds","setup-apparatus","setup-levels","setup-scoring"];
     const root = appMainRef.current;
     if (!root) return;
     const observer = new IntersectionObserver((entries) => {
