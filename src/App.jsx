@@ -298,12 +298,22 @@ const auth = {
 
 const EVENTS_KEY = "gymcomp_events";
 
+// ── Cached localStorage wrapper — avoids repeated JSON.parse on every getAll() call ──
+let _eventsCache = null;
+
 const events = {
   getAll: () => {
-    try { return JSON.parse(localStorage.getItem(EVENTS_KEY) || "[]"); } catch { return []; }
+    if (_eventsCache) return _eventsCache;
+    try { _eventsCache = JSON.parse(localStorage.getItem(EVENTS_KEY) || "[]"); } catch { _eventsCache = []; }
+    return _eventsCache;
   },
-  save: (allEvents) => localStorage.setItem(EVENTS_KEY, JSON.stringify(allEvents)),
-  clear: () => localStorage.removeItem(EVENTS_KEY),
+  save: (allEvents) => {
+    _eventsCache = allEvents;
+    try { localStorage.setItem(EVENTS_KEY, JSON.stringify(allEvents)); } catch (e) {
+      console.warn("[events.save] localStorage write failed (quota?):", e.message);
+    }
+  },
+  clear: () => { _eventsCache = null; localStorage.removeItem(EVENTS_KEY); },
 
   getForAccount: (accountId) => events.getAll().filter(e => e.accountId === accountId),
 
@@ -320,6 +330,8 @@ const events = {
     const idx = all.findIndex(e => e.id === eventId);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates, updatedAt: new Date().toISOString() };
+    // Strip snapshot when archiving to reclaim localStorage space
+    if (updates.status === "archived") delete all[idx].snapshot;
     events.save(all);
     return all[idx];
   },
@@ -336,6 +348,15 @@ const events = {
     if (idx === -1) return;
     all[idx] = { ...all[idx], snapshot: { compData, gymnasts, scores }, updatedAt: new Date().toISOString() };
     events.save(all);
+  },
+
+  // Return estimated localStorage usage in bytes
+  storageBytes: () => {
+    try {
+      const raw = localStorage.getItem(EVENTS_KEY);
+      const queue = localStorage.getItem(SYNC_QUEUE_KEY);
+      return (raw ? raw.length * 2 : 0) + (queue ? queue.length * 2 : 0); // JS strings are UTF-16 (2 bytes/char)
+    } catch { return 0; }
   },
 };
 
@@ -6354,6 +6375,14 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
             }
           }
         });
+        // Strip snapshots from archived events to save localStorage space
+        // (data is always available from Supabase on re-open)
+        all.forEach((e, i) => {
+          if (e.snapshot && e.status === "archived") {
+            all[i] = { ...e }; delete all[i].snapshot;
+            changed = true;
+          }
+        });
         if (changed) { events.save(all); reload(); }
       });
     });
@@ -9815,6 +9844,16 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── localStorage size warning ─────────────────────────────────────────
+  const [storageWarning, setStorageWarning] = useState(null);
+  useEffect(() => {
+    const bytes = events.storageBytes();
+    const mb = bytes / (1024 * 1024);
+    if (mb > 4) {
+      setStorageWarning(`Local storage is ${mb.toFixed(1)} MB — approaching the browser limit. Consider archiving or deleting old competitions to free space.`);
+    }
+  }, []);
+
   // ---- Supabase sync (with offline queue) ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin, status) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
@@ -10103,14 +10142,32 @@ export default function App() {
       else { setPhase("dashboard"); setStep(1); }
       setSyncStatus("saved");
     } else {
-      // No snapshot yet — start fresh setup
+      // No local snapshot — try to fetch from Supabase (e.g. archived events with stripped snapshots)
       setCompId(ev.compId);
-      setCompPin(null);
-      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
-      setGymnasts([]);
-      setScores({});
-      setPhase(1); setStep(1);
-      setSyncStatus("idle");
+      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      if (row?.data) {
+        const d = row.data;
+        const rawPin = d.compData?.pin || null;
+        setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
+        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
+        const { data: tableRows } = await supabase.fetchScores(ev.compId);
+        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
+        if (ev.status === "draft") { setPhase(1); setStep(1); }
+        else if (ev.status === "live") { setPhase(2); setStep(1); }
+        else if (ev.status === "completed") { setPhase(2); setStep(2); }
+        else { setPhase("dashboard"); setStep(1); }
+        setSyncStatus("saved");
+      } else {
+        // Truly new — start fresh setup
+        setCompPin(null);
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setGymnasts([]);
+        setScores({});
+        setPhase(1); setStep(1);
+        setSyncStatus("idle");
+      }
     }
     setCurrentEventId(ev.id);
 
@@ -10120,8 +10177,8 @@ export default function App() {
   // Open an existing event directly into edit mode (phase 1)
   const handleEditEvent = async (ev) => {
     const snapshot = ev.snapshot;
+    setCompId(ev.compId);
     if (snapshot) {
-      setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
@@ -10135,12 +10192,25 @@ export default function App() {
       }
       setSyncStatus("saved");
     } else {
-      setCompId(ev.compId);
-      setCompPin(null);
-      setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
-      setGymnasts([]);
-      setScores({});
-      setSyncStatus("idle");
+      // No local snapshot — try Supabase
+      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      if (row?.data) {
+        const d = row.data;
+        const rawPin = d.compData?.pin || null;
+        setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
+        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
+        const { data: tableRows } = await supabase.fetchScores(ev.compId);
+        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
+        setSyncStatus("saved");
+      } else {
+        setCompPin(null);
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setGymnasts([]);
+        setScores({});
+        setSyncStatus("idle");
+      }
     }
     setPhase(1); setStep(1);
     setCurrentEventId(ev.id);
@@ -10150,8 +10220,8 @@ export default function App() {
   // Open an existing event into the dashboard overview (comp details + PDFs)
   const handleViewEvent = async (ev) => {
     const snapshot = ev.snapshot;
+    setCompId(ev.compId);
     if (snapshot) {
-      setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
@@ -10164,6 +10234,20 @@ export default function App() {
         setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
       }
       setSyncStatus("saved");
+    } else {
+      // No local snapshot — fetch from Supabase
+      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      if (row?.data) {
+        const d = row.data;
+        const rawPin = d.compData?.pin || null;
+        setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
+        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
+        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
+        const { data: tableRows } = await supabase.fetchScores(ev.compId);
+        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
+        setSyncStatus("saved");
+      }
     }
     setPhase("dashboard"); setStep(1);
     setCurrentEventId(ev.id);
@@ -10469,6 +10553,18 @@ export default function App() {
             onStartComp={null} onDashboard={null}
             onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
           <div className="app-main">
+            {storageWarning && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", margin: "12px 16px 0",
+                background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.25)",
+                borderRadius: 8, fontSize: 13, color: "#b45309", fontFamily: "var(--font)"
+              }}>
+                <span style={{ flex: 1 }}>{storageWarning}</span>
+                <button onClick={() => setStorageWarning(null)} style={{
+                  background: "none", border: "none", color: "#b45309", cursor: "pointer", fontSize: 16, padding: 4
+                }}>&times;</button>
+              </div>
+            )}
             <ErrorBoundary label="dashboard">
             <OrganizerDashboard
               account={currentAccount}
