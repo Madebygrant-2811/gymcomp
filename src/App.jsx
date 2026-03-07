@@ -2921,6 +2921,13 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
               transition: "left 0.2s", left: data.useDEScoring ? 25 : 3 }} />
           </button>
         </div>
+        {!data.useDEScoring && (
+          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12,
+            background: "rgba(240,173,78,0.08)", border: "1px solid rgba(240,173,78,0.3)",
+            fontSize: 12, color: "#92400e", lineHeight: 1.6 }}>
+            ⚠ Simple scoring is active — judges will enter a single final score per apparatus instead of the full D/E breakdown.
+          </div>
+        )}
       </div>
 
       {showWarnings && missingFields.length > 0 && (
@@ -7031,8 +7038,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const [topbarHidden, setTopbarHidden] = useState(false);
   const [newClubName, setNewClubName] = useState("");
   const lastScrollY = useRef(0);
-  const [newJudge, setNewJudge] = useState({ name: "", club: "", targetApparatus: "" });
-  const [editingJudge, setEditingJudge] = useState(null);
+  const [judgeModal, setJudgeModal] = useState(null); // { mode: "add"|"edit", apparatus, id?, name, club }
   const [judgeRemoveConfirm, setJudgeRemoveConfirm] = useState(null);
 
   const inSandbox = typeof window !== "undefined" &&
@@ -7088,27 +7094,25 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     setTimeout(() => setSubmLinkCopied(false), 2500);
   };
 
-  const addJudge = (apparatus) => {
-    if (!newJudge.name.trim()) return;
-    onUpdateCompData(d => ({
-      ...d,
-      judges: [...d.judges, { id: generateId(), name: newJudge.name.trim(), club: newJudge.club.trim(), apparatus }]
-    }));
-    setNewJudge({ name: "", club: "", targetApparatus: "" });
+  const saveJudgeModal = () => {
+    if (!judgeModal?.name.trim()) return;
+    if (judgeModal.mode === "add") {
+      onUpdateCompData(d => ({
+        ...d,
+        judges: [...d.judges, { id: generateId(), name: judgeModal.name.trim(), club: judgeModal.club.trim(), apparatus: judgeModal.apparatus }]
+      }));
+    } else {
+      onUpdateCompData(d => ({
+        ...d,
+        judges: d.judges.map(j => j.id === judgeModal.id ? { ...j, name: judgeModal.name.trim(), club: judgeModal.club.trim() } : j)
+      }));
+    }
+    setJudgeModal(null);
   };
 
   const removeJudge = (id) => {
     onUpdateCompData(d => ({ ...d, judges: d.judges.filter(j => j.id !== id) }));
     setJudgeRemoveConfirm(null);
-  };
-
-  const saveEditJudge = () => {
-    if (!editingJudge?.name.trim()) return;
-    onUpdateCompData(d => ({
-      ...d,
-      judges: d.judges.map(j => j.id === editingJudge.id ? { ...j, name: editingJudge.name.trim(), club: editingJudge.club.trim() } : j)
-    }));
-    setEditingJudge(null);
   };
 
   const totalGymnasts = gymnasts.length;
@@ -7499,7 +7503,6 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
                 {compData.apparatus.map(app => {
                   const appJudges = judges.filter(j => j.apparatus === app);
-                  const isAdding = newJudge.targetApparatus === app;
                   return (
                     <div key={app} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
                       <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "var(--text-primary)", background: "var(--surface2)", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -7507,26 +7510,10 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                         <span style={{ width: 20, height: 20, borderRadius: "50%", background: appJudges.length > 0 ? "var(--brand-01)" : "var(--border)", color: appJudges.length > 0 ? "#fff" : "var(--muted)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{appJudges.length}</span>
                       </div>
                       <div style={{ padding: "8px 14px" }}>
-                        {appJudges.length === 0 && !isAdding && (
+                        {appJudges.length === 0 && (
                           <div style={{ color: "var(--muted)", fontSize: 12, padding: "6px 0" }}>No judges assigned</div>
                         )}
-                        {appJudges.map(j => editingJudge?.id === j.id ? (
-                          <div key={j.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                              <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120, padding: "6px 12px", fontSize: 13 }}
-                                value={editingJudge.name}
-                                onChange={e => setEditingJudge(ej => ({ ...ej, name: e.target.value }))}
-                                onKeyDown={e => { if (e.key === "Enter") saveEditJudge(); if (e.key === "Escape") setEditingJudge(null); }}
-                                autoFocus />
-                              <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
-                                value={editingJudge.club}
-                                onChange={val => setEditingJudge(ej => ({ ...ej, club: val }))}
-                                onKeyDown={e => { if (e.key === "Enter") saveEditJudge(); if (e.key === "Escape") setEditingJudge(null); }} />
-                              <button className="btn btn-sm btn-primary" onClick={saveEditJudge}>Save</button>
-                              <button className="btn btn-sm btn-ghost" onClick={() => setEditingJudge(null)}>Cancel</button>
-                            </div>
-                          </div>
-                        ) : (
+                        {appJudges.map(j => (
                           <div key={j.id} style={{ padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div>
                               <div style={{ fontWeight: 400, color: "var(--text)" }}>{j.name}</div>
@@ -7534,7 +7521,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                             </div>
                             {!completed && (
                               <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-icon" onClick={() => setEditingJudge({ id: j.id, name: j.name, club: j.club || "" })} title="Edit">
+                                <button className="btn-icon" onClick={() => setJudgeModal({ mode: "edit", apparatus: app, id: j.id, name: j.name, club: j.club || "" })} title="Edit">
                                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
                                 </button>
                                 <button className="btn-icon" onClick={() => setJudgeRemoveConfirm({ id: j.id, name: j.name, apparatus: app })}>×</button>
@@ -7542,28 +7529,12 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                             )}
                           </div>
                         ))}
-
-                        {/* Add judge form */}
-                        {!completed && (isAdding ? (
-                          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <input className="input" placeholder="Judge name" style={{ flex: 1, minWidth: 120 }}
-                              value={newJudge.name}
-                              onChange={e => setNewJudge(j => ({ ...j, name: e.target.value }))}
-                              onKeyDown={e => e.key === "Enter" && addJudge(app)}
-                              autoFocus />
-                            <ClubPicker placeholder="Club (optional)" style={{ flex: 1, minWidth: 100 }}
-                              value={newJudge.club}
-                              onChange={val => setNewJudge(j => ({ ...j, club: val }))}
-                              onKeyDown={e => e.key === "Enter" && addJudge(app)} />
-                            <button className="btn btn-sm btn-primary" onClick={() => addJudge(app)}>Add</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => setNewJudge({ name: "", club: "", targetApparatus: "" })}>Cancel</button>
-                          </div>
-                        ) : (
+                        {!completed && (
                           <button className="btn btn-sm btn-secondary" style={{ marginTop: 8 }}
-                            onClick={() => setNewJudge({ name: "", club: "", targetApparatus: app })}>
+                            onClick={() => setJudgeModal({ mode: "add", apparatus: app, name: "", club: "" })}>
                             + Add Judge
                           </button>
-                        ))}
+                        )}
                       </div>
                     </div>
                   );
@@ -7585,6 +7556,44 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             </div>
           )}
         </div>
+
+        {/* Judge add/edit modal */}
+        {judgeModal && (
+          <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setJudgeModal(null); }}>
+            <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                {judgeModal.mode === "add" ? "Add Judge" : "Edit Judge"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 20 }}>
+                {getApparatusIcon(judgeModal.apparatus)} {judgeModal.apparatus}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>Name</label>
+                  <input className="input" placeholder="Judge name" autoFocus
+                    value={judgeModal.name}
+                    onChange={e => setJudgeModal(m => ({ ...m, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter" && judgeModal.name.trim()) saveJudgeModal(); if (e.key === "Escape") setJudgeModal(null); }}
+                    style={{ width: "100%" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>Club (optional)</label>
+                  <ClubPicker placeholder="Club"
+                    value={judgeModal.club}
+                    onChange={val => setJudgeModal(m => ({ ...m, club: val }))}
+                    onKeyDown={e => { if (e.key === "Enter" && judgeModal.name.trim()) saveJudgeModal(); if (e.key === "Escape") setJudgeModal(null); }}
+                    style={{ width: "100%" }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 24, justifyContent: "flex-end" }}>
+                <button className="btn btn-secondary" onClick={() => setJudgeModal(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveJudgeModal} disabled={!judgeModal.name.trim()}>
+                  {judgeModal.mode === "add" ? "Add Judge" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Judge remove confirmation */}
         {judgeRemoveConfirm && (
