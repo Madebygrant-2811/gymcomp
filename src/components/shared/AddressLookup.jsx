@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const MAPBOX_TOKEN = "pk.eyJ1IjoibWFkZWJ5Z3JhbnQiLCJhIjoiY21tZHlyZWVuMDE0ejJycXdkeG10Znp6aCJ9.0l6ElokJAH5j-irvMAWL5w";
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 
 function AddressLookup({ value, onChange, placeholder }) {

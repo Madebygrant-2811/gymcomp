@@ -3,7 +3,7 @@ import { supabase } from "../../lib/supabase.js";
 import QRDisplay from "./QRDisplay.jsx";
 function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymnasts, SubmissionsReviewPanel }) {
   const [showReview, setShowReview] = useState(false);
-  const [pendingCount, setPendingCount] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
@@ -15,8 +15,8 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
     if (inSandbox) { setPendingCount(2); return; }
     let cancelled = false;
     supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
-      if (!cancelled && data) setPendingCount(data.filter(s => s.status === "pending").length);
-    });
+      if (!cancelled) setPendingCount((data || []).filter(s => s.status === "pending").length);
+    }).catch(() => { if (!cancelled) setPendingCount(0); });
     return () => { cancelled = true; };
   }, [compId]);
 
@@ -29,8 +29,8 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   const refreshCount = () => {
     if (!inSandbox) {
       supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
-        if (data) setPendingCount(data.filter(s => s.status === "pending").length);
-      });
+        setPendingCount((data || []).filter(s => s.status === "pending").length);
+      }).catch(() => setPendingCount(0));
     } else {
       setPendingCount(c => Math.max(0, (c || 1) - 1));
     }

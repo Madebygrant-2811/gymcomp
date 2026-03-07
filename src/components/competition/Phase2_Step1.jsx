@@ -392,7 +392,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`} style={{ margin: "0 24px" }}>
         <div className="setup-topbar-left">
           {compData.logo
-            ? <img src={compData.logo} alt="" style={{ height: 28, maxWidth: 80, objectFit: "contain", borderRadius: 4, flexShrink: 0 }} />
+            ? <img src={compData.logo} alt={compData.name || "Competition logo"} style={{ height: 28, maxWidth: 80, objectFit: "contain", borderRadius: 4, flexShrink: 0 }} />
             : <img src={GymCompLogomark} alt="GymComp" style={{ height: 22, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9 }} />
           }
           {compData.name && <span className="setup-topbar-name">{compData.name}</span>}
@@ -633,7 +633,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
             <div className="modal-box" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{scoreModal.isEdit ? "Edit Score" : "Add Score"}</div>
-                <button className="btn-icon" onClick={() => setScoreModal(null)} style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
+                <button className="btn-icon" onClick={() => setScoreModal(null)} aria-label="Close" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
               </div>
 
               <div className="si-modal-readonly">

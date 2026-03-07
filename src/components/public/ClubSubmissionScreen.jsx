@@ -177,7 +177,7 @@ function ClubSubmissionScreen({ compId }) {
                   </div>
                   <input style={{ ...inputStyle, flex: 1, width: "auto" }} placeholder="Full name" value={g.name} onChange={e => updateGymnast(g.id, "name", e.target.value)} />
                   {gymnasts.length > 1 && (
-                    <button onClick={() => removeGymnast(g.id)}
+                    <button onClick={() => removeGymnast(g.id)} aria-label="Remove gymnast"
                       style={{ width: 32, height: 32, background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 8, color: "var(--text-tertiary)", cursor: "pointer", fontSize: 16, flexShrink: 0, fontFamily: "var(--font-display)" }}>
                       ×
                     </button>

@@ -11,7 +11,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
   const [showSubmReview, setShowSubmReview] = useState(false);
-  const [pendingCount, setPendingCount] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [topbarHidden, setTopbarHidden] = useState(false);
   const [newClubName, setNewClubName] = useState("");
   const lastScrollY = useRef(0);
@@ -28,8 +28,8 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     if (!compId) return;
     if (inSandbox) { setPendingCount(2); return; }
     supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
-      if (mountedRef.current && data) setPendingCount(data.filter(s => s.status === "pending").length);
-    });
+      if (mountedRef.current) setPendingCount((data || []).filter(s => s.status === "pending").length);
+    }).catch(() => { if (mountedRef.current) setPendingCount(0); });
   }, [compId]);
 
   // Fetch on mount
@@ -93,7 +93,6 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   };
 
   const totalGymnasts = gymnasts.length;
-  const clubs = [...new Set(gymnasts.map(g => g.club))].filter(Boolean);
   const judges = compData.judges || [];
   const hasGymnasts = gymnasts.length > 0;
   const hasJudges = judges.length > 0;
@@ -246,7 +245,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>Overview</div>
         <div className="cd-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
           {statCard("Gymnasts", totalGymnasts, "var(--accent)")}
-          {statCard("Clubs", clubs.length)}
+          {statCard("Clubs", (compData.clubs || []).length)}
           {statCard("Levels", compData.levels.length)}
           {statCard("Apparatus", compData.apparatus.length)}
         </div>
@@ -330,7 +329,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               borderRadius: "var(--radius)", marginBottom: 12
             }}>
               <div style={{ fontSize: 13, color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}>
-                {pendingCount === null ? "Loading submissions…" : pendingCount === 0 ? "No pending submissions" : (
+                {pendingCount === 0 ? "No pending submissions" : (
                   <span style={{ color: "var(--brand-01)", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
                 )}
               </div>

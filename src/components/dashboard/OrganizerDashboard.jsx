@@ -53,7 +53,8 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         const all = events.getAll();
         let changed = false;
         const ownedCompIds = new Set((supabaseComps || []).map(c => c.id));
-        const toRemove = all.filter(e => e.accountId === account.id && e.compId && !ownedCompIds.has(e.compId));
+        // Only remove events that have been synced before — keep unsaved drafts
+        const toRemove = all.filter(e => e.accountId === account.id && e.compId && !ownedCompIds.has(e.compId) && e.status !== "draft");
         if (toRemove.length > 0) {
           toRemove.forEach(e => { const idx = all.indexOf(e); if (idx !== -1) all.splice(idx, 1); });
           changed = true;

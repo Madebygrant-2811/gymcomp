@@ -62,7 +62,6 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [setupWarn, setSetupWarn] = useState(null);
   const [pendingChange, setPendingChange] = useState(null);
-  const [leaveEditConfirm, setLeaveEditConfirm] = useState(null);
 
   // Supabase sync state
   const [compId, setCompId] = useState(() => generateId());
@@ -610,13 +609,13 @@ export default function App() {
 
   // Navigate back to org dashboard
   const goBackToDashboard = () => {
-    const doLeave = () => { setScreen("org-dashboard"); };
-    // Always warn during phase 1 setup — nothing auto-saves
-    if (phase === 1) {
-      setLeaveEditConfirm(() => doLeave);
-    } else {
-      doLeave();
+    // Auto-save draft before navigating back
+    if (currentEventId) {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+      events.snapshot(currentEventId, compData, gymnasts);
+      pushToSupabase(compData, gymnasts);
     }
+    setScreen("org-dashboard");
   };
 
   // ---- Sidebar nav callbacks for active screen ----
@@ -827,7 +826,9 @@ export default function App() {
     return (
       <>
         <style>{css}</style>
+        <ErrorBoundary label="auth">
         <AuthScreen onResume={handleResume} />
+        </ErrorBoundary>
       </>
     );
   }
@@ -837,6 +838,7 @@ export default function App() {
     return (
       <>
         <style>{css}</style>
+        <ErrorBoundary label="profile onboarding">
         <div className="app">
           <ProfileOnboardingScreen
             user={currentUser}
@@ -846,6 +848,7 @@ export default function App() {
             }}
           />
         </div>
+        </ErrorBoundary>
       </>
     );
   }
@@ -1015,7 +1018,7 @@ export default function App() {
           onStartComp={handleStartComp}
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
-          onUpdateCompData={setCompDataRaw}
+          onUpdateCompData={setCompData}
           onSetPin={() => {
             pinModalCallback.current = null;
             setShowPinModal(true);
@@ -1088,10 +1091,12 @@ export default function App() {
         </div>
         </ErrorBoundary>
       ) : (
+        <ErrorBoundary label={step === 3 ? "exports" : "MC mode"}>
         <main className="content" style={{ maxWidth: 1200 }}>
           {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
+        </ErrorBoundary>
       ))}
     </>
   );
@@ -1156,14 +1161,6 @@ export default function App() {
         <PinSetupModal onSet={handlePinSet} onSkip={handlePinSkip} />
       )}
 
-      {leaveEditConfirm && (
-        <ConfirmModal
-          message="You have unsaved changes. Are you sure you want to leave?"
-          confirmLabel="Leave" isDanger={false}
-          onConfirm={() => { const fn = leaveEditConfirm; setLeaveEditConfirm(null); fn(); }}
-          onCancel={() => setLeaveEditConfirm(null)}
-        />
-      )}
 
     </>
   );

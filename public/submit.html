@@ -632,17 +632,6 @@
     const cd = row.data.compData;
     if (!cd) { showError("Competition data is missing. Please contact the organiser."); return; }
 
-    if (!cd.allowSubmissions) {
-      document.getElementById("app").innerHTML = `
-        <div class="state-full">
-          <div class="state-icon">🔒</div>
-          <div class="state-title">Submissions closed</div>
-          <div class="state-sub">This competition is not currently accepting gymnast submissions. Please contact the organiser.</div>
-        </div>
-      `;
-      return;
-    }
-
     if (!cd.levels || !cd.levels.length) {
       document.getElementById("app").innerHTML = `
         <div class="state-full">
