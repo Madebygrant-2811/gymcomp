@@ -342,11 +342,11 @@ const events = {
   },
 
   // Snapshot — save a full copy of comp data with the event record
-  snapshot: (eventId, compData, gymnasts, scores) => {
+  snapshot: (eventId, compData, gymnasts) => {
     const all = events.getAll();
     const idx = all.findIndex(e => e.id === eventId);
     if (idx === -1) return;
-    all[idx] = { ...all[idx], snapshot: { compData, gymnasts, scores }, updatedAt: new Date().toISOString() };
+    all[idx] = { ...all[idx], snapshot: { compData, gymnasts }, updatedAt: new Date().toISOString() };
     events.save(all);
   },
 
@@ -6351,7 +6351,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         (supabaseComps || []).forEach(comp => {
           const existing = all.find(e => e.compId === comp.id && e.accountId === account.id);
           const snapshot = comp.data
-            ? { compData: comp.data.compData, gymnasts: comp.data.gymnasts, scores: comp.data.scores }
+            ? { compData: comp.data.compData, gymnasts: comp.data.gymnasts }
             : undefined;
           const supaStatus = comp.status || "active";
           if (!existing) {
@@ -9790,8 +9790,6 @@ export default function App() {
   const [gymnasts, setGymnasts] = useState([]);
   const [scores, setScores] = useState({});
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
-  const [showScoreMigration, setShowScoreMigration] = useState(false);
-  const [migrating, setMigrating] = useState(false);
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
@@ -9855,11 +9853,11 @@ export default function App() {
   }, []);
 
   // ---- Supabase sync (with offline queue) ----
-  const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, nextScores, pin, status) => {
+  const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, pin, status) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     if (!currentUser) { return; } // Judge/scorer mode — no Supabase auth, skip silently
     setSyncStatus("saving");
-    const payload = { compData: nextCompData, gymnasts: nextGymnasts, scores: nextScores, pin: pin ?? compPin };
+    const payload = { compData: nextCompData, gymnasts: nextGymnasts, pin: pin ?? compPin };
     const record = { id: compId, data: payload, user_id: currentUser.id };
     const localEv = events.getAll().find(e => e.compId === compId);
     record.status = status || localEv?.status || "draft";
@@ -9972,12 +9970,12 @@ export default function App() {
     };
   }, [compId, phase, inSandbox]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const scheduleSync = useCallback((cd, g, s) => {
+  const scheduleSync = useCallback((cd, g) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
-      pushToSupabase(cd, g, s);
-      // Also snapshot to local events store
-      if (currentEventId) events.snapshot(currentEventId, cd, g, s);
+      pushToSupabase(cd, g);
+      // Also snapshot to local events store (scores live in scores table, not blob)
+      if (currentEventId) events.snapshot(currentEventId, cd, g);
     }, 800);
   }, [pushToSupabase, currentEventId]);
 
@@ -9994,10 +9992,10 @@ export default function App() {
           return prev;
         }
       }
-      scheduleSync(next, gymnasts, scores);
+      scheduleSync(next, gymnasts);
       return next;
     });
-  }, [gymnasts, scores, scheduleSync]);
+  }, [gymnasts, scheduleSync]);
 
   // Local-only version of setCompData — updates React state without syncing to Supabase.
   // Used in Phase 1 setup so edits aren't auto-saved.
@@ -10021,18 +10019,16 @@ export default function App() {
   const setGymnastsWithSync = useCallback((updater) => {
     setGymnasts(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      scheduleSync(compData, next, scores);
+      scheduleSync(compData, next);
       return next;
     });
-  }, [compData, scores, scheduleSync]);
+  }, [compData, scheduleSync]);
 
+  // Scores now persist via the scores table (pushScoreToTable), not the blob.
+  // setScoresWithSync updates local state only — no blob sync needed.
   const setScoresWithSync = useCallback((updater) => {
-    setScores(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      scheduleSync(compData, gymnasts, next);
-      return next;
-    });
-  }, [compData, gymnasts, scheduleSync]);
+    setScores(updater);
+  }, []);
 
   // ── Score table push (fire-and-forget) ──────────────────────────────────
   const pushScoreToTable = useCallback(async (roundId, gymnastId, apparatus, flatSubset) => {
@@ -10117,33 +10113,15 @@ export default function App() {
   // Open an existing event from the organiser dashboard
   const handleOpenEvent = async (ev) => {
     const snapshot = ev.snapshot;
+    setCompId(ev.compId);
     if (snapshot) {
-      setCompId(ev.compId);
       const rawPin = snapshot.compData?.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
-      const blobScores = migrateScoreKeys(structuredClone(snapshot.scores || {}));
-      setScores(blobScores);
-      // Merge table scores (table wins if present)
-      const { data: tableRows } = await supabase.fetchScores(ev.compId);
-      if (tableRows && tableRows.length > 0) {
-        const tableFlat = scoresToFlat(tableRows);
-        setScores(prev => ({ ...prev, ...tableFlat }));
-      } else if (Object.keys(blobScores).length > 0) {
-        // Blob has scores but table is empty — offer migration
-        setShowScoreMigration(true);
-      }
-      // Draft events open in edit mode; live opens into competition; others to dashboard
-      if (ev.status === "draft") { setPhase(1); setStep(1); }
-      else if (ev.status === "live") { setPhase(2); setStep(1); }
-      else if (ev.status === "completed") { setPhase(2); setStep(2); }
-      else { setPhase("dashboard"); setStep(1); }
-      setSyncStatus("saved");
     } else {
       // No local snapshot — try to fetch from Supabase (e.g. archived events with stripped snapshots)
-      setCompId(ev.compId);
       const { data: row } = await supabase.fetchOne("competitions", ev.compId);
       if (row?.data) {
         const d = row.data;
@@ -10151,14 +10129,6 @@ export default function App() {
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
-        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
-        const { data: tableRows } = await supabase.fetchScores(ev.compId);
-        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
-        if (ev.status === "draft") { setPhase(1); setStep(1); }
-        else if (ev.status === "live") { setPhase(2); setStep(1); }
-        else if (ev.status === "completed") { setPhase(2); setStep(2); }
-        else { setPhase("dashboard"); setStep(1); }
-        setSyncStatus("saved");
       } else {
         // Truly new — start fresh setup
         setCompPin(null);
@@ -10167,10 +10137,42 @@ export default function App() {
         setScores({});
         setPhase(1); setStep(1);
         setSyncStatus("idle");
+        setCurrentEventId(ev.id);
+        setScreen("active");
+        return;
       }
     }
+    // Scores come exclusively from the scores table
+    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    if (tableRows && tableRows.length > 0) {
+      setScores(scoresToFlat(tableRows));
+    } else {
+      // Check blob for legacy scores and silently migrate
+      const blobScores = migrateScoreKeys(structuredClone(snapshot?.scores || {}));
+      if (Object.keys(blobScores).length > 0) {
+        setScores(blobScores);
+        // Silent migration — push to scores table in background
+        const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
+        const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
+        if (rows.length > 0) {
+          let token = SUPABASE_KEY;
+          if (currentUser) {
+            const { data: { session } } = await supabaseAuth.auth.getSession();
+            if (session) token = session.access_token;
+          }
+          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+        }
+      } else {
+        setScores({});
+      }
+    }
+    // Draft events open in edit mode; live opens into competition; others to dashboard
+    if (ev.status === "draft") { setPhase(1); setStep(1); }
+    else if (ev.status === "live") { setPhase(2); setStep(1); }
+    else if (ev.status === "completed") { setPhase(2); setStep(2); }
+    else { setPhase("dashboard"); setStep(1); }
+    setSyncStatus("saved");
     setCurrentEventId(ev.id);
-
     setScreen("active");
   };
 
@@ -10184,15 +10186,7 @@ export default function App() {
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
-      setScores(migrateScoreKeys(structuredClone(snapshot.scores || {})));
-      // Merge table scores
-      const { data: tableRows } = await supabase.fetchScores(ev.compId);
-      if (tableRows && tableRows.length > 0) {
-        setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
-      }
-      setSyncStatus("saved");
     } else {
-      // No local snapshot — try Supabase
       const { data: row } = await supabase.fetchOne("competitions", ev.compId);
       if (row?.data) {
         const d = row.data;
@@ -10200,18 +10194,41 @@ export default function App() {
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
-        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
-        const { data: tableRows } = await supabase.fetchScores(ev.compId);
-        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
-        setSyncStatus("saved");
       } else {
         setCompPin(null);
         setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
         setGymnasts([]);
         setScores({});
         setSyncStatus("idle");
+        setPhase(1); setStep(1);
+        setCurrentEventId(ev.id);
+        setScreen("active");
+        return;
       }
     }
+    // Scores from table only, with silent blob migration
+    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    if (tableRows && tableRows.length > 0) {
+      setScores(scoresToFlat(tableRows));
+    } else {
+      const blobScores = migrateScoreKeys(structuredClone(snapshot?.scores || {}));
+      if (Object.keys(blobScores).length > 0) {
+        setScores(blobScores);
+        const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
+        const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
+        if (rows.length > 0) {
+          let token = SUPABASE_KEY;
+          if (currentUser) {
+            const { data: { session } } = await supabaseAuth.auth.getSession();
+            if (session) token = session.access_token;
+          }
+          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+        }
+      } else {
+        setScores({});
+      }
+    }
+    setSyncStatus("saved");
     setPhase(1); setStep(1);
     setCurrentEventId(ev.id);
     setScreen("active");
@@ -10227,15 +10244,7 @@ export default function App() {
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
-      setScores(migrateScoreKeys(structuredClone(snapshot.scores || {})));
-      // Merge table scores
-      const { data: tableRows } = await supabase.fetchScores(ev.compId);
-      if (tableRows && tableRows.length > 0) {
-        setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
-      }
-      setSyncStatus("saved");
     } else {
-      // No local snapshot — fetch from Supabase
       const { data: row } = await supabase.fetchOne("competitions", ev.compId);
       if (row?.data) {
         const d = row.data;
@@ -10243,12 +10252,31 @@ export default function App() {
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
-        setScores(migrateScoreKeys(structuredClone(d.scores || {})));
-        const { data: tableRows } = await supabase.fetchScores(ev.compId);
-        if (tableRows && tableRows.length > 0) setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
-        setSyncStatus("saved");
       }
     }
+    // Scores from table only, with silent blob migration
+    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    if (tableRows && tableRows.length > 0) {
+      setScores(scoresToFlat(tableRows));
+    } else {
+      const blobScores = migrateScoreKeys(structuredClone(snapshot?.scores || {}));
+      if (Object.keys(blobScores).length > 0) {
+        setScores(blobScores);
+        const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
+        const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
+        if (rows.length > 0) {
+          let token = SUPABASE_KEY;
+          if (currentUser) {
+            const { data: { session } } = await supabaseAuth.auth.getSession();
+            if (session) token = session.access_token;
+          }
+          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+        }
+      } else {
+        setScores({});
+      }
+    }
+    setSyncStatus("saved");
     setPhase("dashboard"); setStep(1);
     setCurrentEventId(ev.id);
     setScreen("active");
@@ -10283,7 +10311,7 @@ export default function App() {
 
     if (currentAccount) {
       const newEv = events.create(currentAccount.id, newCompId);
-      events.snapshot(newEv.id, baseData, [], {});
+      events.snapshot(newEv.id, baseData, []);
       setCurrentEventId(newEv.id);
     } else {
       setCurrentEventId(null);
@@ -10295,8 +10323,8 @@ export default function App() {
   const handlePinSet = (pin) => {
     setCompPin(pin); setShowPinModal(false);
     // Sync PIN to Supabase + local snapshot
-    pushToSupabase(compData, gymnasts, scores, pin);
-    if (currentEventId) events.snapshot(currentEventId, { ...compData, pin }, gymnasts, scores);
+    pushToSupabase(compData, gymnasts, pin);
+    if (currentEventId) events.snapshot(currentEventId, { ...compData, pin }, gymnasts);
     if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
   };
   const handlePinSkip = () => {
@@ -10318,8 +10346,8 @@ export default function App() {
   // ---- Sidebar nav callbacks for active screen ----
   const handleSaveSetup = () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    pushToSupabase(compData, gymnasts, scores);
-    if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+    pushToSupabase(compData, gymnasts);
+    if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
   };
 
   const setupCanProceed = compData.name && compData.date &&
@@ -10334,9 +10362,9 @@ export default function App() {
       if (syncTimer.current) clearTimeout(syncTimer.current);
       const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
       const isDraft = ev && ev.status === "draft";
-      pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
+      pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);
       if (currentEventId) {
-        events.snapshot(currentEventId, compData, gymnasts, scores);
+        events.snapshot(currentEventId, compData, gymnasts);
         if (isDraft) events.update(currentEventId, { status: "active" });
       }
       if (!compPin) {
@@ -10348,8 +10376,8 @@ export default function App() {
     } else if (setupCanSave) {
       // Partial save — persist and go back to dashboard
       if (syncTimer.current) clearTimeout(syncTimer.current);
-      pushToSupabase(compData, gymnasts, scores);
-      if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
+      pushToSupabase(compData, gymnasts);
+      if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
       setScreen("org-dashboard");
     }
   };
@@ -10368,9 +10396,9 @@ export default function App() {
   };
   const handleCompleteComp = () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    pushToSupabase(compData, gymnasts, scores);
+    pushToSupabase(compData, gymnasts);
     if (currentEventId) {
-      events.snapshot(currentEventId, compData, gymnasts, scores);
+      events.snapshot(currentEventId, compData, gymnasts);
       events.update(currentEventId, { status: "completed" });
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
@@ -10416,11 +10444,22 @@ export default function App() {
     setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
     setCompDataRaw(savedData.compData || {});
     setGymnasts(savedData.gymnasts || []);
-    setScores(savedData.scores || {});
-    // Merge table scores — judges now see scores from other judges
+    // Scores exclusively from table
     const { data: tableRows } = await supabase.fetchScores(id);
     if (tableRows && tableRows.length > 0) {
-      setScores(prev => ({ ...prev, ...scoresToFlat(tableRows) }));
+      setScores(scoresToFlat(tableRows));
+    } else {
+      // Fallback: migrate blob scores silently (judge path — anon key)
+      const blobScores = savedData.scores || {};
+      if (Object.keys(blobScores).length > 0) {
+        setScores(blobScores);
+        const rows = flatToScoreRows(blobScores, id, "migration:judge");
+        if (rows.length > 0) {
+          supabase.upsertScores(rows, SUPABASE_KEY).catch(err => console.warn("[score migration]", err));
+        }
+      } else {
+        setScores({});
+      }
     }
     // Judges land directly on scoring view, not dashboard
     setPhase(2); setStep(1);
@@ -10454,7 +10493,7 @@ export default function App() {
   };
   const handleSharePublic = async () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    await pushToSupabase(compData, gymnasts, scores);
+    await pushToSupabase(compData, gymnasts);
     const url = `${window.location.origin}/results.html?comp=${compId}`;
     setShareUrl(url);
     await copyOrShare(url, `${compData.name || "Competition"} — Live Results`);
@@ -10464,7 +10503,7 @@ export default function App() {
   };
   const handleShareCoach = async () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    await pushToSupabase(compData, gymnasts, scores);
+    await pushToSupabase(compData, gymnasts);
     const url = `${window.location.origin}/coach.html?comp=${compId}`;
     setShareUrl(url);
     await copyOrShare(url, `${compData.name || "Competition"} — Coach View`);
@@ -10724,8 +10763,8 @@ export default function App() {
             onSaveExit={async () => {
               // Partial save — persist and go back to organiser dashboard (event list)
               if (syncTimer.current) clearTimeout(syncTimer.current);
-              if (currentEventId) events.snapshot(currentEventId, compData, gymnasts, scores);
-              await pushToSupabase(compData, gymnasts, scores);
+              if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
+              await pushToSupabase(compData, gymnasts);
               setScreen("org-dashboard");
             }}
             onNext={async () => {
@@ -10734,10 +10773,10 @@ export default function App() {
               const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
               const isDraft = ev && ev.status === "draft";
               if (currentEventId) {
-                events.snapshot(currentEventId, compData, gymnasts, scores);
+                events.snapshot(currentEventId, compData, gymnasts);
                 if (isDraft) events.update(currentEventId, { status: "active" });
               }
-              await pushToSupabase(compData, gymnasts, scores, undefined, isDraft ? "active" : undefined);
+              await pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);
               if (!compPin) {
                 pinModalCallback.current = () => setPhase("dashboard");
                 setShowPinModal(true);
@@ -10854,33 +10893,6 @@ export default function App() {
         />
       )}
 
-      {showScoreMigration && (
-        <ConfirmModal
-          message="This competition has scores saved in the old format. Sync them to enable real-time judge scoring?"
-          confirmLabel={migrating ? "Syncing\u2026" : "Sync scores"}
-          isDanger={false}
-          onConfirm={async () => {
-            setMigrating(true);
-            try {
-              const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
-              const rows = flatToScoreRows(scores, compId, submittedBy);
-              if (rows.length > 0) {
-                let token = SUPABASE_KEY;
-                if (currentUser) {
-                  const { data: { session } } = await supabaseAuth.auth.getSession();
-                  if (session) token = session.access_token;
-                }
-                await supabase.upsertScores(rows, token);
-              }
-            } catch (e) {
-              console.error("[score migration]", e.message);
-            }
-            setMigrating(false);
-            setShowScoreMigration(false);
-          }}
-          onCancel={() => setShowScoreMigration(false)}
-        />
-      )}
     </>
   );
 }

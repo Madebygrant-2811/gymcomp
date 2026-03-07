@@ -817,9 +817,8 @@
     if (!row || !row.data) return;
     compData = row.data.compData || {};
     gymnasts = row.data.gymnasts || [];
-    scores = row.data.scores || {};
-    // Merge table scores (table wins if present)
-    if (tableRows.length > 0) Object.assign(scores, scoresToFlat(tableRows));
+    // Scores come exclusively from the scores table
+    scores = tableRows.length > 0 ? scoresToFlat(tableRows) : {};
     renderPage();
     updateTimestamp();
   }
@@ -848,9 +847,8 @@
 
     compData = row.data.compData || {};
     gymnasts = row.data.gymnasts || [];
-    scores = row.data.scores || {};
-    // Merge table scores (table wins if present)
-    if (tableRows.length > 0) Object.assign(scores, scoresToFlat(tableRows));
+    // Scores come exclusively from the scores table
+    scores = tableRows.length > 0 ? scoresToFlat(tableRows) : {};
 
     renderPage();
     updateTimestamp();
