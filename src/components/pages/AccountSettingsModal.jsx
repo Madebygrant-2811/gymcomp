@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
-import ClubPicker from "../shared/ClubPicker.jsx";
 
 // ============================================================
 // ACCOUNT SETTINGS MODAL

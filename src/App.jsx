@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── lib imports ──
 import { supabase } from "./lib/supabase.js";
@@ -89,6 +89,14 @@ export default function App() {
   const [scores, setScores] = useState({});
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
 
+  // Derived values — avoid redundant events.getAll().find() in render path
+  const currentEvent = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
+  const eventStatus = currentEvent?.status;
+  const allGymnastsComplete = useMemo(() => {
+    const rf = ["name","club","level","round","age","group"];
+    return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim()));
+  }, [gymnasts]);
+
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
@@ -104,7 +112,7 @@ export default function App() {
         setScreen(profile?.full_name ? "org-dashboard" : "profile-onboarding");
       }
     } catch (e) {
-      console.error("Profile load error:", e);
+      console.error("Profile load error:", e.message);
       setAuthLoading(false);
       setScreen("auth-login");
     }
@@ -1003,7 +1011,7 @@ export default function App() {
         <CompDashboard
           compData={compData} gymnasts={gymnasts}
           compId={compId} compPin={compPin}
-          eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined}
+          eventStatus={eventStatus}
           onStartComp={handleStartComp}
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
@@ -1023,7 +1031,7 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "draft")}
+          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")}
             onSaveExit={async () => {
               // Partial save — persist and go back to organiser dashboard (event list)
               if (syncTimer.current) clearTimeout(syncTimer.current);
@@ -1076,7 +1084,7 @@ export default function App() {
         <ErrorBoundary label="results">
         <div style={{ flex: 1 }}>
           <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores}
-            onComplete={currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "completed" ? handleCompleteComp : undefined} />
+            onComplete={currentEventId && eventStatus !== "completed" ? handleCompleteComp : undefined} />
         </div>
         </ErrorBoundary>
       ) : (
@@ -1103,8 +1111,8 @@ export default function App() {
             onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
             gymnastsCount={gymnasts.length}
             judgesCount={(compData.judges || []).length}
-            eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined}
-            allGymnastsComplete={(() => { const rf = ["name","club","level","round","age","group"]; return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim())); })()}  />
+            eventStatus={eventStatus}
+            allGymnastsComplete={allGymnastsComplete}  />
           <div className="app-main" ref={appMainRef}>
             {activeContent}
           </div>
@@ -1125,7 +1133,7 @@ export default function App() {
           onSettings={() => setShowAccountSettings(true)}
           onSave={phase === 1 ? handleMobileSave : handleSaveSetup}
           saveLabel={phase === 1 ? (setupCanProceed ? "Continue" : "Save & Exit") : "Save"}
-          eventStatus={currentEventId ? events.getAll().find(e => e.id === currentEventId)?.status : undefined} />
+          eventStatus={eventStatus} />
       </>)}
 
       {showAccountSettings && (

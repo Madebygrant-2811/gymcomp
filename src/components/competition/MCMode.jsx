@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { gymnast_key, denseRank } from "../../lib/scoring.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 
@@ -15,7 +15,7 @@ function MCMode({ compData, gymnasts, scores }) {
   };
   const getTotal = (gid) => compData.apparatus.reduce((s, a) => s + getScore(gid, a), 0);
 
-  const roundGymnasts = gymnasts.filter(g => g.round === activeRound && !g.dns);
+  const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound && !g.dns), [gymnasts, activeRound]);
 
   const buildRankGroups = () => {
     const map = {};
@@ -31,7 +31,7 @@ function MCMode({ compData, gymnasts, scores }) {
     return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([key, val]) => ({ key, ...val }));
   };
 
-  const rankGroups = buildRankGroups();
+  const rankGroups = useMemo(buildRankGroups, [roundGymnasts, compData.levels]);
 
   // Build flat announcement list: for each level group, gymnasts in reverse order (worst first → best last)
   const buildAnnouncementList = () => {
@@ -78,7 +78,7 @@ function MCMode({ compData, gymnasts, scores }) {
     return list;
   };
 
-  const announcements = buildAnnouncementList();
+  const announcements = useMemo(buildAnnouncementList, [rankGroups, scores, activeRound, compData.apparatus, view, activeApparatus]);
   const current = announcements[currentIdx];
 
   const prev = () => setCurrentIdx(i => Math.max(0, i - 1));

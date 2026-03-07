@@ -1,8 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
-import GymCompLogo from "../../assets/GymComp-Logo.svg";
-import ClubPicker from "../shared/ClubPicker.jsx";
-import AddressLookup from "../shared/AddressLookup.jsx";
 
 // ============================================================
 // PROFILE ONBOARDING — shown once on first login

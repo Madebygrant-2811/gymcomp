@@ -3,6 +3,11 @@ import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { gymnast_key, denseRank } from "./scoring.js";
 
+const escHtml = (s) => {
+  if (s == null) return "";
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+};
+
 export const APPARATUS_ICONS = {
   Beam: "🤸",
   Bar: "🏋️",
@@ -42,16 +47,16 @@ export function getPrintHeader(compData, subtitle) {
   return `
     <div class="print-header">
       <div class="print-header-top" style="border-bottom: 3px solid ${colour};">
-        ${compData.logo ? `<img src="${compData.logo}" class="print-logo" alt="Logo" />` : ""}
+        ${compData.logo ? `<img src="${escHtml(compData.logo)}" class="print-logo" alt="Logo" />` : ""}
         <div class="print-header-text">
-          <div class="print-comp-name" style="color:${colour};">${compData.name || "Competition"}</div>
-          ${compData.organiserName ? `<div class="print-organiser">${compData.organiserName}</div>` : ""}
+          <div class="print-comp-name" style="color:${colour};">${escHtml(compData.name) || "Competition"}</div>
+          ${compData.organiserName ? `<div class="print-organiser">${escHtml(compData.organiserName)}</div>` : ""}
           <div class="print-meta">
             ${compData.date ? formatDate(compData.date) : ""}
-            ${compData.venue ? ` &nbsp;·&nbsp; ${compData.venue}` : ""}
+            ${compData.venue ? ` &nbsp;·&nbsp; ${escHtml(compData.venue)}` : ""}
           </div>
         </div>
-        <div class="print-subtitle-badge" style="background:${colour}; color:#000;">${subtitle}</div>
+        <div class="print-subtitle-badge" style="background:${colour}; color:#000;">${escHtml(subtitle)}</div>
       </div>
     </div>
   `;
@@ -150,10 +155,10 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
   html += `<table style="margin-bottom:20px;">
     <tr><th>Competition</th><th>Date</th><th>Venue</th><th>Levels</th><th>Total Gymnasts</th></tr>
     <tr>
-      <td><strong>${compData.name || "—"}</strong></td>
+      <td><strong>${escHtml(compData.name) || "—"}</strong></td>
       <td>${compData.date ? formatDate(compData.date) : "—"}</td>
-      <td>${compData.venue || compData.location || "—"}</td>
-      <td>${(compData.levels || []).map(l => l.name).join(", ") || "—"}</td>
+      <td>${escHtml(compData.venue || compData.location) || "—"}</td>
+      <td>${(compData.levels || []).map(l => escHtml(l.name)).join(", ") || "—"}</td>
       <td>${gymnasts.length}</td>
     </tr>
   </table>`;
@@ -162,7 +167,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
   if (apparatus.length) {
     html += `<div style="margin-bottom:16px;"><strong style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Apparatus: </strong>`;
     apparatus.forEach((a, i) => {
-      html += `<span class="apparatus-tag">${i + 1}. ${a}</span>`;
+      html += `<span class="apparatus-tag">${i + 1}. ${escHtml(a)}</span>`;
     });
     html += `</div>`;
   }
@@ -171,7 +176,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
   rounds.forEach((round, ri) => {
     if (ri > 0) html += `<div class="page-break"></div>`;
     html += `<div class="round-header" style="border-left: 4px solid ${colour};">
-      <span>${round.name}</span>
+      <span>${escHtml(round.name)}</span>
       <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
     </div>`;
 
@@ -186,10 +191,10 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
         <thead><tr><th>Group</th>${apparatus.map((_, i) => `<th>Position ${i + 1}</th>`).join("")}</tr></thead>
         <tbody>`;
       groupNames.forEach(grp => {
-        html += `<tr><td><strong>${grp}</strong></td>`;
+        html += `<tr><td><strong>${escHtml(grp)}</strong></td>`;
         apparatus.forEach((_, i) => {
           const app = rotMap[grp]?.[i] || "—";
-          html += `<td>${app}</td>`;
+          html += `<td>${escHtml(app)}</td>`;
         });
         html += `</tr>`;
       });
@@ -199,7 +204,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
       groupNames.forEach(grp => {
         const gList = (groups[grp] || []).sort((a, b) => (a.number || 0) - (b.number || 0));
         html += `<div class="group-block">
-          <div class="group-name">${grp} — ${gList.length} gymnast${gList.length !== 1 ? "s" : ""}</div>
+          <div class="group-name">${escHtml(grp)} — ${gList.length} gymnast${gList.length !== 1 ? "s" : ""}</div>
           <table>
             <thead><tr><th>#</th><th>Name</th><th>Club</th><th>Level</th><th>Start App.</th></tr></thead>
             <tbody>`;
@@ -207,10 +212,10 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
           const startApp = rotMap[grp]?.[0] || "—";
           html += `<tr>
             <td>${g.number || idx + 1}</td>
-            <td>${g.name || "—"}</td>
-            <td>${g.club || "—"}</td>
-            <td>${g.level || "—"}</td>
-            <td>${startApp}</td>
+            <td>${escHtml(g.name) || "—"}</td>
+            <td>${escHtml(g.club) || "—"}</td>
+            <td>${escHtml(g.level) || "—"}</td>
+            <td>${escHtml(startApp)}</td>
           </tr>`;
         });
         html += `</tbody></table></div>`;
@@ -249,7 +254,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
 
   html += `<div class="print-footer">
     <span>Generated by GymScore · ${new Date().toLocaleDateString("en-GB")}</span>
-    <span>${compData.organiserName || ""}</span>
+    <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
   return html;
@@ -273,10 +278,10 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
 
       if (appIdx > 0 || rIdx > 0) html += `<div class="page-break"></div>`;
 
-      html += getPrintHeader(compData, `Judge Score Sheet — ${app}`);
+      html += getPrintHeader(compData, `Judge Score Sheet — ${escHtml(app)}`);
 
       html += `<div class="round-header" style="border-left:4px solid ${colour};">
-        <span>${round.name} · ${getApparatusIcon(app)} ${app}</span>
+        <span>${escHtml(round.name)} · ${getApparatusIcon(app)} ${escHtml(app)}</span>
         <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
       </div>`;
 
@@ -285,17 +290,17 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
       if (assignedJudges.length) {
         html += `<div style="background:${colour}18;border:1px solid ${colour}44;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:10px;">
           <strong>Assigned judge${assignedJudges.length !== 1 ? "s" : ""}:</strong>
-          ${assignedJudges.map(j => `<strong>${j.name}</strong>${j.club ? ` · ${j.club}` : ""}`).join("&ensp;|&ensp;")}
+          ${assignedJudges.map(j => `<strong>${escHtml(j.name)}</strong>${j.club ? ` · ${escHtml(j.club)}` : ""}`).join("&ensp;|&ensp;")}
         </div>`;
       }
 
       // Competition info strip
       html += `<div style="display:flex;gap:16px;margin-bottom:14px;font-size:9px;color:#555;flex-wrap:wrap;">
-        <span><strong>Competition:</strong> ${compData.name || "—"}</span>
+        <span><strong>Competition:</strong> ${escHtml(compData.name) || "—"}</span>
         <span><strong>Date:</strong> ${compData.date ? formatDate(compData.date) : "—"}</span>
-        <span><strong>Venue:</strong> ${compData.venue || compData.location || "—"}</span>
-        <span><strong>Apparatus:</strong> ${app}</span>
-        <span><strong>Round:</strong> ${round.name}</span>
+        <span><strong>Venue:</strong> ${escHtml(compData.venue || compData.location) || "—"}</span>
+        <span><strong>Apparatus:</strong> ${escHtml(app)}</span>
+        <span><strong>Round:</strong> ${escHtml(round.name)}</span>
         <span><strong>Gymnasts:</strong> ${roundGymnasts.length}</span>
       </div>`;
 
@@ -322,10 +327,10 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
           const isDns = !!g.dns;
           html += `<tr style="${isDns ? "opacity:0.4;text-decoration:line-through;" : i % 2 === 0 ? "" : "background:#fafafa;"}">
             <td style="font-weight:700;color:${colour};">${g.number || i + 1}</td>
-            <td><strong>${g.name || "—"}</strong>${isDns ? ' <span style="color:#d9534f;font-size:8px;font-weight:700;">DNS</span>' : ""}</td>
-            <td style="color:#555;">${g.club || "—"}</td>
-            <td style="font-size:9px;color:#666;">${levelName}</td>
-            <td style="text-align:center;font-size:10px;color:#666;">${g.group || "—"}</td>
+            <td><strong>${escHtml(g.name) || "—"}</strong>${isDns ? ' <span style="color:#d9534f;font-size:8px;font-weight:700;">DNS</span>' : ""}</td>
+            <td style="color:#555;">${escHtml(g.club) || "—"}</td>
+            <td style="font-size:9px;color:#666;">${escHtml(levelName)}</td>
+            <td style="text-align:center;font-size:10px;color:#666;">${escHtml(g.group) || "—"}</td>
             <td style="text-align:center;"><span class="score-box"></span></td>
             <td style="text-align:center;"><span class="score-box"></span></td>
             <td style="text-align:center;"><span class="score-box" style="width:44px;"></span></td>
@@ -351,10 +356,10 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
           const isDns = !!g.dns;
           html += `<tr style="${isDns ? "opacity:0.4;text-decoration:line-through;" : i % 2 === 0 ? "" : "background:#fafafa;"}">
             <td style="font-weight:700;color:${colour};">${g.number || i + 1}</td>
-            <td><strong>${g.name || "—"}</strong>${isDns ? ' <span style="color:#d9534f;font-size:8px;font-weight:700;">DNS</span>' : ""}</td>
-            <td style="color:#555;">${g.club || "—"}</td>
-            <td style="font-size:9px;color:#666;">${levelName}</td>
-            <td style="text-align:center;font-size:10px;color:#666;">${g.group || "—"}</td>
+            <td><strong>${escHtml(g.name) || "—"}</strong>${isDns ? ' <span style="color:#d9534f;font-size:8px;font-weight:700;">DNS</span>' : ""}</td>
+            <td style="color:#555;">${escHtml(g.club) || "—"}</td>
+            <td style="font-size:9px;color:#666;">${escHtml(levelName)}</td>
+            <td style="text-align:center;font-size:10px;color:#666;">${escHtml(g.group) || "—"}</td>
             <td style="text-align:center;"><span class="score-box" style="width:80px;"></span></td>
           </tr>`;
         });
@@ -383,13 +388,13 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
           </div>
         </div>
         <div style="font-size:9px;color:#aaa;">
-          ${compData.name || ""} · ${round.name} · ${app} · ${compData.date ? formatDate(compData.date) : ""}
+          ${escHtml(compData.name) || ""} · ${escHtml(round.name)} · ${escHtml(app)} · ${compData.date ? formatDate(compData.date) : ""}
         </div>
       </div>`;
 
       html += `<div class="print-footer">
-        <span>GYMCOMP · ${compData.name || ""} · ${compData.date ? formatDate(compData.date) : ""}</span>
-        <span>${app} / ${round.name}</span>
+        <span>GYMCOMP · ${escHtml(compData.name) || ""} · ${compData.date ? formatDate(compData.date) : ""}</span>
+        <span>${escHtml(app)} / ${escHtml(round.name)}</span>
       </div>`;
     });
   });
@@ -448,11 +453,11 @@ export function buildAttendanceHTML(compData, gymnasts) {
     const round = (compData.rounds || []).find(r => r.id === g.round);
     html += `<tr>
       <td>${g.number || i + 1}</td>
-      <td>${g.name || "—"}</td>
-      <td>${g.club || "—"}</td>
-      <td>${g.level || "—"}</td>
-      <td>${g.group || "—"}</td>
-      <td>${round ? round.name : "—"}</td>
+      <td>${escHtml(g.name) || "—"}</td>
+      <td>${escHtml(g.club) || "—"}</td>
+      <td>${escHtml(g.level) || "—"}</td>
+      <td>${escHtml(g.group) || "—"}</td>
+      <td>${round ? escHtml(round.name) : "—"}</td>
       <td style="text-align:center;"><span class="score-box" style="width:28px;height:20px;"></span></td>
     </tr>`;
   });
@@ -465,7 +470,7 @@ export function buildAttendanceHTML(compData, gymnasts) {
   html += `<h2>By Club</h2>`;
 
   Object.entries(byClub).sort(([a],[b]) => a.localeCompare(b)).forEach(([club, members]) => {
-    html += `<h3 style="border-left:3px solid ${colour};padding-left:8px;">${club} <span style="font-weight:400;color:#666;">(${members.length})</span></h3>
+    html += `<h3 style="border-left:3px solid ${colour};padding-left:8px;">${escHtml(club)} <span style="font-weight:400;color:#666;">(${members.length})</span></h3>
     <table style="margin-bottom:14px;">
       <thead><tr><th>#</th><th>Name</th><th>Level</th><th>Group</th><th>Round</th><th style="width:60px;text-align:center;">Present ✓</th></tr></thead>
       <tbody>`;
@@ -473,10 +478,10 @@ export function buildAttendanceHTML(compData, gymnasts) {
       const round = (compData.rounds || []).find(r => r.id === g.round);
       html += `<tr>
         <td>${g.number || i + 1}</td>
-        <td>${g.name || "—"}</td>
-        <td>${g.level || "—"}</td>
-        <td>${g.group || "—"}</td>
-        <td>${round ? round.name : "—"}</td>
+        <td>${escHtml(g.name) || "—"}</td>
+        <td>${escHtml(g.level) || "—"}</td>
+        <td>${escHtml(g.group) || "—"}</td>
+        <td>${round ? escHtml(round.name) : "—"}</td>
         <td style="text-align:center;"><span class="score-box" style="width:28px;height:20px;"></span></td>
       </tr>`;
     });
@@ -484,7 +489,7 @@ export function buildAttendanceHTML(compData, gymnasts) {
   });
 
   html += `<div class="print-footer">
-    <span>GymScore · ${compData.name || ""} · ${compData.date ? formatDate(compData.date) : ""}</span>
+    <span>GymScore · ${escHtml(compData.name) || ""} · ${compData.date ? formatDate(compData.date) : ""}</span>
     <span>${gymnasts.length} gymnasts registered</span>
   </div>`;
 
@@ -666,7 +671,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
     first = false;
 
     html += `<div class="round-header" style="border-left:4px solid ${colour};">
-      <span>${round.name} — Diagnostics</span>
+      <span>${escHtml(round.name)} — Diagnostics</span>
       <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
     </div>`;
 
@@ -681,11 +686,11 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
         <!-- Gymnast header -->
         <div style="background:${colour}18;border-bottom:2px solid ${colour};padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <span style="font-size:14px;font-weight:800;">${gymnast.name}</span>
-            <span style="font-size:11px;color:#555;margin-left:8px;">#${gymnast.number || "—"} · ${gymnast.club || "—"}</span>
+            <span style="font-size:14px;font-weight:800;">${escHtml(gymnast.name)}</span>
+            <span style="font-size:11px;color:#555;margin-left:8px;">#${gymnast.number || "—"} · ${escHtml(gymnast.club) || "—"}</span>
           </div>
           <div style="text-align:right;font-size:11px;color:#444;">
-            <strong>${diag.groupLabel}</strong><br/>
+            <strong>${escHtml(diag.groupLabel)}</strong><br/>
             ${diag.overallTotal > 0
               ? `Overall: <strong style="color:${colour};">${diag.overallTotal.toFixed(2)}</strong>
                  · Rank <strong>${diag.overallRank}</strong> of ${diag.overallOf}
@@ -713,7 +718,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
           <tbody>
             ${diag.appData.map(a => {
               if (!a.scored) return `<tr style="opacity:0.4;">
-                <td>${getApparatusIcon(a.app)} ${a.app}</td>
+                <td>${getApparatusIcon(a.app)} ${escHtml(a.app)}</td>
                 <td colspan="9" style="color:#aaa;font-size:10px;">DNS</td>
               </tr>`;
 
@@ -723,7 +728,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
               const totalDelta = a.avgTotal !== null ? a.total - a.avgTotal : null;
 
               return `<tr style="${q ? `background:${q.bg};` : ""}">
-                <td style="font-weight:600;">${getApparatusIcon(a.app)} ${a.app}</td>
+                <td style="font-weight:600;">${getApparatusIcon(a.app)} ${escHtml(a.app)}</td>
                 <td style="text-align:right;">${a.dv > 0 ? a.dv.toFixed(2) : "—"}</td>
                 <td style="text-align:right;">${a.bonus > 0 ? a.bonus.toFixed(2) : "—"}</td>
                 <td style="text-align:right;">${a.eAvg > 0 ? a.eAvg.toFixed(2) : "—"}</td>
@@ -768,7 +773,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
                 const fmtVal = v => v > 0 ? v.toFixed(2) : "—";
                 const fmtAvg = v => v !== null ? v.toFixed(2) : "—";
                 return `<tr>
-                  <td style="font-weight:600;">${getApparatusIcon(a.app)} ${a.app}</td>
+                  <td style="font-weight:600;">${getApparatusIcon(a.app)} ${escHtml(a.app)}</td>
                   <td style="text-align:right;">${fmtVal(a.dv)}</td>
                   <td style="text-align:right;color:#777;">${fmtAvg(a.avgDV)}</td>
                   ${fmtDim(a.dims.dv.delta, false)}
@@ -797,7 +802,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
             ${diag.appData.filter(a => a.scored && a.advice).map(a => {
               const q = quadrantStyles[a.quadrant];
               return `<div style="flex:1;min-width:180px;border-left:3px solid ${q.border};padding:6px 10px;background:${q.bg};border-radius:0 4px 4px 0;">
-                <div style="font-size:10px;font-weight:700;margin-bottom:3px;">${getApparatusIcon(a.app)} ${a.app}</div>
+                <div style="font-size:10px;font-weight:700;margin-bottom:3px;">${getApparatusIcon(a.app)} ${escHtml(a.app)}</div>
                 <div style="font-size:10px;line-height:1.5;color:#333;">${a.advice}</div>
               </div>`;
             }).join("")}
@@ -809,7 +814,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
 
   html += `<div class="print-footer">
     <span>GymScore · Gymnast Diagnostic Report · Generated ${new Date().toLocaleDateString("en-GB")}</span>
-    <span>${compData.organiserName || ""}</span>
+    <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
   return html;
@@ -880,7 +885,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
   rounds.forEach((round, ri) => {
     if (ri > 0) html += `<div class="page-break"></div>`;
     html += `<div class="round-header" style="border-left:4px solid ${colour};">
-      <span>${round.name} — Overall Results</span>
+      <span>${escHtml(round.name)} — Overall Results</span>
       <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
     </div>`;
 
@@ -894,21 +899,21 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         const ranked = denseRank(withTotals.filter(g => g.total > 0), "total");
         const dns = withTotals.filter(g => g.total === 0);
 
-        html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${groupLabel}</h2>
+        html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${escHtml(groupLabel)}</h2>
         <table style="margin-bottom:18px;">
           <thead><tr>
             <th style="width:60px;">Rank</th>
             <th style="width:32px;">#</th>
             <th>Gymnast</th><th>Club</th>
-            ${apparatus.map(a => `<th style="width:64px;text-align:right;">${a}</th>`).join("")}
+            ${apparatus.map(a => `<th style="width:64px;text-align:right;">${escHtml(a)}</th>`).join("")}
             <th style="width:70px;text-align:right;">Total</th>
           </tr></thead>
           <tbody>
           ${ranked.map(g => `<tr>
             ${badgeCell(g.rank)}
             <td style="color:#888;">${g.number || ""}</td>
-            <td><strong>${g.name}</strong></td>
-            <td style="color:#666;">${g.club || ""}</td>
+            <td><strong>${escHtml(g.name)}</strong></td>
+            <td style="color:#666;">${escHtml(g.club) || ""}</td>
             ${apparatus.map(a => {
               const s = getScore(round.id, g.id, a);
               return `<td style="text-align:right;color:#555;">${s > 0 ? s.toFixed(2) : "—"}</td>`;
@@ -918,8 +923,8 @@ export function buildResultsHTML(compData, gymnasts, scores) {
           ${dns.map(g => `<tr style="opacity:0.4;">
             <td style="color:#aaa;font-size:10px;">DNS</td>
             <td style="color:#aaa;">${g.number || ""}</td>
-            <td>${g.name}</td>
-            <td style="color:#aaa;">${g.club || ""}</td>
+            <td>${escHtml(g.name)}</td>
+            <td style="color:#aaa;">${escHtml(g.club) || ""}</td>
             ${apparatus.map(() => `<td style="text-align:right;color:#aaa;">—</td>`).join("")}
             <td style="text-align:right;color:#aaa;">—</td>
           </tr>`).join("")}
@@ -932,12 +937,12 @@ export function buildResultsHTML(compData, gymnasts, scores) {
   // Section 2: Per-apparatus breakdown per round
   rounds.forEach((round) => {
     html += `<div class="page-break"></div>`;
-    html += getPrintHeader(compData, `${round.name} — By Apparatus`);
+    html += getPrintHeader(compData, `${escHtml(round.name)} — By Apparatus`);
 
     const rankGroups = buildRankGroups(round.id);
     apparatus.forEach((app, ai) => {
       if (ai > 0) html += `<div style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;"></div>`;
-      html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${getApparatusIcon(app)} ${app}</h2>`;
+      html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${getApparatusIcon(app)} ${escHtml(app)}</h2>`;
 
       rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
         const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
@@ -945,7 +950,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         const ranked = denseRank(withScores.filter(g => g.score > 0), "score");
         const dns = withScores.filter(g => g.score === 0);
 
-        html += `<h3 style="color:#444;margin-top:10px;">${groupLabel} <span style="font-weight:400;color:#888;">(${glist.length})</span></h3>
+        html += `<h3 style="color:#444;margin-top:10px;">${escHtml(groupLabel)} <span style="font-weight:400;color:#888;">(${glist.length})</span></h3>
         <table style="margin-bottom:14px;">
           <thead><tr>
             <th style="width:60px;">Rank</th>
@@ -957,15 +962,15 @@ export function buildResultsHTML(compData, gymnasts, scores) {
           ${ranked.map(g => `<tr>
             ${badgeCell(g.rank)}
             <td style="color:#888;">${g.number || ""}</td>
-            <td>${g.name}</td>
-            <td style="color:#666;">${g.club || ""}</td>
+            <td>${escHtml(g.name)}</td>
+            <td style="color:#666;">${escHtml(g.club) || ""}</td>
             <td style="text-align:right;font-weight:700;color:${colour};">${g.score.toFixed(2)}</td>
           </tr>`).join("")}
           ${dns.map(g => `<tr style="opacity:0.4;">
             <td style="color:#aaa;font-size:10px;">DNS</td>
             <td style="color:#aaa;">${g.number || ""}</td>
-            <td>${g.name}</td>
-            <td style="color:#aaa;">${g.club || ""}</td>
+            <td>${escHtml(g.name)}</td>
+            <td style="color:#aaa;">${escHtml(g.club) || ""}</td>
             <td style="text-align:right;color:#aaa;">—</td>
           </tr>`).join("")}
           </tbody>
@@ -976,7 +981,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
 
   html += `<div class="print-footer">
     <span>GymScore · Official Results · Generated ${new Date().toLocaleDateString("en-GB")}</span>
-    <span>${compData.organiserName || ""}</span>
+    <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
   return html;
@@ -1020,24 +1025,24 @@ export function exportResultsPDF(compData, gymnasts, scores) {
       map[key].gymnasts.push(g);
     });
 
-    body += `<div class="round-header">${round.name} &nbsp;·&nbsp; ${round.start} – ${round.end}</div>`;
+    body += `<div class="round-header">${escHtml(round.name)} &nbsp;·&nbsp; ${round.start} – ${round.end}</div>`;
 
     Object.values(map).sort((a,b)=>(a.levelName+a.ageLabel).localeCompare(b.levelName+b.ageLabel)).forEach(({ levelName, ageLabel, gymnasts: glist }) => {
       const label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
-      body += `<div class="level-header">${label}</div>`;
+      body += `<div class="level-header">${escHtml(label)}</div>`;
 
       // Overall ranking table
       const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
       const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
       const dns = withTotals.filter(g => g.total === 0);
 
-      const appHeaders = compData.apparatus.map(a => `<th>${getPlainIcon(a)} ${a}</th>`).join("");
+      const appHeaders = compData.apparatus.map(a => `<th>${getPlainIcon(a)} ${escHtml(a)}</th>`).join("");
 
       body += `<table><thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>${appHeaders}<th>Total</th></tr></thead><tbody>`;
       [...ranked, ...dns.map(g=>({...g,rank:null}))].forEach(g => {
         const cells = compData.apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(2) : "—"}</td>`).join("");
         const rankCell = g.rank === null ? `<td class="dns">DNS</td>` : `<td class="rank">${medalEmoji(g.rank)}</td>`;
-        body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${g.name}</strong></td><td>${g.club || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(2) : "—"}</strong></td></tr>`;
+        body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${escHtml(g.name)}</strong></td><td>${escHtml(g.club) || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(2) : "—"}</strong></td></tr>`;
       });
       body += `</tbody></table>`;
     });
@@ -1048,7 +1053,7 @@ export function exportResultsPDF(compData, gymnasts, scores) {
     : "";
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>${compData.name || "Competition"} — Results</title>
+<title>${escHtml(compData.name) || "Competition"} — Results</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Arial', sans-serif; font-size: 11px; color: #111; padding: 20px; }
@@ -1069,8 +1074,8 @@ export function exportResultsPDF(compData, gymnasts, scores) {
 </style>
 </head><body>
 <div class="header">
-  <h1>${compData.name || "Competition Results"}</h1>
-  <div class="meta">${[dateFmt, compData.location, compData.holder ? `Holder: ${compData.holder}` : ""].filter(Boolean).join("  ·  ")}</div>
+  <h1>${escHtml(compData.name) || "Competition Results"}</h1>
+  <div class="meta">${[dateFmt, escHtml(compData.location), compData.holder ? `Holder: ${escHtml(compData.holder)}` : ""].filter(Boolean).join("  ·  ")}</div>
 </div>
 ${body}
 <div class="footer">Generated by GYMCOMP · ${new Date().toLocaleDateString("en-GB")}</div>

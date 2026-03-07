@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { denseRank, gymnast_key } from "../../lib/scoring.js";
-import { getApparatusIcon, printDocument, buildResultsHTML, exportResultsPDF, exportResultsXLSX } from "../../lib/pdf.js";
-import ConfirmModal from "../shared/ConfirmModal.jsx";
+import { exportResultsXLSX } from "../../lib/pdf.js";
+
 
 function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
@@ -10,28 +10,28 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [levelFilter, setLevelFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
 
-  const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
+  const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
   // Unique levels in this round
-  const uniqueLevels = [...new Set(roundGymnasts.map(g => {
+  const uniqueLevels = useMemo(() => [...new Set(roundGymnasts.map(g => {
     const lo = compData.levels.find(l => l.id === g.level);
     return lo?.name || "Unknown";
-  }))].sort();
+  }))].sort(), [roundGymnasts, compData.levels]);
 
   // Check if selected level uses level+age ranking
   const selectedLevelObj = levelFilter !== "all" ? compData.levels.find(l => l.name === levelFilter) : null;
   const showAgeFilter = selectedLevelObj && selectedLevelObj.rankBy === "level+age";
 
   // Unique ages for the selected level
-  const uniqueAges = showAgeFilter
+  const uniqueAges = useMemo(() => showAgeFilter
     ? [...new Set(roundGymnasts.filter(g => {
         const lo = compData.levels.find(l => l.id === g.level);
         return (lo?.name || "Unknown") === levelFilter;
       }).map(g => g.age || "Unknown age"))].sort()
-    : [];
+    : [], [roundGymnasts, compData.levels, levelFilter, showAgeFilter]);
 
   // Reset age filter when level changes to one without age ranking
-  React.useEffect(() => {
+  useEffect(() => {
     if (!showAgeFilter) setAgeFilter("all");
   }, [showAgeFilter]);
 
@@ -58,7 +58,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
       .map(([key, val]) => ({ key, ...val }));
   };
 
-  const allRankGroups = buildRankGroups();
+  const allRankGroups = useMemo(buildRankGroups, [roundGymnasts, compData.levels]);
   const rankGroups = allRankGroups.filter(rg => {
     if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
     if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
@@ -67,7 +67,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
 
   // ── Hide-on-scroll topbar ──
   const [topbarHidden, setTopbarHidden] = useState(false);
-  React.useEffect(() => {
+  useEffect(() => {
     const el = document.querySelector(".app-main");
     if (!el) return;
     let last = el.scrollTop;

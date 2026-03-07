@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML, buildDiagnosticHTML, buildResultsHTML, exportResultsPDF, exportResultsXLSX } from "../../lib/pdf.js";
+import { printDocument, formatDate, buildDiagnosticHTML, buildResultsHTML } from "../../lib/pdf.js";
 
 function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
   const colour = compData.brandColour || "#000dff";

@@ -706,7 +706,7 @@
   async function fetchData() {
     if (!compId) return null;
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/competitions?id=eq.${compId}&select=*`,
+      `${SUPABASE_URL}/rest/v1/competitions?id=eq.${encodeURIComponent(compId)}&select=*`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
     );
     if (!res.ok) return null;
@@ -719,7 +719,7 @@
     if (!compId) return [];
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/scores?comp_id=eq.${compId}&select=*`,
+        `${SUPABASE_URL}/rest/v1/scores?comp_id=eq.${encodeURIComponent(compId)}&select=*`,
         { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
       );
       if (!res.ok) return [];

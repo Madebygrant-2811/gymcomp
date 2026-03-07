@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
-import { generateId, hashPin, isHashed } from "../../lib/utils.js";
-import { APPARATUS_OPTIONS, APPARATUS_GROUPS, UK_LEVELS, UK_LEVELS_FLAT } from "../../lib/constants.js";
+import { generateId } from "../../lib/utils.js";
 import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML } from "../../lib/pdf.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";

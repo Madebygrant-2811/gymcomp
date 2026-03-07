@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import GymCompLogo from "../../assets/GymComp-Logo.svg";
 import LaptopSignUp from "../../assets/Laptop-sign-up.png";

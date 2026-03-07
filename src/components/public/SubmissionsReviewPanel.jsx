@@ -39,7 +39,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
       return;
     }
     const { data, error } = await supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false });
-    if (error) console.error("[SubmissionsReviewPanel] load error:", error);
+    if (error) console.error("[SubmissionsReviewPanel] load error:", error.message);
     if (!mountedRef.current) return;
     setSubmissions(data || []);
     setLoading(false);
@@ -63,7 +63,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
       const { data: rows, error } = await supabase.from("submissions").update({ status: "accepted" }).eq("id", sub.id).select();
       if (error) {
         console.error("[acceptSubmission] Supabase update failed:", error.message);
-        alert("Could not save acceptance to Supabase — please check your RLS policies on the submissions table, then try again.\n\n" + error.message);
+        alert("Could not accept this submission. Please try again or contact support if the problem persists.");
         setProcessing(null);
         return;
       }
@@ -92,7 +92,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
     if (!inSandbox) {
       const { error } = await supabase.from("submissions").update({ status: "declined" }).eq("id", sub.id).select();
       if (error) {
-        console.error("[declineSubmission] Supabase update failed:", error);
+        console.error("[declineSubmission] Supabase update failed:", error.message);
         setProcessing(null);
         return;
       }

@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { isHashed, hashPin } from "../../lib/utils.js";
-import GymCompLogo from "../../assets/GymComp-Logo.svg";
-import LaptopSignUp from "../../assets/Laptop-sign-up.png";
 
 function HomeScreen({ onNew, onResume }) {
   const [recentComps, setRecentComps] = useState([]);

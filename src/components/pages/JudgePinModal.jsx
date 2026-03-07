@@ -1,9 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { hashPin, isHashed } from "../../lib/utils.js";
-import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "../../lib/migrate.js";
-import { scoresToFlat } from "../../lib/scoring.js";
-import GymCompLogo from "../../assets/GymComp-Logo.svg";
 
 // ============================================================
 // JUDGE PIN MODAL — competition ID + PIN entry overlay

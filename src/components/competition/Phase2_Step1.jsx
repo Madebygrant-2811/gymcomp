@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { gymnast_key } from "../../lib/scoring.js";
-import { round2dp, generateId } from "../../lib/utils.js";
+import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import GymCompLogomark from "../../assets/Logomark.svg";
-import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
@@ -143,43 +142,49 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     !!sheetReceived[roundId]?.[`${groupKey}__${apparatus}`];
 
   // ── Group gymnasts ───────────────────────────────────────
-  const roundGymnasts = gymnasts.filter(g => g.round === activeRound);
+  const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
   // Unfiltered groups for sheet tracker
-  const allGroups = [];
-  const allGrouped = {};
-  roundGymnasts.forEach(g => {
-    const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
-    const grp = g.group || "\u2014";
-    const key = `${levelName}__${grp}`;
-    if (!allGrouped[key]) {
-      allGrouped[key] = true;
-      allGroups.push({ key, level: levelName, group: grp });
-    }
-  });
+  const allGroups = useMemo(() => {
+    const groups = [];
+    const seen = {};
+    roundGymnasts.forEach(g => {
+      const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
+      const grp = g.group || "\u2014";
+      const key = `${levelName}__${grp}`;
+      if (!seen[key]) {
+        seen[key] = true;
+        groups.push({ key, level: levelName, group: grp });
+      }
+    });
+    return groups;
+  }, [roundGymnasts, compData.levels]);
   const appCount = (compData.apparatus || []).length;
   const totalSheets = allGroups.length * appCount;
   const sheetsIn = (roundId) => {
     const rd = sheetReceived[roundId] || {};
     return Object.values(rd).filter(Boolean).length;
   };
-  const filteredGymnasts = searchQuery.trim()
+  const filteredGymnasts = useMemo(() => searchQuery.trim()
     ? roundGymnasts.filter(g => {
         const q = searchQuery.toLowerCase();
         return (g.name || "").toLowerCase().includes(q)
           || (g.number || "").toString().toLowerCase().includes(q)
           || (g.club || "").toLowerCase().includes(q);
       })
-    : roundGymnasts;
+    : roundGymnasts, [roundGymnasts, searchQuery]);
 
-  const grouped = {};
-  filteredGymnasts.forEach(g => {
-    const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
-    if (!grouped[levelName]) grouped[levelName] = {};
-    const grp = g.group || "\u2014";
-    if (!grouped[levelName][grp]) grouped[levelName][grp] = [];
-    grouped[levelName][grp].push(g);
-  });
+  const grouped = useMemo(() => {
+    const g = {};
+    filteredGymnasts.forEach(gym => {
+      const levelName = compData.levels.find(l => l.id === gym.level)?.name || gym.level;
+      if (!g[levelName]) g[levelName] = {};
+      const grp = gym.group || "\u2014";
+      if (!g[levelName][grp]) g[levelName][grp] = [];
+      g[levelName][grp].push(gym);
+    });
+    return g;
+  }, [filteredGymnasts, compData.levels]);
 
   // ── Score Modal helpers ──────────────────────────────────
   const openScoreModal = (gid, app, isEdit) => {

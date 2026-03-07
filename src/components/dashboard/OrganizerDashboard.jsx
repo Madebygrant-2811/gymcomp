@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { generateId } from "../../lib/utils.js";
-import { EVENT_STATUSES, statusMeta } from "../../lib/constants.js";
-import { events, EVENTS_KEY } from "../../lib/storage.js";
-import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "../../lib/migrate.js";
-import { scoresToFlat } from "../../lib/scoring.js";
+import { statusMeta } from "../../lib/constants.js";
+import { events } from "../../lib/storage.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 // ============================================================
@@ -26,7 +24,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
     try {
       const { error } = await supabase.from("competitions").update({ status: newStatus }).eq("id", cid);
       if (error) console.error("[pushStatusToSupabase] failed:", error.message);
-    } catch (e) { console.error("[pushStatusToSupabase] error:", e); }
+    } catch (e) { console.error("[pushStatusToSupabase] error:", e.message); }
   };
 
   const reload = () => {
@@ -52,7 +50,6 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
       if (!session) return;
       supabase.from("competitions").select("id, data, status, created_at").eq("user_id", session.user.id).order("created_at", { ascending: false }).then(({ data: supabaseComps, error }) => {
         if (error) return;
-        console.log("[syncFromSupabase] raw rows:", (supabaseComps || []).map(c => ({ id: c.id, status: c.status, keys: Object.keys(c) })));
         const all = events.getAll();
         let changed = false;
         const ownedCompIds = new Set((supabaseComps || []).map(c => c.id));
@@ -68,7 +65,6 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
             : undefined;
           const supaStatus = comp.status || "active";
           if (!existing) {
-            console.log("[syncFromSupabase] NEW local event:", comp.id, "supabase status:", comp.status, "→ local status:", supaStatus);
             all.push({ id: generateId(), accountId: account.id, compId: comp.id, status: supaStatus, createdAt: comp.created_at, updatedAt: comp.created_at, snapshot });
             changed = true;
           } else {
@@ -76,12 +72,8 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
             const patch = recentPatches.current[comp.id];
             const useLocalStatus = patch && (Date.now() - patch.ts < 5000);
             const effectiveStatus = useLocalStatus ? patch.status : supaStatus;
-            if (useLocalStatus) {
-              console.log("[syncFromSupabase] SKIP status overwrite for", comp.id, "— recent patch:", patch.status, "(supabase has:", comp.status, ")");
-            }
             const needsUpdate = snapshot || existing.status !== effectiveStatus;
             if (needsUpdate) {
-              console.log("[syncFromSupabase] UPDATE:", comp.id, "status:", existing.status, "→", effectiveStatus);
               const idx = all.indexOf(existing);
               all[idx] = { ...existing, ...(snapshot ? { snapshot } : {}), status: effectiveStatus };
               changed = true;

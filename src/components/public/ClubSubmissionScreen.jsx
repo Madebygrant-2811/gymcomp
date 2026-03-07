@@ -1,8 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase.js";
-import { generateId, normalizeStr, parseCSV } from "../../lib/utils.js";
-import { UK_LEVELS, UK_LEVELS_FLAT, UK_CLUBS } from "../../lib/constants.js";
-import ClubPicker from "../shared/ClubPicker.jsx";
+import { generateId } from "../../lib/utils.js";
 
 // ============================================================
 // HOME SCREEN

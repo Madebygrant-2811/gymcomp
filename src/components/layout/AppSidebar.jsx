@@ -1,4 +1,3 @@
-import { EVENT_STATUSES, statusMeta } from "../../lib/constants.js";
 import GymCompLogotype from "../../assets/Logotype.svg";
 import GymCompLogomark from "../../assets/Logomark.svg";
 
