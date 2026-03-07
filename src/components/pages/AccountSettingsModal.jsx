@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabaseAuth, supabase } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 
 // ============================================================
@@ -17,11 +17,10 @@ function AccountSettingsModal({ account, profile, onSave, onLogout, onClose }) {
     setError(""); setSuccess("");
     if (!fullName.trim()) { setError("Name cannot be empty."); return; }
     setSaving(true);
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setError("Session expired — please sign in again."); setSaving(false); return; }
-    const token = session.access_token;
     const updated = { id: account.id, full_name: fullName.trim(), club_name: clubName.trim(), location: location.trim() };
-    const { error: err } = await supabase.upsertProfile(updated, token);
+    const { error: err } = await supabase.from("profiles").upsert(updated);
     setSaving(false);
     if (err) { setError("Couldn't save changes — please try again."); return; }
     setSuccess("Changes saved.");

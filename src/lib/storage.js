@@ -69,12 +69,12 @@ export const SYNC_QUEUE_KEY = "gymcomp_sync_queue";
 export const syncQueue = {
   get: () => { try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]"); } catch { return []; } },
   save: (q) => localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)),
-  push: (record, token) => {
+  push: (record) => {
     const q = syncQueue.get();
     // Replace any existing entry for the same comp ID (only latest matters)
     const idx = q.findIndex(e => e.record.id === record.id);
     if (idx !== -1) q.splice(idx, 1);
-    q.push({ record, token, ts: Date.now() });
+    q.push({ record, ts: Date.now() });
     syncQueue.save(q);
   },
   clear: (compId) => {

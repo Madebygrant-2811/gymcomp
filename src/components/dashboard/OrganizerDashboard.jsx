@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { supabaseAuth, supabase } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase.js";
 import { generateId } from "../../lib/utils.js";
 import { EVENT_STATUSES, statusMeta } from "../../lib/constants.js";
 import { events, EVENTS_KEY } from "../../lib/storage.js";
@@ -24,10 +24,8 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
   const pushStatusToSupabase = async (cid, newStatus) => {
     recentPatches.current[cid] = { status: newStatus, ts: Date.now() };
     try {
-      const { data: { session } } = await supabaseAuth.auth.getSession();
-      if (!session) { console.error("[pushStatusToSupabase] no session"); return; }
-      const { error } = await supabase.patch("competitions", cid, { status: newStatus }, session.access_token);
-      if (error) console.error("[pushStatusToSupabase] failed:", error);
+      const { error } = await supabase.from("competitions").update({ status: newStatus }).eq("id", cid);
+      if (error) console.error("[pushStatusToSupabase] failed:", error.message);
     } catch (e) { console.error("[pushStatusToSupabase] error:", e); }
   };
 
@@ -50,9 +48,9 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
     // Clean up expired patch guards (>10s old)
     const now = Date.now();
     Object.keys(recentPatches.current).forEach(k => { if (now - recentPatches.current[k].ts > 10000) delete recentPatches.current[k]; });
-    supabaseAuth.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
-      supabase.fetchListForUser(session.access_token, session.user.id).then(({ data: supabaseComps, error }) => {
+      supabase.from("competitions").select("id, data, status, created_at").eq("user_id", session.user.id).order("created_at", { ascending: false }).then(({ data: supabaseComps, error }) => {
         if (error) return;
         console.log("[syncFromSupabase] raw rows:", (supabaseComps || []).map(c => ({ id: c.id, status: c.status, keys: Object.keys(c) })));
         const all = events.getAll();
@@ -140,22 +138,18 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
     const ev = deleteConfirm;
     setDeleteConfirm(null);
     if (ev.compId) {
-      const { data: { session } } = await supabaseAuth.auth.getSession();
-      if (session) {
-        const { error } = await supabase.deleteCompetition(ev.compId, session.access_token);
-        if (error) console.error("[confirmDelete] Supabase DELETE failed:", error);
-      }
+      const { error } = await supabase.from("competitions").delete().eq("id", ev.compId);
+      if (error) console.error("[confirmDelete] Supabase DELETE failed:", error.message);
     }
     events.remove(ev.id);
     reload();
   };
 
   const confirmBulkDelete = async () => {
-    const { data: { session } } = await supabaseAuth.auth.getSession();
     for (const id of selected) {
       const ev = myEvents.find(e => e.id === id);
-      if (ev?.compId && session) {
-        await supabase.deleteCompetition(ev.compId, session.access_token);
+      if (ev?.compId) {
+        await supabase.from("competitions").delete().eq("id", ev.compId);
       }
       events.remove(id);
     }

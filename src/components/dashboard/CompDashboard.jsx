@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { supabaseAuth, supabase } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase.js";
 import { generateId, hashPin, isHashed } from "../../lib/utils.js";
 import { APPARATUS_OPTIONS, APPARATUS_GROUPS, UK_LEVELS, UK_LEVELS_FLAT } from "../../lib/constants.js";
 import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML } from "../../lib/pdf.js";
@@ -28,7 +28,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const fetchPendingCount = useCallback(() => {
     if (!compId) return;
     if (inSandbox) { setPendingCount(2); return; }
-    supabase.fetchSubmissions(compId).then(({ data }) => {
+    supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
       if (mountedRef.current && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
   }, [compId]);

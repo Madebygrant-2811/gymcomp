@@ -29,7 +29,7 @@ function JudgePinModal({ onResume, onClose }) {
     if (!id) return;
     setResumeError("");
     setChecking(true);
-    const { data, error } = await supabase.fetchOne("competitions", id);
+    const { data, error } = await supabase.from("competitions").select("*").eq("id", id).maybeSingle();
     setChecking(false);
     if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
     const pin = data.data?.pin;

@@ -21,7 +21,7 @@ function HomeScreen({ onNew, onResume }) {
   useEffect(() => {
     if (inSandbox) { setLoading(false); return; }
     let cancelled = false;
-    supabase.fetchList("competitions").then(({ data }) => {
+    supabase.from("competitions").select("id, data->compData->>name, data->compData->>date, data->compData->>location, created_at").order("created_at", { ascending: false }).limit(20).then(({ data }) => {
       if (cancelled) return;
       setRecentComps(data || []);
       setLoading(false);
@@ -39,7 +39,7 @@ function HomeScreen({ onNew, onResume }) {
     if (!id) return;
     setResumeError("");
     setResuming(true);
-    const { data, error } = await supabase.fetchOne("competitions", id);
+    const { data, error } = await supabase.from("competitions").select("*").eq("id", id).maybeSingle();
     setResuming(false);
     if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
     const pin = data.data?.pin;

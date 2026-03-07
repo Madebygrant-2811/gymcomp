@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
 // ── lib imports ──
-import { supabaseAuth, supabase, SUPABASE_KEY } from "./lib/supabase.js";
+import { supabase } from "./lib/supabase.js";
 import { generateId, hashPin, isHashed } from "./lib/utils.js";
 import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
 import { events, syncQueue } from "./lib/storage.js";
@@ -95,9 +95,7 @@ export default function App() {
   // ── Auth initialisation ──────────────────────────────────────────────────
   const loadUserProfile = async (user) => {
     try {
-      const { data: { session } } = await supabaseAuth.auth.getSession();
-      const token = session?.access_token ?? SUPABASE_KEY;
-      const { data: profile } = await supabase.fetchProfile(user.id, token);
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
       setCurrentProfile(profile || null);
       setAuthLoading(false);
       // Only navigate on initial auth — not on token refreshes that re-trigger loadUserProfile
@@ -114,7 +112,7 @@ export default function App() {
 
   useEffect(() => {
     // Resolve any existing session on page load (also handles magic-link / OAuth redirect tokens)
-    supabaseAuth.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setCurrentUser(session.user);
         loadUserProfile(session.user);
@@ -124,7 +122,7 @@ export default function App() {
       }
     });
 
-    const { data: { subscription } } = supabaseAuth.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         setCurrentUser(session.user);
         loadUserProfile(session.user);
@@ -160,11 +158,10 @@ export default function App() {
     const localEv = events.getAll().find(e => e.compId === compId);
     record.status = status || localEv?.status || "draft";
     try {
-      const { data: { session } } = await supabaseAuth.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("no active session");
-      const token = session.access_token;
-      const { error } = await supabase.upsert("competitions", record, token);
-      if (error) throw new Error(error);
+      const { error } = await supabase.from("competitions").upsert(record);
+      if (error) throw new Error(error.message);
       // Success — clear any queued entry for this comp
       syncQueue.clear(compId);
       setPendingSyncCount(syncQueue.size());
@@ -185,14 +182,13 @@ export default function App() {
     flushingRef.current = true;
     setSyncStatus("saving");
     try {
-      const { data: { session } } = await supabaseAuth.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) { flushingRef.current = false; return; }
-      const token = session.access_token;
       const remaining = [];
       for (const entry of queue) {
         try {
-          const { error } = await supabase.upsert("competitions", entry.record, token);
-          if (error) throw new Error(error);
+          const { error } = await supabase.from("competitions").upsert(entry.record);
+          if (error) throw new Error(error.message);
         } catch {
           remaining.push(entry);
         }
@@ -233,7 +229,7 @@ export default function App() {
     if (phase !== 2 && phase !== "dashboard") return;
 
     const flashTimers = new Set();
-    const channel = supabaseAuth.channel(`scores:${compId}`)
+    const channel = supabase.channel(`scores:${compId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "scores", filter: `comp_id=eq.${compId}` }, (payload) => {
         if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
           const row = payload.new;
@@ -263,7 +259,7 @@ export default function App() {
       .subscribe();
 
     return () => {
-      supabaseAuth.removeChannel(channel);
+      supabase.removeChannel(channel);
       flashTimers.forEach(t => clearTimeout(t));
     };
   }, [compId, phase, inSandbox]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -334,14 +330,8 @@ export default function App() {
     try {
       const rows = flatToScoreRows(flatSubset, compId, currentUser ? `organiser:${currentUser.id}` : "judge");
       if (!rows.length) return;
-      // Use JWT if authenticated, anon key for judges
-      let token = SUPABASE_KEY;
-      if (currentUser) {
-        const { data: { session } } = await supabaseAuth.auth.getSession();
-        if (session) token = session.access_token;
-      }
-      const { error } = await supabase.upsertScores(rows, token);
-      if (error) console.error("[pushScoreToTable]", error);
+      const { error } = await supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" });
+      if (error) console.error("[pushScoreToTable]", error.message);
     } catch (e) {
       console.error("[pushScoreToTable]", e.message);
     }
@@ -350,17 +340,12 @@ export default function App() {
   const deleteScoreFromTable = useCallback(async (roundId, gymnastId, apparatus) => {
     if (inSandbox) return;
     try {
-      let token = SUPABASE_KEY;
-      if (currentUser) {
-        const { data: { session } } = await supabaseAuth.auth.getSession();
-        if (session) token = session.access_token;
-      }
-      const { error } = await supabase.deleteScore(compId, roundId, gymnastId, apparatus, token);
-      if (error) console.error("[deleteScoreFromTable]", error);
+      const { error } = await supabase.from("scores").delete().eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId).eq("apparatus", apparatus);
+      if (error) console.error("[deleteScoreFromTable]", error.message);
     } catch (e) {
       console.error("[deleteScoreFromTable]", e.message);
     }
-  }, [compId, currentUser, inSandbox]);
+  }, [compId, inSandbox]);
 
   const confirmSetupChange = () => {
     setCompDataRaw(pendingChange);
@@ -378,7 +363,7 @@ export default function App() {
 
   const handleLogout = async () => {
     events.clear(); // Wipe local events so stale data never leaks to the next session
-    await supabaseAuth.auth.signOut();
+    await supabase.auth.signOut();
     // setCurrentUser(null) + setScreen("auth-login") handled by onAuthStateChange
   };
 
@@ -420,7 +405,7 @@ export default function App() {
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
     } else {
       // No local snapshot — try to fetch from Supabase (e.g. archived events with stripped snapshots)
-      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
         const rawPin = d.compData?.pin || null;
@@ -441,7 +426,7 @@ export default function App() {
       }
     }
     // Scores come exclusively from the scores table
-    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
       setScores(scoresToFlat(tableRows));
     } else {
@@ -453,12 +438,7 @@ export default function App() {
         const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
         const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
         if (rows.length > 0) {
-          let token = SUPABASE_KEY;
-          if (currentUser) {
-            const { data: { session } } = await supabaseAuth.auth.getSession();
-            if (session) token = session.access_token;
-          }
-          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+          supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" }).then(({ error }) => { if (error) console.warn("[score migration]", error.message); });
         }
       } else {
         setScores({});
@@ -485,7 +465,7 @@ export default function App() {
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
     } else {
-      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
         const rawPin = d.compData?.pin || null;
@@ -505,7 +485,7 @@ export default function App() {
       }
     }
     // Scores from table only, with silent blob migration
-    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
       setScores(scoresToFlat(tableRows));
     } else {
@@ -515,12 +495,7 @@ export default function App() {
         const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
         const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
         if (rows.length > 0) {
-          let token = SUPABASE_KEY;
-          if (currentUser) {
-            const { data: { session } } = await supabaseAuth.auth.getSession();
-            if (session) token = session.access_token;
-          }
-          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+          supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" }).then(({ error }) => { if (error) console.warn("[score migration]", error.message); });
         }
       } else {
         setScores({});
@@ -543,7 +518,7 @@ export default function App() {
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
       setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
     } else {
-      const { data: row } = await supabase.fetchOne("competitions", ev.compId);
+      const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
         const rawPin = d.compData?.pin || null;
@@ -553,7 +528,7 @@ export default function App() {
       }
     }
     // Scores from table only, with silent blob migration
-    const { data: tableRows } = await supabase.fetchScores(ev.compId);
+    const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
       setScores(scoresToFlat(tableRows));
     } else {
@@ -563,12 +538,7 @@ export default function App() {
         const submittedBy = currentUser ? `organiser:${currentUser.id}` : "migration";
         const rows = flatToScoreRows(blobScores, ev.compId, submittedBy);
         if (rows.length > 0) {
-          let token = SUPABASE_KEY;
-          if (currentUser) {
-            const { data: { session } } = await supabaseAuth.auth.getSession();
-            if (session) token = session.access_token;
-          }
-          supabase.upsertScores(rows, token).catch(err => console.warn("[score migration]", err));
+          supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" }).then(({ error }) => { if (error) console.warn("[score migration]", error.message); });
         }
       } else {
         setScores({});
@@ -686,9 +656,7 @@ export default function App() {
       events.update(currentEventId, { status: "live" });
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
-        supabaseAuth.auth.getSession().then(({ data: { session } }) => {
-          if (session) supabase.patch("competitions", ev.compId, { status: "live" }, session.access_token);
-        });
+        supabase.from("competitions").update({ status: "live" }).eq("id", ev.compId);
       }
     }
   };
@@ -700,9 +668,7 @@ export default function App() {
       events.update(currentEventId, { status: "completed" });
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
-        supabaseAuth.auth.getSession().then(({ data: { session } }) => {
-          if (session) supabase.patch("competitions", ev.compId, { status: "completed" }, session.access_token);
-        });
+        supabase.from("competitions").update({ status: "completed" }).eq("id", ev.compId);
       }
     }
     setScreen("org-dashboard");
@@ -743,7 +709,7 @@ export default function App() {
     setCompDataRaw(savedData.compData || {});
     setGymnasts(savedData.gymnasts || []);
     // Scores exclusively from table
-    const { data: tableRows } = await supabase.fetchScores(id);
+    const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", id);
     if (tableRows && tableRows.length > 0) {
       setScores(scoresToFlat(tableRows));
     } else {
@@ -753,7 +719,7 @@ export default function App() {
         setScores(blobScores);
         const rows = flatToScoreRows(blobScores, id, "migration:judge");
         if (rows.length > 0) {
-          supabase.upsertScores(rows, SUPABASE_KEY).catch(err => console.warn("[score migration]", err));
+          supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" }).then(({ error }) => { if (error) console.warn("[score migration]", error.message); });
         }
       } else {
         setScores({});

@@ -14,7 +14,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   useEffect(() => {
     if (inSandbox) { setPendingCount(2); return; }
     let cancelled = false;
-    supabase.fetchSubmissions(compId).then(({ data }) => {
+    supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
       if (!cancelled && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
     return () => { cancelled = true; };
@@ -28,7 +28,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
 
   const refreshCount = () => {
     if (!inSandbox) {
-      supabase.fetchSubmissions(compId).then(({ data }) => {
+      supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false }).then(({ data }) => {
         if (data) setPendingCount(data.filter(s => s.status === "pending").length);
       });
     } else {

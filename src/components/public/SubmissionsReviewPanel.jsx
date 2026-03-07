@@ -38,7 +38,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
       setLoading(false);
       return;
     }
-    const { data, error } = await supabase.fetchSubmissions(compId);
+    const { data, error } = await supabase.from("submissions").select("*").eq("comp_id", compId).order("submitted_at", { ascending: false });
     if (error) console.error("[SubmissionsReviewPanel] load error:", error);
     if (!mountedRef.current) return;
     setSubmissions(data || []);
@@ -60,10 +60,10 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
     setProcessing(sub.id);
 
     if (!inSandbox) {
-      const { error } = await supabase.updateSubmission(sub.id, { status: "accepted" });
+      const { data: rows, error } = await supabase.from("submissions").update({ status: "accepted" }).eq("id", sub.id).select();
       if (error) {
-        console.error("[acceptSubmission] Supabase update failed:", error);
-        alert("Could not save acceptance to Supabase — please check your RLS policies on the submissions table, then try again.\n\n" + error);
+        console.error("[acceptSubmission] Supabase update failed:", error.message);
+        alert("Could not save acceptance to Supabase — please check your RLS policies on the submissions table, then try again.\n\n" + error.message);
         setProcessing(null);
         return;
       }
@@ -90,7 +90,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
   const declineSubmission = async (sub) => {
     setProcessing(sub.id);
     if (!inSandbox) {
-      const { error } = await supabase.updateSubmission(sub.id, { status: "declined" });
+      const { error } = await supabase.from("submissions").update({ status: "declined" }).eq("id", sub.id).select();
       if (error) {
         console.error("[declineSubmission] Supabase update failed:", error);
         setProcessing(null);

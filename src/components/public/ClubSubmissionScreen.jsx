@@ -28,7 +28,7 @@ function ClubSubmissionScreen({ compId }) {
   useEffect(() => {
     if (!compId) { setError("No competition ID provided."); setLoading(false); return; }
     let cancelled = false;
-    supabase.fetchOne("competitions", compId).then(({ data, error }) => {
+    supabase.from("competitions").select("*").eq("id", compId).maybeSingle().then(({ data, error }) => {
       if (cancelled) return;
       if (error || !data) { setError("Competition not found. Please check your link."); setLoading(false); return; }
       const cd = data.data?.compData;
@@ -70,7 +70,7 @@ function ClubSubmissionScreen({ compId }) {
       status: "pending",
     };
 
-    const { error } = await supabase.insertSubmission(submission);
+    const { error } = await supabase.from("submissions").insert(submission);
     setSubmitting(false);
     if (error) { setFormError("Submission failed — please try again or contact the organiser."); return; }
     setSubmitted(true);

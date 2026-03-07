@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { supabaseAuth, SUPABASE_URL } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase.js";
 import GymCompLogo from "../../assets/GymComp-Logo.svg";
 import LaptopSignUp from "../../assets/Laptop-sign-up.png";
 import JudgePinModal from "../pages/JudgePinModal.jsx";
@@ -17,7 +17,7 @@ function AuthScreen({ onResume }) {
   const handleGoogle = async () => {
     setError("");
     setLoading(true);
-    const { error: err } = await supabaseAuth.auth.signInWithOAuth({
+    const { error: err } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },
     });
@@ -30,7 +30,7 @@ function AuthScreen({ onResume }) {
     if (!trimmed) { setError("Please enter your email address."); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setError("Please enter a valid email address."); return; }
     setLoading(true);
-    const { error: err } = await supabaseAuth.auth.signInWithOtp({
+    const { error: err } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: { emailRedirectTo: window.location.origin },
     });

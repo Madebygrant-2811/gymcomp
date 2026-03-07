@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { supabase, supabaseAuth } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase.js";
 import GymCompLogo from "../../assets/GymComp-Logo.svg";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import AddressLookup from "../shared/AddressLookup.jsx";
@@ -23,8 +23,6 @@ function ProfileOnboardingScreen({ user, onComplete }) {
     if (!fullName.trim()) { setError("Please enter your name."); return; }
     if (!role)            { setError("Please select your role."); return; }
     setSaving(true);
-    const { data: { session } } = await supabaseAuth.auth.getSession();
-    const token = session?.access_token ?? SUPABASE_KEY;
     const profile = {
       id:        user.id,
       full_name: fullName.trim(),
@@ -33,7 +31,7 @@ function ProfileOnboardingScreen({ user, onComplete }) {
       role,
       referral,
     };
-    const { error: err } = await supabase.upsertProfile(profile, token);
+    const { error: err } = await supabase.from("profiles").upsert(profile);
     setSaving(false);
     if (err) { setError("Couldn't save your profile — please try again."); return; }
     onComplete(profile);
