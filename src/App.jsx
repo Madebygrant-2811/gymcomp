@@ -1,56 +1,30 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
-import GymCompLogo from "./assets/GymComp-Logo.svg";
-import GymCompLogotype from "./assets/Logotype.svg";
-import GymCompLogomark from "./assets/Logomark.svg";
-import LaptopSignUp from "./assets/Laptop-sign-up.png";
 
 // ── lib imports ──
-import { supabaseAuth, supabase, SUPABASE_URL, SUPABASE_KEY } from "./lib/supabase.js";
-import { generateId, hashPin, isHashed, todayStr, isFutureOrToday, round2dp, normalizeStr, buildRotations, parseCSV, downloadTemplate } from "./lib/utils.js";
-import { denseRank, gymnast_key, scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
-import { EVENTS_KEY, events, SYNC_QUEUE_KEY, syncQueue } from "./lib/storage.js";
-import { EVENT_STATUSES, statusMeta, APPARATUS_GROUPS, APPARATUS_OPTIONS, APPARATUS_MIGRATE, UK_LEVELS, UK_LEVELS_FLAT, UK_CLUBS } from "./lib/constants.js";
-import { migrateApparatus, migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
-import { getApparatusIcon, formatDate, formatTime, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML, buildDiagnosticHTML, buildResultsHTML, exportResultsPDF, exportResultsXLSX, generatePDF } from "./lib/pdf.js";
+import { supabaseAuth, supabase, SUPABASE_KEY } from "./lib/supabase.js";
+import { generateId, hashPin, isHashed } from "./lib/utils.js";
+import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
+import { events, syncQueue } from "./lib/storage.js";
+import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
+import { exportResultsPDF, exportResultsXLSX } from "./lib/pdf.js";
 import { css } from "./lib/styles.js";
 
-
-// ── shared component imports ──
+// ── component imports ──
 import ErrorBoundary from "./components/shared/ErrorBoundary.jsx";
-import AddressLookup from "./components/shared/AddressLookup.jsx";
-import ClubSearch from "./components/shared/ClubSearch.jsx";
-import ClubPicker from "./components/shared/ClubPicker.jsx";
 import ConfirmModal from "./components/shared/ConfirmModal.jsx";
-import QRDisplay from "./components/shared/QRDisplay.jsx";
-import SubmissionsDashboardSection from "./components/shared/SubmissionsDashboardSection.jsx";
-
 import Step1_CompDetails from "./components/setup/Step1_CompDetails.jsx";
 import Step2_Gymnasts from "./components/setup/Step2_Gymnasts.jsx";
-
-
-// ── competition component imports ──
 import Phase2_Exports from "./components/competition/Phase2_Exports.jsx";
 import Phase2_Step1 from "./components/competition/Phase2_Step1.jsx";
 import Phase2_Step2 from "./components/competition/Phase2_Step2.jsx";
 import MCMode from "./components/competition/MCMode.jsx";
-import LiveViewPanel from "./components/competition/LiveViewPanel.jsx";
-// ── auth imports ──
 import AuthScreen from "./components/auth/AuthScreen.jsx";
 import ProfileOnboardingScreen from "./components/auth/ProfileOnboarding.jsx";
-// ── dashboard imports ──
 import OrganizerDashboard from "./components/dashboard/OrganizerDashboard.jsx";
 import CompDashboard from "./components/dashboard/CompDashboard.jsx";
-// ── public imports ──
-import ClubSubmissionScreen from "./components/public/ClubSubmissionScreen.jsx";
-import SubmissionsReviewPanel from "./components/public/SubmissionsReviewPanel.jsx";
-// ── layout imports ──
 import AppSidebar from "./components/layout/AppSidebar.jsx";
 import MobileLogoHeader from "./components/layout/MobileLogoHeader.jsx";
 import MobileTabBar from "./components/layout/MobileTabBar.jsx";
-// ── page imports ──
-import HomeScreen from "./components/pages/HomeScreen.jsx";
-import JudgePinModal from "./components/pages/JudgePinModal.jsx";
 import PinSetupModal from "./components/pages/PinSetupModal.jsx";
 import AccountSettingsModal from "./components/pages/AccountSettingsModal.jsx";
 import PrivacyPolicyScreen from "./components/pages/PrivacyPolicyScreen.jsx";
