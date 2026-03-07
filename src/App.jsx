@@ -1762,6 +1762,14 @@ function AddressLookup({ value, onChange, placeholder }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Cleanup debounce timer and in-flight fetch on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(debounceRef.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
+
   const search = async (val) => {
     const q = val.trim();
     if (q.length < 3) { setSuggestions([]); setStatus("idle"); return; }
@@ -7034,10 +7042,12 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
 
   useEffect(() => {
     if (!enabled) return;
-    if (inSandbox) { setPendingCount(2); return; } // demo count in sandbox
+    if (inSandbox) { setPendingCount(2); return; }
+    let cancelled = false;
     supabase.fetchSubmissions(compId).then(({ data }) => {
-      if (data) setPendingCount(data.filter(s => s.status === "pending").length);
+      if (!cancelled && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
+    return () => { cancelled = true; };
   }, [compId, enabled]);
 
   const copyLink = async () => {
@@ -7180,11 +7190,14 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+
   const fetchPendingCount = useCallback(() => {
     if (!compData.allowSubmissions || !compId) return;
     if (inSandbox) { setPendingCount(2); return; }
     supabase.fetchSubmissions(compId).then(({ data }) => {
-      if (data) setPendingCount(data.filter(s => s.status === "pending").length);
+      if (mountedRef.current && data) setPendingCount(data.filter(s => s.status === "pending").length);
     });
   }, [compId, compData.allowSubmissions]);
 
@@ -7823,13 +7836,16 @@ function ClubSubmissionScreen({ compId }) {
 
   useEffect(() => {
     if (!compId) { setError("No competition ID provided."); setLoading(false); return; }
+    let cancelled = false;
     supabase.fetchOne("competitions", compId).then(({ data, error }) => {
+      if (cancelled) return;
       if (error || !data) { setError("Competition not found. Please check your link."); setLoading(false); return; }
       const cd = data.data?.compData;
       if (!cd?.allowSubmissions) { setError("This competition is not currently accepting submissions."); setLoading(false); return; }
       setCompConfig(cd);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [compId]);
 
   const addGymnast = () => {
@@ -8043,6 +8059,9 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
 
+  const mountedRef = useRef(true);
+  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+
   const load = async () => {
     setLoading(true);
     if (inSandbox) {
@@ -8063,6 +8082,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
     }
     const { data, error } = await supabase.fetchSubmissions(compId);
     if (error) console.error("[SubmissionsReviewPanel] load error:", error);
+    if (!mountedRef.current) return;
     setSubmissions(data || []);
     setLoading(false);
   };
@@ -8262,10 +8282,13 @@ function HomeScreen({ onNew, onResume }) {
 
   useEffect(() => {
     if (inSandbox) { setLoading(false); return; }
+    let cancelled = false;
     supabase.fetchList("competitions").then(({ data }) => {
+      if (cancelled) return;
       setRecentComps(data || []);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, []);
 
   const handleIdChange = (val) => {
@@ -9816,6 +9839,7 @@ export default function App() {
     // Subscribe for both judges and organisers when in competition phase
     if (phase !== 2 && phase !== "dashboard") return;
 
+    const flashTimers = new Set();
     const channel = supabaseAuth.channel(`scores:${compId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "scores", filter: `comp_id=eq.${compId}` }, (payload) => {
         if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
@@ -9826,7 +9850,8 @@ export default function App() {
           // Flash animation — add base key, remove after 2s
           const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
           setNewScoreKeys(prev => new Set(prev).add(bk));
-          setTimeout(() => setNewScoreKeys(prev => { const n = new Set(prev); n.delete(bk); return n; }), 2000);
+          const t = setTimeout(() => { setNewScoreKeys(prev => { const n = new Set(prev); n.delete(bk); return n; }); flashTimers.delete(t); }, 2000);
+          flashTimers.add(t);
         } else if (payload.eventType === "DELETE") {
           const row = payload.old;
           if (row) {
@@ -9844,7 +9869,10 @@ export default function App() {
       })
       .subscribe();
 
-    return () => { supabaseAuth.removeChannel(channel); };
+    return () => {
+      supabaseAuth.removeChannel(channel);
+      flashTimers.forEach(t => clearTimeout(t));
+    };
   }, [compId, phase, inSandbox]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const scheduleSync = useCallback((cd, g, s) => {
