@@ -2398,6 +2398,64 @@ const css = `
 `;
 
 // ============================================================
+// ERROR BOUNDARY — prevents full-app crash on component errors
+// ============================================================
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    const label = this.props.label || "Unknown";
+    console.error(`[ErrorBoundary:${label}] caught error:`, error);
+    if (info?.componentStack) console.error(`[ErrorBoundary:${label}] component stack:`, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const isDev = typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+      return (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          minHeight: 300, padding: 40, textAlign: "center", fontFamily: "'Saans', system-ui, sans-serif"
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>Something went wrong</div>
+          <p style={{ color: "var(--muted, #909090)", fontSize: 14, maxWidth: 420, lineHeight: 1.6, marginBottom: 8 }}>
+            {this.props.label ? `The ${this.props.label} section hit an error.` : "An unexpected error occurred."}
+            {" "}Your data is safe — try again or refresh the page.
+          </p>
+          {isDev && this.state.error && (
+            <pre style={{
+              background: "var(--surface2, #f0f0f0)", border: "1px solid var(--border, #e4e4e4)",
+              borderRadius: 8, padding: "12px 16px", fontSize: 12, color: "#c0392b",
+              maxWidth: 540, overflow: "auto", textAlign: "left", marginBottom: 16, whiteSpace: "pre-wrap"
+            }}>
+              {this.state.error.message || String(this.state.error)}
+            </pre>
+          )}
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              padding: "10px 24px", borderRadius: 8, border: "none", cursor: "pointer",
+              background: "var(--accent, #000dff)", color: "#fff",
+              fontFamily: "'Saans', system-ui, sans-serif", fontSize: 14, fontWeight: 600
+            }}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ============================================================
 // PHASE 1 STEP 1
 // ============================================================
 function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting }) {
@@ -10411,6 +10469,7 @@ export default function App() {
             onStartComp={null} onDashboard={null}
             onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
           <div className="app-main">
+            <ErrorBoundary label="dashboard">
             <OrganizerDashboard
               account={currentAccount}
               onNew={handleNew}
@@ -10422,6 +10481,7 @@ export default function App() {
               setStatusFilter={setStatusFilter}
               onFilterCountsChange={setFilterCounts}
             />
+            </ErrorBoundary>
           </div>
         </div>
         <MobileLogoHeader onGoHome={() => setScreen("org-dashboard")} />
@@ -10540,6 +10600,7 @@ export default function App() {
 
       {/* DASHBOARD */}
       {phase === "dashboard" && (
+        <ErrorBoundary label="competition dashboard">
         <CompDashboard
           compData={compData} gymnasts={gymnasts}
           compId={compId} compPin={compPin}
@@ -10556,10 +10617,12 @@ export default function App() {
             setGymnastsWithSync(prev => [...prev, ...newGymnasts]);
           }}
         />
+        </ErrorBoundary>
       )}
 
       {/* SETUP phase 1 */}
       {phase === 1 && (
+        <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
           <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "draft")}
             onSaveExit={async () => {
@@ -10587,29 +10650,36 @@ export default function App() {
               }
             }} />
         </div>
+        </ErrorBoundary>
       )}
 
       {/* GYMNAST MANAGEMENT */}
       {phase === "gymnasts" && (
+        <ErrorBoundary label="gymnast management">
         <div style={{ flex: 1 }}>
           <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
             onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
         </div>
+        </ErrorBoundary>
       )}
 
       {/* COMPETITION phase 2 — no old sidebar, just content */}
       {phase === 2 && (step === 1 ? (
+        <ErrorBoundary label="score input">
         <div style={{ flex: 1 }}>
           <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} setStep={setStep}
             onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
             isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue}
             onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys} />
         </div>
+        </ErrorBoundary>
       ) : step === 2 ? (
+        <ErrorBoundary label="results">
         <div style={{ flex: 1 }}>
           <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores}
             onComplete={currentEventId && events.getAll().find(e => e.id === currentEventId)?.status !== "completed" ? handleCompleteComp : undefined} />
         </div>
+        </ErrorBoundary>
       ) : (
         <main className="content" style={{ maxWidth: 1200 }}>
           {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
