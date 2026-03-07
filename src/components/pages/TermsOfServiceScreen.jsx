@@ -1,3 +1,5 @@
+import GymCompLogo from "../../assets/GymComp-Logo.svg";
+
 function TermsOfServiceScreen() {
   const sectionStyle = { marginBottom: 28 };
   const headingStyle = { fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 };

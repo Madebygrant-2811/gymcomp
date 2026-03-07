@@ -1,3 +1,5 @@
+import { useState, useRef, useEffect } from "react";
+import GymCompLogotype from "../../assets/Logotype.svg";
 import GymCompLogomark from "../../assets/Logomark.svg";
 
 // ============================================================

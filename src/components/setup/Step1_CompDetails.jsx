@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from "react";
-import { generateId, isFutureOrToday } from "../../lib/utils.js";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { generateId, isFutureOrToday, todayStr } from "../../lib/utils.js";
 import { UK_LEVELS, UK_LEVELS_FLAT, APPARATUS_GROUPS, APPARATUS_OPTIONS } from "../../lib/constants.js";
+import { getApparatusIcon } from "../../lib/pdf.js";
 import AddressLookup from "../shared/AddressLookup.jsx";
 import ClubSearch from "../shared/ClubSearch.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";

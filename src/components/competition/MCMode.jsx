@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { gymnast_key, denseRank } from "../../lib/scoring.js";
+import { getApparatusIcon } from "../../lib/pdf.js";
 
 function MCMode({ compData, gymnasts, scores }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");

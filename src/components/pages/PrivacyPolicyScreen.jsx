@@ -1,3 +1,5 @@
+import GymCompLogo from "../../assets/GymComp-Logo.svg";
+
 // ============================================================
 // PRIVACY POLICY (public, no auth required)
 // ============================================================

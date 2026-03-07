@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { supabaseAuth, SUPABASE_URL } from "../../lib/supabase.js";
 import GymCompLogo from "../../assets/GymComp-Logo.svg";
+import LaptopSignUp from "../../assets/Laptop-sign-up.png";
+import JudgePinModal from "../pages/JudgePinModal.jsx";
 
 // ============================================================
 // AUTH SCREEN — Google OAuth + Magic Link (replaces LoginScreen + RegisterScreen)

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { gymnast_key } from "../../lib/scoring.js";
 import { round2dp, generateId } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
+import GymCompLogomark from "../../assets/Logomark.svg";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys }) {
