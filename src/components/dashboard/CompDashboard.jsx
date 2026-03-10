@@ -103,7 +103,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const canStart = hasGymnasts && hasJudges && allGymnastsComplete;
   const competingGymnasts = gymnasts.filter(g => !g.dns);
   const dnsGymnasts = gymnasts.filter(g => !!g.dns);
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const completed = eventStatus === "completed";
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
@@ -518,11 +518,11 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               </div>
 
               {/* FIG validation warning */}
-              {compData.useDEScoring && compData.apparatus.some(app => judges.filter(j => j.apparatus === app).length === 0) && (
+              {compData.apparatus.some(app => judges.filter(j => j.apparatus === app).length === 0) && (
                 <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 12,
                   background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
                   fontSize: 12, color: "#c8862a" }}>
-                  ⚠ FIG scoring is enabled — each apparatus needs at least one judge before scores can be entered.
+                  ⚠ Each apparatus needs at least one judge before scores can be entered.
                 </div>
               )}
             </div>

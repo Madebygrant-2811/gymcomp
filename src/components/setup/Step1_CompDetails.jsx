@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { generateId, isFutureOrToday, todayStr } from "../../lib/utils.js";
 import { UK_LEVELS, APPARATUS_GROUPS } from "../../lib/constants.js";
-import { getApparatusIcon } from "../../lib/pdf.js";
+
 import AddressLookup from "../shared/AddressLookup.jsx";
 import ClubSearch from "../shared/ClubSearch.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
@@ -217,60 +217,13 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             />
           </div>
         </div>
-      </div>
-
-      {/* Branding */}
-      <div className="card" id="setup-branding">
-        <div className="card-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          Organiser Branding
-          <a href="/example-judge-slip" target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", textTransform: "none", letterSpacing: 0 }}>
-            View example doc →
-          </a>
-        </div>
-        <div className="grid-2">
-          <div className="field">
-            <label className="label">Organising Club / Organisation Name</label>
-            <ClubPicker
-              value={data.organiserName || ""}
-              onChange={v => setData(d => ({ ...d, organiserName: v }))}
-              placeholder="e.g. Midlands Gymnastics Club"
-            />
-          </div>
-          <div className="field">
-            <label className="label">Brand Colour</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input type="color" value={data.brandColour || "#000dff"}
-                onChange={e => setData(d => ({ ...d, brandColour: e.target.value }))}
-                style={{ width: 44, height: 44, border: "1px solid var(--border)", borderRadius: 12, cursor: "pointer", padding: 2, background: "var(--bg)" }} />
-              <span style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{data.brandColour || "#000dff"}</span>
-            </div>
-          </div>
-        </div>
         <div className="field">
-          <label className="label">Club Logo</label>
-          {data.logo ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <img src={data.logo} alt="Logo" style={{ height: 52, maxWidth: 160, objectFit: "contain", borderRadius: 12, border: "1px solid var(--border)", padding: 4, background: "#fff" }} />
-              <button className="btn btn-sm btn-ghost" style={{ color: "var(--danger)" }}
-                onClick={() => setData(d => ({ ...d, logo: "" }))}>Remove</button>
-            </div>
-          ) : (
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
-              padding: "9px 16px", border: "1px dashed var(--border)", borderRadius: "var(--radius)",
-              fontSize: 13, color: "var(--muted)", background: "var(--bg)", transition: "all 0.2s" }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = "var(--accent)"}
-              onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
-              <span style={{ fontSize: 18 }}>📁</span> Upload logo (PNG/JPG)
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = ev => setData(d => ({ ...d, logo: ev.target.result }));
-                reader.readAsDataURL(file);
-              }} />
-            </label>
-          )}
+          <label className="label">Organising Club / Organisation Name</label>
+          <ClubPicker
+            value={data.organiserName || ""}
+            onChange={v => setData(d => ({ ...d, organiserName: v }))}
+            placeholder="e.g. Midlands Gymnastics Club"
+          />
         </div>
       </div>
 
@@ -375,7 +328,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                         color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
                       }}>
                         <input type="checkbox" checked={checked} onChange={() => toggleApparatus(key, checked)} style={{ display: "none" }} />
-                        <span style={{ fontSize: 16 }}>{getApparatusIcon(key)}</span> {a}
+                        {a}
                       </label>
                     );
                   })}
@@ -431,31 +384,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           </div>
         ))}
         {!data.levels.length && <div className="empty">No levels added yet</div>}
-      </div>
-
-      {/* Scoring Settings */}
-      <div className="card" id="setup-scoring">
-        <div className="card-title">Scoring Format</div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px",
-          background: "var(--background-neutral)", borderRadius: 12, border: "1px solid var(--border)" }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>FIG Scoring</span>
-          <button onClick={() => setData(d => ({ ...d, useDEScoring: !d.useDEScoring }))}
-            style={{ width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
-              background: data.useDEScoring ? "var(--brand-01)" : "var(--background-neutral)",
-              position: "relative", transition: "background 0.2s",
-              boxShadow: "inset 0 0 0 1.5px var(--border)" }}>
-            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ffffff",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.15)", position: "absolute", top: 3,
-              transition: "left 0.2s", left: data.useDEScoring ? 25 : 3 }} />
-          </button>
-        </div>
-        {!data.useDEScoring && (
-          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12,
-            background: "rgba(240,173,78,0.08)", border: "1px solid rgba(240,173,78,0.3)",
-            fontSize: 12, color: "#92400e", lineHeight: 1.6 }}>
-            ⚠ Simple scoring is active — judges will enter a single final score per apparatus instead of the full D/E breakdown.
-          </div>
-        )}
       </div>
 
       {showWarnings && missingFields.length > 0 && (

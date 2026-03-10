@@ -74,7 +74,7 @@ function ClubSubmissionScreen({ compId }) {
     setSubmitted(true);
   };
 
-  const colour = compConfig?.brandColour || "#000dff";
+  const colour = "#000dff";
 
   const inputStyle = { width: "100%", padding: "12px 16px", background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 56, color: "var(--text-primary)", fontSize: 14, fontFamily: "var(--font-display)", boxSizing: "border-box", outline: "none" };
   const labelStyle = { fontSize: 12, fontWeight: 600, color: "var(--text-tertiary)", display: "block", marginBottom: 8, fontFamily: "var(--font-display)" };
@@ -120,7 +120,6 @@ function ClubSubmissionScreen({ compId }) {
     <div style={{ minHeight: "100vh", background: "var(--background-neutral)", fontFamily: "var(--font-display)" }}>
       {/* Header */}
       <div style={{ background: "var(--background-light)", borderBottom: "1px solid #e4e4e4", padding: "20px 24px", display: "flex", alignItems: "center", gap: 16 }}>
-        {compConfig.logo && <img src={compConfig.logo} alt="Logo" style={{ height: 44, objectFit: "contain" }} />}
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 20, color: "var(--text-primary)" }}>{compConfig.name}</div>
           <div style={{ fontSize: 13, color: "var(--text-tertiary)", display: "flex", gap: 16, marginTop: 3 }}>

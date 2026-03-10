@@ -581,7 +581,7 @@
 
   // ── Render helpers ──
   function renderApparatusBlock(rid, gid, app) {
-    const fig = !!compData.useDEScoring;
+    const fig = true;
     const total = getTotal(rid, gid, app);
     const isQueried = !!scores[subKey(rid, gid, app, "query")];
     const isResolved = !!scores[subKey(rid, gid, app, "queryResolved")];
@@ -748,13 +748,13 @@
     const currentRound = rounds.find(r => r.id === activeRound) || rounds[0];
     const roundContent = currentRound ? buildRoundContent(currentRound) : "";
 
-    const colour = compData.brandColour || "#000dff";
+    const colour = "#000dff";
     const dateStr = compData.date
       ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
       : "";
     const venue = compData.venue || compData.location || "";
 
-    const fig = !!compData.useDEScoring;
+    const fig = true;
     const queryCount = countActiveQueries();
 
     document.getElementById("main").innerHTML = `

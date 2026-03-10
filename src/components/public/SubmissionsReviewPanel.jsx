@@ -102,7 +102,7 @@ function SubmissionsReviewPanel({ compId, compData, gymnasts, onAccept, onDeclin
     onDecline?.();
   };
 
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
 
   return (
     <div style={{

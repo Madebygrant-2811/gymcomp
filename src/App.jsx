@@ -80,8 +80,8 @@ export default function App() {
 
   const [compData, setCompDataRaw] = useState({
     name: "", location: "", date: "", holder: "",
-    organiserName: "", venue: "", brandColour: "#000dff", logo: "",
-    useDEScoring: true, allowSubmissions: true, dataConsentConfirmed: false,
+    organiserName: "", venue: "",
+    allowSubmissions: true, dataConsentConfirmed: false,
     clubs: [], rounds: [], apparatus: [], levels: [], judges: []
   });
   const [gymnasts, setGymnasts] = useState([]);
@@ -383,7 +383,7 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
     setGymnasts([]);
     setScores({});
     setPhase(1); setStep(1);
@@ -422,7 +422,7 @@ export default function App() {
       } else {
         // Truly new — start fresh setup
         setCompPin(null);
-        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
         setGymnasts([]);
         setScores({});
         setPhase(1); setStep(1);
@@ -481,7 +481,7 @@ export default function App() {
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
       } else {
         setCompPin(null);
-        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
+        setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
         setGymnasts([]);
         setScores({});
         setSyncStatus("idle");
@@ -576,7 +576,7 @@ export default function App() {
       src.judges = [];
       baseData = src;
     } else {
-      baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", brandColour:"#000dff", logo:"", useDEScoring:true, allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+      baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     }
     setCompDataRaw(migrateCompData(baseData));
     setGymnasts([]);
@@ -694,7 +694,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
     if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
-    const ids = ["setup-basic","setup-branding","setup-clubs","setup-rounds","setup-apparatus","setup-levels","setup-scoring"];
+    const ids = ["setup-basic","setup-clubs","setup-rounds","setup-apparatus","setup-levels"];
     const root = appMainRef.current;
     if (!root) return;
     const observer = new IntersectionObserver((entries) => {

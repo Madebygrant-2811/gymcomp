@@ -405,7 +405,7 @@
 
   // ── Render form ──
   function renderForm() {
-    const colour = compConfig.brandColour || "#000dff";
+    const colour = "#000dff";
     const levels = compConfig.levels || [];
     const compDate = compConfig.date
       ? new Date(compConfig.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
@@ -456,7 +456,7 @@
     document.getElementById("app").innerHTML = `
       <header class="comp-header">
         <div class="comp-header-inner">
-          ${compConfig.logo ? `<img class="comp-logo" src="${escHtml(compConfig.logo)}" alt="Logo" />` : `<img src="/logo.svg" alt="GymComp" style="height:20px;opacity:0.6" />`}
+          <img src="/logo.svg" alt="GymComp" style="height:20px;opacity:0.6" />
           <div style="flex:1">
             <div class="comp-name">${escHtml(compConfig.name || "Competition")}</div>
             <div class="comp-sub">
@@ -603,8 +603,7 @@
         throw new Error(err);
       }
 
-      const colour = compConfig.brandColour || "#000dff";
-      showSubmitted(colour, compConfig.name || "", compConfig.date || "", filled.length, clubName.trim());
+      showSubmitted("#000dff", compConfig.name || "", compConfig.date || "", filled.length, clubName.trim());
 
     } catch (e) {
       submitting = false;

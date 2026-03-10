@@ -8,24 +8,7 @@ const escHtml = (s) => {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 
-export const APPARATUS_ICONS = {
-  Beam: "🤸",
-  Bar: "🏋️",
-  Bars: "🏋️",
-  Vault: "⚡",
-  Floor: "🌟",
-  Range: "🎯",
-  "Pommel Horse": "🐴",
-  Rings: "⭕",
-  "Parallel Bars": "🤸‍♂️",
-  "Horizontal Bar": "🏋️",
-};
-// Resolve icon for apparatus names like "Floor (WAG)" — strip the group suffix
-export const getApparatusIcon = (name) => {
-  if (APPARATUS_ICONS[name]) return APPARATUS_ICONS[name];
-  const base = name.replace(/\s*\((WAG|MAG)\)$/, "");
-  return APPARATUS_ICONS[base] || "🏅";
-};
+export const getApparatusIcon = () => "";
 
 export function formatDate(dateStr) {
   if (!dateStr) return "";
@@ -43,11 +26,10 @@ export function formatTime(t) {
 }
 
 export function getPrintHeader(compData, subtitle) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   return `
     <div class="print-header">
       <div class="print-header-top" style="border-bottom: 3px solid ${colour};">
-        ${compData.logo ? `<img src="${escHtml(compData.logo)}" class="print-logo" alt="Logo" />` : ""}
         <div class="print-header-text">
           <div class="print-comp-name" style="color:${colour};">${escHtml(compData.name) || "Competition"}</div>
           ${compData.organiserName ? `<div class="print-organiser">${escHtml(compData.organiserName)}</div>` : ""}
@@ -129,7 +111,7 @@ export function printDocument(htmlContent, filename = "gymcomp-document.pdf") {
 
 // Build agenda content
 export function buildAgendaHTML(compData, gymnasts, compId) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const rounds = compData.rounds || [];
   const apparatus = compData.apparatus || [];
 
@@ -262,10 +244,10 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
 
 // Build judge sheets
 export function buildJudgeSheetsHTML(compData, gymnasts) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
-  const fig = !!compData.useDEScoring;
+  const fig = true;
 
   let html = "";
 
@@ -404,7 +386,7 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
 
 // Build attendance list
 export function buildAttendanceHTML(compData, gymnasts) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const sorted = [...gymnasts].sort((a, b) => (a.number || 0) - (b.number || 0));
 
   // Group by club
@@ -497,7 +479,7 @@ export function buildAttendanceHTML(compData, gymnasts) {
 }
 
 export function buildDiagnosticHTML(compData, gymnasts, scores) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
 
@@ -821,7 +803,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
 }
 
 export function buildResultsHTML(compData, gymnasts, scores) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const apparatus = compData.apparatus || [];
   const rounds = compData.rounds || [];
 
@@ -988,8 +970,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
 }
 
 export function exportResultsPDF(compData, gymnasts, scores) {
-  const APPARATUS_ICONS_PLAIN = { Beam:"🤸", Bar:"🏋️", Bars:"🏋️", Vault:"⚡", Floor:"🌟", Range:"🎯", "Pommel Horse":"🐴", Rings:"⭕", "Parallel Bars":"🤸‍♂️", "Horizontal Bar":"🏋️" };
-  const getPlainIcon = (name) => APPARATUS_ICONS_PLAIN[name] || APPARATUS_ICONS_PLAIN[name.replace(/\s*\((WAG|MAG)\)$/, "")] || "";
+  const getPlainIcon = () => "";
 
   const getScore = (roundId, gid, app) => {
     const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
@@ -1101,7 +1082,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     return result;
   };
 
-  const fig = !!compData.useDEScoring;
+  const fig = true;
   const judgeCount = (app) => (compData.judges || []).filter(j => j.apparatus === app).length;
 
   // ── Sheet 1: Results ──

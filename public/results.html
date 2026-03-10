@@ -652,7 +652,7 @@
     const rounds = compData.rounds || [];
     if (!activeRound && rounds.length) activeRound = rounds[0].id;
 
-    const colour = compData.brandColour || "#000dff";
+    const colour = "#000dff";
     const dateStr = compData.date
       ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
       : "";

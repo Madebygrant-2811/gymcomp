@@ -1,7 +1,7 @@
-import { printDocument, formatDate, buildDiagnosticHTML, buildResultsHTML } from "../../lib/pdf.js";
+import { printDocument, buildDiagnosticHTML, buildResultsHTML } from "../../lib/pdf.js";
 
 function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
-  const colour = compData.brandColour || "#000dff";
+  const colour = "#000dff";
   const hasGymnasts = gymnasts.length > 0;
   const hasScores = Object.keys(scores).length > 0;
 
@@ -31,16 +31,12 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
       title: "Gymnast Diagnostic Report",
       icon: "📊",
       desc: "Per-gymnast breakdown comparing Difficulty vs Execution against level peers. Identifies strengths, flags areas for development, and highlights performance patterns across apparatus.",
-      use: "Share with coaches post-competition. D/E scoring must be enabled in Setup for full analysis.",
-      available: hasScores && !!compData.useDEScoring,
-      unavailableMsg: compData.useDEScoring
-        ? "Enter D/E scores in Score Input to generate diagnostics."
-        : "Enable D/E Scoring in Step 1 → Scoring Settings to use this report.",
+      use: "Share with coaches post-competition for full D/E analysis.",
+      available: hasScores,
+      unavailableMsg: "Enter D/E scores in Score Input to generate diagnostics.",
       action: () => printDocument(buildDiagnosticHTML(compData, gymnasts, scores), "gymcomp-diagnostic.pdf"),
     },
   ];
-
-  const brandOk = compData.name && compData.organiserName;
 
   return (
     <div>
@@ -51,38 +47,6 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
 
       <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: 20, fontSize: 12, color: "var(--muted)" }}>
         ℹ Pre-competition documents (Agenda, Judge Sheets, Attendance List) are available on the <strong style={{ color: "var(--text)" }}>Competition Dashboard</strong> — accessible before you start.
-      </div>
-
-      {/* Branding preview */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-title">Branding Preview</div>
-        {!brandOk && (
-          <div className="warn-box" style={{ marginBottom: 14 }}>
-            Complete your organiser name in Step 1 → Competition Details to improve document branding.
-          </div>
-        )}
-        <div style={{
-          border: `2px solid ${colour}`, borderRadius: 8, padding: "16px 20px",
-          display: "flex", alignItems: "center", gap: 16, background: "#fff"
-        }}>
-          {compData.logo
-            ? <img src={compData.logo} alt="Logo" style={{ height: 52, maxWidth: 120, objectFit: "contain" }} />
-            : <div style={{ width: 52, height: 52, borderRadius: 8, background: colour, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🏅</div>
-          }
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 18, color: colour }}>{compData.name || "Competition Name"}</div>
-            {compData.organiserName && <div style={{ fontSize: 12, color: "#444", marginTop: 2 }}>{compData.organiserName}</div>}
-            {(compData.date || compData.venue) && (
-              <div style={{ fontSize: 11, color: "#777", marginTop: 3 }}>
-                {compData.date ? formatDate(compData.date) : ""}
-                {compData.venue ? ` · ${compData.venue}` : ""}
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>
-          To update branding, go to <strong>Step 1 → Organiser Branding</strong>.
-        </div>
       </div>
 
       {/* Document cards */}
@@ -149,7 +113,7 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
       <div className="card" style={{ marginTop: 16, background: "rgba(0,13,255,0.03)", borderColor: "rgba(0,13,255,0.12)" }}>
         <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
           <strong style={{ color: "var(--text)" }}>How it works:</strong> Click "Generate PDF" to download a .pdf file directly to your device.
-          All documents are automatically branded with your competition name, organiser details, logo and colour.
+          All documents are automatically branded with your competition name and organiser details.
         </div>
       </div>
     </div>
