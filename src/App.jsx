@@ -82,7 +82,7 @@ export default function App() {
     name: "", location: "", date: "", holder: "",
     organiserName: "", venue: "",
     allowSubmissions: true, dataConsentConfirmed: false,
-    clubs: [], rounds: [], apparatus: [], levels: [], judges: []
+    clubs: [], rounds: [], apparatus: [], levels: [], judges: [], ageRanges: []
   });
   const [gymnasts, setGymnasts] = useState([]);
   const [scores, setScores] = useState({});
@@ -602,10 +602,6 @@ export default function App() {
     if (currentEventId) events.snapshot(currentEventId, { ...compData, pin }, gymnasts);
     if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
   };
-  const handlePinSkip = () => {
-    setCompPin(null); setShowPinModal(false);
-    if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
-  };
 
   // Navigate back to org dashboard
   const goBackToDashboard = () => {
@@ -694,7 +690,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
     if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
-    const ids = ["setup-basic","setup-clubs","setup-rounds","setup-apparatus","setup-levels"];
+    const ids = ["setup-basic","setup-levels","setup-apparatus","setup-ages","setup-rounds"];
     const root = appMainRef.current;
     if (!root) return;
     const observer = new IntersectionObserver((entries) => {
@@ -919,7 +915,7 @@ export default function App() {
         <style>{css}</style>
         <div className="app">
           <nav className="nav"><div className="nav-logo">GYMCOMP<span>.</span></div><div /><div /></nav>
-          <PinSetupModal onSet={handlePinSet} onSkip={handlePinSkip} />
+          <PinSetupModal onSet={handlePinSet} />
         </div>
       </>
     );
@@ -1158,7 +1154,7 @@ export default function App() {
       )}
 
       {showPinModal && (
-        <PinSetupModal onSet={handlePinSet} onSkip={handlePinSkip} />
+        <PinSetupModal onSet={handlePinSet} />
       )}
 
 

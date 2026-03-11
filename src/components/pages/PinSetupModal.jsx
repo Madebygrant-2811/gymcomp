@@ -4,7 +4,7 @@ import { hashPin } from "../../lib/utils.js";
 // ============================================================
 // PIN SETUP MODAL
 // ============================================================
-function PinSetupModal({ onSet, onSkip }) {
+function PinSetupModal({ onSet }) {
   const [pin, setPin] = useState("");
   const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState("");
@@ -43,22 +43,13 @@ function PinSetupModal({ onSet, onSkip }) {
               onKeyDown={e => e.key === "Enter" && handleSet()} />
           </div>
           {err && <div style={{ fontSize: 13, color: "#e53e3e", padding: "10px 16px", background: "#fff5f5", borderRadius: 8 }}>{err}</div>}
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              onClick={handleSet}
-              style={{
-                flex: 1, padding: "14px", borderRadius: 56, background: "var(--brand-01)", border: "none",
-                cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-alternate)",
-              }}
-            >Set PIN</button>
-            <button
-              onClick={onSkip}
-              style={{
-                flex: 1, padding: "14px", borderRadius: 56, background: "none", border: "1px solid #e4e4e4",
-                cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-primary)",
-              }}
-            >Skip — no PIN</button>
-          </div>
+          <button
+            onClick={handleSet}
+            style={{
+              width: "100%", padding: "14px", borderRadius: 56, background: "var(--brand-01)", border: "none",
+              cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 600, color: "var(--text-alternate)",
+            }}
+          >Set PIN</button>
         </div>
       </div>
     </div>

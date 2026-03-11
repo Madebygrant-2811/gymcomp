@@ -3,17 +3,16 @@ import { generateId, isFutureOrToday, todayStr } from "../../lib/utils.js";
 import { UK_LEVELS, APPARATUS_GROUPS } from "../../lib/constants.js";
 
 import AddressLookup from "../shared/AddressLookup.jsx";
-import ClubSearch from "../shared/ClubSearch.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting }) {
   const [pendingRemove, setPendingRemove] = useState(null);
-  const [editingClubId, setEditingClubId] = useState(null);
-  const [editingClubVal, setEditingClubVal] = useState("");
-  const [newClub, setNewClub] = useState("");
   const [roundCount, setRoundCount] = useState(data.rounds.length || 1);
   const [newLevel, setNewLevel] = useState("");
+  const [newAgeRange, setNewAgeRange] = useState("");
+  const [editingAgeIdx, setEditingAgeIdx] = useState(null);
+  const [editingAgeVal, setEditingAgeVal] = useState("");
   const [showWarnings, setShowWarnings] = useState(false);
   const [topbarHidden, setTopbarHidden] = useState(false);
   const lastScrollY = useRef(0);
@@ -45,19 +44,28 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     setData(d => ({ ...d, date: val }));
   };
 
-  const addClub = () => {
-    const name = newClub.trim();
-    if (!name) return;
-    if (data.clubs.find(c => c.name.toLowerCase() === name.toLowerCase())) return;
-    setData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name }] }));
-    setNewClub("");
+  const addAgeRange = () => {
+    const val = newAgeRange.trim();
+    if (!val) return;
+    const existing = data.ageRanges || [];
+    if (existing.find(a => a.toLowerCase() === val.toLowerCase())) return;
+    setData(d => ({ ...d, ageRanges: [...(d.ageRanges || []), val] }));
+    setNewAgeRange("");
   };
 
-  const saveClubEdit = (id) => {
-    const val = editingClubVal.trim();
+  const saveAgeEdit = (idx) => {
+    const val = editingAgeVal.trim();
     if (!val) return;
-    setData(d => ({ ...d, clubs: d.clubs.map(c => c.id === id ? { ...c, name: val } : c) }));
-    setEditingClubId(null);
+    setData(d => {
+      const updated = [...(d.ageRanges || [])];
+      updated[idx] = val;
+      return { ...d, ageRanges: updated };
+    });
+    setEditingAgeIdx(null);
+  };
+
+  const removeAgeRange = (idx) => {
+    setData(d => ({ ...d, ageRanges: (d.ageRanges || []).filter((_, i) => i !== idx) }));
   };
 
   // Build/sync rounds when roundCount changes — preserve existing round times
@@ -108,7 +116,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 
   const doRemove = () => {
     const { type, id } = pendingRemove;
-    if (type === "club") setData(d => ({ ...d, clubs: d.clubs.filter(c => c.id !== id) }));
     if (type === "round") setData(d => ({ ...d, rounds: d.rounds.filter(r => r.id !== id) }));
     if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id) }));
     if (type === "level") setData(d => ({ ...d, levels: d.levels.filter(l => l.id !== id) }));
@@ -227,118 +234,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         </div>
       </div>
 
-
-      <div className="card" id="setup-clubs">
-        <div className="card-title">Participating Clubs</div>
-        <div className="inline-row" style={{ marginBottom: 14 }}>
-          <ClubSearch
-            value={newClub}
-            onChange={setNewClub}
-            onAdd={addClub}
-          />
-          <button className="btn btn-secondary" onClick={addClub}>Add Club</button>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {data.clubs.map(c => (
-            <div key={c.id} className="chip">
-              {editingClubId === c.id ? (
-                <>
-                  <input className="club-edit-input" value={editingClubVal}
-                    onChange={e => setEditingClubVal(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") saveClubEdit(c.id); if (e.key === "Escape") setEditingClubId(null); }}
-                    autoFocus />
-                  <button onClick={() => saveClubEdit(c.id)} style={{ color: "var(--success)" }}>✓</button>
-                  <button onClick={() => setEditingClubId(null)}>×</button>
-                </>
-              ) : (
-                <>
-                  <span>{c.name}</span>
-                  <button onClick={() => { setEditingClubId(c.id); setEditingClubVal(c.name); }}
-                    style={{ fontSize: 12, color: "var(--muted)" }}>✏️</button>
-                  <button onClick={() => setPendingRemove({ type: "club", id: c.id, msg: `Remove club "${c.name}"?` })}>×</button>
-                </>
-              )}
-            </div>
-          ))}
-          {!data.clubs.length && (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ color: "var(--muted)", fontSize: 13 }}>No clubs added yet</span>
-              <span style={{ color: "var(--muted)", fontSize: 12 }}>·</span>
-              <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "default" }}>You can add clubs later from the Event Dashboard</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Rounds */}
-      <div className="card" id="setup-rounds">
-        <div className="card-title">Rounds &amp; Times</div>
-        <div className="field" style={{ maxWidth: 200 }}>
-          <label className="label">Number of Rounds</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="btn-icon" style={{ fontSize: 18 }}
-              onClick={() => syncRounds(roundCount - 1)} disabled={roundCount <= 1}>−</button>
-            <span style={{ fontFamily: "var(--font-display)", fontSize: 32, minWidth: 32, textAlign: "center", color: "var(--accent)" }}>{roundCount}</span>
-            <button className="btn-icon" style={{ fontSize: 18 }}
-              onClick={() => syncRounds(roundCount + 1)} disabled={roundCount >= 10}>+</button>
-          </div>
-        </div>
-        {data.rounds.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Set times for each round</div>
-            {data.rounds.map((r, i) => (
-              <div key={r.id} className="round-time-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-                <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
-                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                  <label className="label">Start</label>
-                  <input className="input" type="time" value={r.start}
-                    onChange={e => updateRoundTime(r.id, "start", e.target.value)} />
-                </div>
-                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                  <label className="label">End</label>
-                  <input className="input" type="time" value={r.end}
-                    onChange={e => updateRoundTime(r.id, "end", e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {overallTime() && <div className="summary-box" style={{ marginTop: 10 }}>Overall: {overallTime()}</div>}
-      </div>
-
-      {/* Apparatus */}
-      <div className="card" id="setup-apparatus">
-        <div className="card-title">Apparatus</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {APPARATUS_GROUPS.map(group => {
-            const tag = group.label.split(" ")[0]; // WAG or MAG
-            return (
-              <div key={group.label}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", fontFamily: "var(--font-display)", marginBottom: 8 }}>{group.label}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {group.items.map(a => {
-                    const key = `${a} (${tag})`;
-                    const checked = data.apparatus.includes(key);
-                    return (
-                      <label key={key} style={{
-                        display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
-                        background: checked ? "rgba(0,13,255,0.04)" : "var(--bg)",
-                        border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
-                        borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
-                        color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
-                      }}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleApparatus(key, checked)} style={{ display: "none" }} />
-                        {a}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Skill Levels */}
       <div className="card" id="setup-levels">
         <div className="card-title">Skill Levels</div>
@@ -384,6 +279,115 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           </div>
         ))}
         {!data.levels.length && <div className="empty">No levels added yet</div>}
+      </div>
+
+      {/* Apparatus */}
+      <div className="card" id="setup-apparatus">
+        <div className="card-title">Apparatus</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {APPARATUS_GROUPS.map(group => {
+            const tag = group.label.split(" ")[0]; // WAG or MAG
+            return (
+              <div key={group.label}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", fontFamily: "var(--font-display)", marginBottom: 8 }}>{group.label}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {group.items.map(a => {
+                    const key = `${a} (${tag})`;
+                    const checked = data.apparatus.includes(key);
+                    return (
+                      <label key={key} style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+                        background: checked ? "rgba(0,13,255,0.04)" : "var(--bg)",
+                        border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
+                        borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
+                        color: checked ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
+                      }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleApparatus(key, checked)} style={{ display: "none" }} />
+                        {a}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Age Ranges */}
+      <div className="card" id="setup-ages">
+        <div className="card-title">Age Ranges</div>
+        <div className="inline-row" style={{ marginBottom: 14 }}>
+          <div className="field" style={{ flex: 1, margin: 0 }}>
+            <input className="input" placeholder="e.g. Under 9, Junior, 9-10 years"
+              value={newAgeRange}
+              onChange={e => setNewAgeRange(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addAgeRange(); }} />
+          </div>
+          <button className="btn btn-secondary" onClick={addAgeRange}>Add</button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {(data.ageRanges || []).map((a, idx) => (
+            <div key={idx} className="chip">
+              {editingAgeIdx === idx ? (
+                <>
+                  <input className="club-edit-input" value={editingAgeVal}
+                    onChange={e => setEditingAgeVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveAgeEdit(idx); if (e.key === "Escape") setEditingAgeIdx(null); }}
+                    autoFocus />
+                  <button onClick={() => saveAgeEdit(idx)} style={{ color: "var(--success)" }}>✓</button>
+                  <button onClick={() => setEditingAgeIdx(null)}>×</button>
+                </>
+              ) : (
+                <>
+                  <span>{a}</span>
+                  <button onClick={() => { setEditingAgeIdx(idx); setEditingAgeVal(a); }}
+                    style={{ fontSize: 12, color: "var(--muted)" }}>✏️</button>
+                  <button onClick={() => removeAgeRange(idx)}>×</button>
+                </>
+              )}
+            </div>
+          ))}
+          {!(data.ageRanges || []).length && (
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>No age ranges added yet</span>
+          )}
+        </div>
+      </div>
+
+      {/* Rounds */}
+      <div className="card" id="setup-rounds">
+        <div className="card-title">Rounds &amp; Times</div>
+        <div className="field" style={{ maxWidth: 200 }}>
+          <label className="label">Number of Rounds</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button className="btn-icon" style={{ fontSize: 18 }}
+              onClick={() => syncRounds(roundCount - 1)} disabled={roundCount <= 1}>−</button>
+            <span style={{ fontFamily: "var(--font-display)", fontSize: 32, minWidth: 32, textAlign: "center", color: "var(--accent)" }}>{roundCount}</span>
+            <button className="btn-icon" style={{ fontSize: 18 }}
+              onClick={() => syncRounds(roundCount + 1)} disabled={roundCount >= 10}>+</button>
+          </div>
+        </div>
+        {data.rounds.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Set times for each round</div>
+            {data.rounds.map((r, i) => (
+              <div key={r.id} className="round-time-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+                <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
+                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
+                  <label className="label">Start</label>
+                  <input className="input" type="time" value={r.start}
+                    onChange={e => updateRoundTime(r.id, "start", e.target.value)} />
+                </div>
+                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
+                  <label className="label">End</label>
+                  <input className="input" type="time" value={r.end}
+                    onChange={e => updateRoundTime(r.id, "end", e.target.value)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {overallTime() && <div className="summary-box" style={{ marginTop: 10 }}>Overall: {overallTime()}</div>}
       </div>
 
       {showWarnings && missingFields.length > 0 && (

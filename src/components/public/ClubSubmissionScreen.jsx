@@ -55,6 +55,10 @@ function ClubSubmissionScreen({ compId }) {
     if (!filled.length) { setFormError("Please add at least one gymnast."); return; }
     const incomplete = filled.find(g => !g.level);
     if (incomplete) { setFormError(`Please select a level for ${incomplete.name}.`); return; }
+    if ((compConfig.ageRanges || []).length > 0) {
+      const missingAge = filled.find(g => !g.ageCategory);
+      if (missingAge) { setFormError(`Please select an age range for ${missingAge.name}.`); return; }
+    }
 
     setSubmitting(true);
     const submission = {
@@ -190,18 +194,12 @@ function ClubSubmissionScreen({ compId }) {
                       {(compConfig.levels || []).map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
                     </select>
                   </div>
-                  {(compConfig.levels || []).some(l => l.rankBy === "level+age") && (
+                  {(compConfig.ageRanges || []).length > 0 && (
                     <div style={{ flex: 1 }}>
-                      <label style={{ ...labelStyle, fontSize: 11, marginBottom: 6 }}>Age Category</label>
+                      <label style={{ ...labelStyle, fontSize: 11, marginBottom: 6 }}>Age Range <span style={{ color: colour }}>*</span></label>
                       <select style={{ ...selectStyle, color: g.ageCategory ? "var(--text-primary)" : "var(--text-tertiary)" }} value={g.ageCategory} onChange={e => updateGymnast(g.id, "ageCategory", e.target.value)}>
                         <option value="">Select…</option>
-                        <option value="Junior">Junior</option>
-                        <option value="Senior">Senior</option>
-                        <option value="U9">Under 9</option>
-                        <option value="U11">Under 11</option>
-                        <option value="U13">Under 13</option>
-                        <option value="U15">Under 15</option>
-                        <option value="U18">Under 18</option>
+                        {(compConfig.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
                     </div>
                   )}

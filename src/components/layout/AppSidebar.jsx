@@ -61,10 +61,10 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
   const setupAnchors = [
     { id: "setup-basic", label: "Basic Info", icon: icons.info },
-    { id: "setup-clubs", label: "Clubs", icon: icons.club },
-    { id: "setup-rounds", label: "Rounds", icon: icons.clock },
-    { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
     { id: "setup-levels", label: "Levels", icon: icons.layers },
+    { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
+    { id: "setup-ages", label: "Age Ranges", icon: icons.users },
+    { id: "setup-rounds", label: "Rounds", icon: icons.clock },
   ];
 
   const phase2Steps = [

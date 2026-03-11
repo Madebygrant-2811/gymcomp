@@ -45,7 +45,6 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   });
   const [newG, setNewG] = useState(() => blankForm());
 
-  const allAges = [...new Set(data.map(g => g.age).filter(Boolean))];
   const allGroups = [...new Set(data.map(g => g.group).filter(Boolean))];
 
   // Helper: pick or add a club, auto-adding to compData.clubs if new
@@ -300,9 +299,11 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
           </div>
           <div className="field">
             <label className="label">Age <span style={{ color: "#e53e3e" }}>*</span></label>
-            <input className="input" list="ages-list" placeholder="e.g. 9 years" style={fieldErrors.age ? errBorder : {}}
-              value={newG.age} onChange={e => { setNewG(g => ({ ...g, age: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }} />
-            <datalist id="ages-list">{allAges.map(a => <option key={a} value={a} />)}</datalist>
+            <select className="select" value={newG.age} style={fieldErrors.age ? errBorder : {}}
+              onChange={e => { setNewG(g => ({ ...g, age: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }}>
+              <option value="">Select…</option>
+              {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
           </div>
           <div className="field">
             <label className="label">Group <span style={{ color: "#e53e3e" }}>*</span></label>
@@ -518,9 +519,11 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
               </div>
               <div className="field">
                 <label className="label">Age <span style={{ color: "#e53e3e" }}>*</span></label>
-                <input className="input" list="edit-ages-list" value={editModal.age} style={editModalErrors.age ? errBorder : {}}
-                  onChange={e => { setEditModal(m => ({ ...m, age: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }} />
-                <datalist id="edit-ages-list">{allAges.map(a => <option key={a} value={a} />)}</datalist>
+                <select className="select" value={editModal.age} style={editModalErrors.age ? errBorder : {}}
+                  onChange={e => { setEditModal(m => ({ ...m, age: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }}>
+                  <option value="">Select…</option>
+                  {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
               </div>
               <div className="field">
                 <label className="label">Group <span style={{ color: "#e53e3e" }}>*</span></label>
