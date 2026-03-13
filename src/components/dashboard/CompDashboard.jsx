@@ -7,7 +7,7 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 import QRDisplay from "../shared/QRDisplay.jsx";
 import SubmissionsReviewPanel from "../public/SubmissionsReviewPanel.jsx";
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus, onUpdateCompData }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus, onUpdateCompData, onUpdateGymnasts }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
   const [showSubmReview, setShowSubmReview] = useState(false);
@@ -262,7 +262,10 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   <div key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", background: "var(--surface2)", borderRadius: 56, fontSize: 13, fontWeight: 500 }}>
                     <span>{c.name}</span>
                     {!completed && (
-                      <button onClick={() => onUpdateCompData(d => ({ ...d, clubs: d.clubs.filter(cl => cl.id !== c.id) }))}
+                      <button onClick={() => {
+                          onUpdateCompData(d => ({ ...d, clubs: d.clubs.filter(cl => cl.id !== c.id) }));
+                          if (onUpdateGymnasts) onUpdateGymnasts(prev => prev.map(g => g.club === c.name ? { ...g, club: "" } : g));
+                        }}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                     )}
                   </div>

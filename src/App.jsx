@@ -68,6 +68,7 @@ export default function App() {
   const [compPin, setCompPin] = useState(null);
   const [showPinModal, setShowPinModal] = useState(false);
   const pinModalCallback = useRef(null);
+  const snapshotWithPin = (evId, cd, g) => events.snapshot(evId, { ...cd, pin: compPin }, g);
   const [syncStatus, setSyncStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState(null);
   const [showShareToast, setShowShareToast] = useState(false);
@@ -160,7 +161,8 @@ export default function App() {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     if (!currentUser) { return; } // Judge/scorer mode — no Supabase auth, skip silently
     setSyncStatus("saving");
-    const payload = { compData: nextCompData, gymnasts: nextGymnasts, pin: pin ?? compPin };
+    const resolvedPin = pin ?? compPin;
+    const payload = { compData: { ...nextCompData, pin: resolvedPin }, gymnasts: nextGymnasts, pin: resolvedPin };
     const record = { id: compId, data: payload, user_id: currentUser.id };
     const localEv = events.getAll().find(e => e.compId === compId);
     record.status = status || localEv?.status || "draft";
@@ -276,7 +278,7 @@ export default function App() {
     syncTimer.current = setTimeout(() => {
       pushToSupabase(cd, g);
       // Also snapshot to local events store (scores live in scores table, not blob)
-      if (currentEventId) events.snapshot(currentEventId, cd, g);
+      if (currentEventId) snapshotWithPin(currentEventId, cd, g);
     }, 800);
   }, [pushToSupabase, currentEventId]);
 
@@ -405,7 +407,7 @@ export default function App() {
     const snapshot = ev.snapshot;
     setCompId(ev.compId);
     if (snapshot) {
-      const rawPin = snapshot.compData?.pin || null;
+      const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
@@ -415,7 +417,7 @@ export default function App() {
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
-        const rawPin = d.compData?.pin || null;
+        const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
@@ -466,7 +468,7 @@ export default function App() {
     const snapshot = ev.snapshot;
     setCompId(ev.compId);
     if (snapshot) {
-      const rawPin = snapshot.compData?.pin || null;
+      const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
@@ -475,7 +477,7 @@ export default function App() {
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
-        const rawPin = d.compData?.pin || null;
+        const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
@@ -519,7 +521,7 @@ export default function App() {
     const snapshot = ev.snapshot;
     setCompId(ev.compId);
     if (snapshot) {
-      const rawPin = snapshot.compData?.pin || null;
+      const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
       setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
@@ -528,7 +530,7 @@ export default function App() {
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
-        const rawPin = d.compData?.pin || null;
+        const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
         setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
         setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
@@ -586,7 +588,7 @@ export default function App() {
 
     if (currentAccount) {
       const newEv = events.create(currentAccount.id, newCompId);
-      events.snapshot(newEv.id, baseData, []);
+      snapshotWithPin(newEv.id, baseData, []);
       setCurrentEventId(newEv.id);
     } else {
       setCurrentEventId(null);
@@ -599,7 +601,7 @@ export default function App() {
     setCompPin(pin); setShowPinModal(false);
     // Sync PIN to Supabase + local snapshot
     pushToSupabase(compData, gymnasts, pin);
-    if (currentEventId) events.snapshot(currentEventId, { ...compData, pin }, gymnasts);
+    if (currentEventId) events.snapshot(currentEventId, { ...compData, pin: pin }, gymnasts);
     if (pinModalCallback.current) { pinModalCallback.current(); pinModalCallback.current = null; }
   };
 
@@ -608,7 +610,7 @@ export default function App() {
     // Auto-save draft before navigating back
     if (currentEventId) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
-      events.snapshot(currentEventId, compData, gymnasts);
+      snapshotWithPin(currentEventId, compData, gymnasts);
       pushToSupabase(compData, gymnasts);
     }
     setScreen("org-dashboard");
@@ -618,7 +620,7 @@ export default function App() {
   const handleSaveSetup = () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     pushToSupabase(compData, gymnasts);
-    if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
+    if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
   };
 
   const setupCanProceed = compData.name && compData.date &&
@@ -635,7 +637,7 @@ export default function App() {
       const isDraft = ev && ev.status === "draft";
       pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);
       if (currentEventId) {
-        events.snapshot(currentEventId, compData, gymnasts);
+        snapshotWithPin(currentEventId, compData, gymnasts);
         if (isDraft) events.update(currentEventId, { status: "active" });
       }
       if (!compPin) {
@@ -648,7 +650,7 @@ export default function App() {
       // Partial save — persist and go back to dashboard
       if (syncTimer.current) clearTimeout(syncTimer.current);
       pushToSupabase(compData, gymnasts);
-      if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
+      if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
       setScreen("org-dashboard");
     }
   };
@@ -667,7 +669,7 @@ export default function App() {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     pushToSupabase(compData, gymnasts);
     if (currentEventId) {
-      events.snapshot(currentEventId, compData, gymnasts);
+      snapshotWithPin(currentEventId, compData, gymnasts);
       events.update(currentEventId, { status: "completed" });
       const ev = events.getAll().find(e => e.id === currentEventId);
       if (ev?.compId) {
@@ -1015,6 +1017,7 @@ export default function App() {
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
           onUpdateCompData={setCompData}
+          onUpdateGymnasts={setGymnastsWithSync}
           onSetPin={() => {
             pinModalCallback.current = null;
             setShowPinModal(true);
@@ -1034,7 +1037,7 @@ export default function App() {
             onSaveExit={async () => {
               // Partial save — persist and go back to organiser dashboard (event list)
               if (syncTimer.current) clearTimeout(syncTimer.current);
-              if (currentEventId) events.snapshot(currentEventId, compData, gymnasts);
+              if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
               await pushToSupabase(compData, gymnasts);
               setScreen("org-dashboard");
             }}
@@ -1044,7 +1047,7 @@ export default function App() {
               const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
               const isDraft = ev && ev.status === "draft";
               if (currentEventId) {
-                events.snapshot(currentEventId, compData, gymnasts);
+                snapshotWithPin(currentEventId, compData, gymnasts);
                 if (isDraft) events.update(currentEventId, { status: "active" });
               }
               await pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);

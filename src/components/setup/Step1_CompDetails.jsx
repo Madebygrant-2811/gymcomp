@@ -312,6 +312,25 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             );
           })}
         </div>
+        {data.apparatus.length >= 2 && (
+          <>
+            <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Apparatus Order</div>
+            <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Set the starting rotation order. Groups will cascade automatically from this sequence.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {data.apparatus.map((a, i) => (
+                <div key={a} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13 }}>
+                  <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, minWidth: 20 }}>{i + 1}</span>
+                  <span style={{ flex: 1 }}>{a}</span>
+                  <button className="btn btn-sm btn-secondary" style={{ padding: "2px 6px", fontSize: 11, visibility: i === 0 ? "hidden" : "visible" }}
+                    onClick={() => setData(d => { const arr = [...d.apparatus]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return { ...d, apparatus: arr }; })}>↑</button>
+                  <button className="btn btn-sm btn-secondary" style={{ padding: "2px 6px", fontSize: 11, visibility: i === data.apparatus.length - 1 ? "hidden" : "visible" }}
+                    onClick={() => setData(d => { const arr = [...d.apparatus]; [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]; return { ...d, apparatus: arr }; })}>↓</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Age Ranges */}

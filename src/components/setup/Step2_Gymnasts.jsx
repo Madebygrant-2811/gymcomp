@@ -5,7 +5,8 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack }) {
   const [selectedClub, setSelectedClub] = useState(compData.clubs[0]?.name || "");
-  const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
+  const unassignedCount = data.filter(g => !g.round).length;
+  const [activeRound, setActiveRound] = useState(unassignedCount ? "__unassigned__" : compData.rounds[0]?.id || "");
   const [editId, setEditId] = useState(null);
   const [editModal, setEditModal] = useState(null); // { ...gymnast fields } or null
   const [editModalErrors, setEditModalErrors] = useState({});
@@ -14,6 +15,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   const [formWarnings, setFormWarnings] = useState([]);
   const [csvWarnings, setCsvWarnings] = useState({ errors: [], warns: [] });
   const [fieldErrors, setFieldErrors] = useState({});
+  const [editingGroup, setEditingGroup] = useState(null); // { old, value }
+  const [selected, setSelected] = useState(new Set());
   const fileRef = useRef(null);
 
   // Topbar hide-on-scroll
@@ -125,8 +128,23 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
   const cancelEdit = () => { setEditId(null); setNewG(blankForm()); setFormWarnings([]); setFieldErrors({}); };
 
+  const commitGroupRename = () => {
+    if (!editingGroup) return;
+    const newName = normalizeStr(editingGroup.value);
+    if (newName && newName !== editingGroup.old) {
+      setData(d => d.map(g => g.group === editingGroup.old ? { ...g, group: newName } : g));
+    }
+    setEditingGroup(null);
+  };
+
   const doRemove = () => {
-    setData(d => d.filter(g => g.id !== pendingRemove.id));
+    if (pendingRemove.ids) {
+      const removeSet = new Set(pendingRemove.ids);
+      setData(d => d.filter(g => !removeSet.has(g.id)));
+      setSelected(s => { const n = new Set(s); pendingRemove.ids.forEach(id => n.delete(id)); return n; });
+    } else {
+      setData(d => d.filter(g => g.id !== pendingRemove.id));
+    }
     setPendingRemove(null);
   };
 
@@ -145,13 +163,17 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
       rows.forEach((row, i) => {
         const rowNum = i + 2;
         if (!row.name) { errors.push(`Row ${rowNum}: missing Name — skipped`); return; }
-        const levelObj = compData.levels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase());
-        if (!levelObj) { errors.push(`Row ${rowNum}: level "${row.level}" not found in setup — skipped`); return; }
-        const roundObj = compData.rounds.find(r => r.name.toLowerCase() === (row.round || "").toLowerCase());
-        if (!roundObj) { errors.push(`Row ${rowNum}: round "${row.round}" not found in setup — skipped`); return; }
         if (row.number && data.find(x => x.number === row.number)) {
           errors.push(`Row ${rowNum}: number #${row.number} already taken — skipped`); return;
         }
+
+        const levelObj = compData.levels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase());
+        if (row.level && !levelObj) warns.push(`Row ${rowNum}: level "${row.level}" not found — imported without level`);
+        else if (!row.level && compData.levels.length) warns.push(`Row ${rowNum}: no level provided — imported without level`);
+
+        const roundObj = compData.rounds.find(r => r.name.toLowerCase() === (row.round || "").toLowerCase());
+        if (row.round && !roundObj) warns.push(`Row ${rowNum}: round "${row.round}" not found — imported without round`);
+        else if (!row.round && compData.rounds.length) warns.push(`Row ${rowNum}: no round provided — imported without round`);
 
         // Auto-add unknown clubs
         const clubName = (row.club || selectedClub || "").trim();
@@ -164,13 +186,16 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
           }
         }
 
-        toAdd.push({ id: generateId(), name: row.name, number: row.number, club: clubName, level: levelObj.id, round: roundObj.id, age: row.age || "", group: row.group || "" });
+        toAdd.push({ id: generateId(), name: row.name, number: row.number, club: clubName, level: levelObj ? levelObj.id : "", round: roundObj ? roundObj.id : "", age: row.age || "", group: row.group || "" });
       });
 
       setCsvWarnings({ errors, warns });
       if (newClubs.length) {
-        compData.clubs.push(...newClubs); // reflected via setCompData below
-        setCompDataFn(d => ({ ...d, clubs: [...d.clubs, ...newClubs] }));
+        setCompDataFn(d => {
+          const existing = new Set(d.clubs.map(c => c.name.toLowerCase()));
+          const deduped = newClubs.filter(c => !existing.has(c.name.toLowerCase()));
+          return deduped.length ? { ...d, clubs: [...d.clubs, ...deduped] } : d;
+        });
       }
       if (toAdd.length) setData(d => [...d, ...toAdd]);
     };
@@ -178,27 +203,23 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     e.target.value = "";
   };
 
-  // Rotation schedule
-  const [rotations, setRotations] = useState({});
   const allGroups2 = [...new Set(data.map(g => g.group).filter(Boolean))].sort();
-  useEffect(() => {
-    if (allGroups2.length && compData.apparatus.length) {
-      setRotations(prev => buildRotations(allGroups2, compData.apparatus, prev));
-    } else {
-      setRotations({});
-    }
-  }, [JSON.stringify(allGroups2), JSON.stringify(compData.apparatus)]);
+  const rotations = allGroups2.length && compData.apparatus.length ? buildRotations(allGroups2, compData.apparatus, {}) : {};
 
   // Display
-  const roundGymnasts = data.filter(g => g.round === activeRound);
+  const roundGymnasts = activeRound === "__unassigned__" ? data.filter(g => !g.round) : data.filter(g => g.round === activeRound);
   const grouped = {};
   roundGymnasts.forEach(g => {
-    const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
+    const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level || "No Level";
     if (!grouped[levelName]) grouped[levelName] = {};
     const grp = g.group || "—";
     if (!grouped[levelName][grp]) grouped[levelName][grp] = [];
     grouped[levelName][grp].push(g);
   });
+
+  const toggleSelect = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = (ids) => setSelected(s => { const allSelected = ids.every(id => s.has(id)); const n = new Set(s); ids.forEach(id => allSelected ? n.delete(id) : n.add(id)); return n; });
+  const selectedVisible = roundGymnasts.filter(g => selected.has(g.id)).length;
 
   const errBorder = { borderColor: "#e53e3e", boxShadow: "0 0 0 1px #e53e3e" };
 
@@ -256,20 +277,24 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
       {/* Manual Add */}
       <div className="card">
         <div className="card-title">Add Gymnast Manually</div>
-        <div style={{ marginBottom: 12 }}>
-          <label className="label">Club <span style={{ color: "#e53e3e" }}>*</span></label>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Club(s)</div>
+        <div style={{ marginBottom: 16 }}>
+          <ClubPicker value="" placeholder="Add New Clubs..." onSelect={name => { pickClub(name, n => { setSelectedClub(n); setFieldErrors(e => { const ne = { ...e }; delete ne.club; return ne; }); }); }} />
           {compData.clubs.length > 0 && (
-            <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
-              {compData.clubs.map(c => (
-                <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
-              ))}
-            </div>
+            <>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", marginTop: 10, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.5px" }}>Club(s) Attending</div>
+              <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
+                {compData.clubs.map(c => (
+                  <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
+                ))}
+              </div>
+            </>
           )}
-          <ClubPicker value="" placeholder="Search & add a club…" onSelect={name => { pickClub(name, n => { setSelectedClub(n); setFieldErrors(e => { const ne = { ...e }; delete ne.club; return ne; }); }); }} />
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Clubs can be managed in your Event Dashboard</div>
           {fieldErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
         </div>
+        <div style={{ borderTop: "1px solid var(--border)", margin: "0 0 16px" }} />
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Gymnast Details</div>
         <div className="grid-3" style={{ marginBottom: 8 }}>
           <div className="field">
             <label className="label">Name <span style={{ color: "#e53e3e" }}>*</span></label>
@@ -340,7 +365,62 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
               {r.name} ({data.filter(g => g.round === r.id).length})
             </button>
           ))}
+          {data.some(g => !g.round) && (
+            <button className={`tab-btn ${activeRound === "__unassigned__" ? "active" : ""}`}
+              onClick={() => setActiveRound("__unassigned__")}
+              style={{ color: activeRound === "__unassigned__" ? undefined : "#e53e3e" }}>
+              Unassigned ({data.filter(g => !g.round).length})
+            </button>
+          )}
         </div>
+        {selectedVisible > 0 && (
+          <div style={{ padding: "10px 12px", background: "var(--surface2)", borderRadius: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>{selectedVisible} selected</span>
+              <select className="select" style={{ fontSize: 12, padding: "4px 24px 4px 8px", width: "auto", minWidth: 120 }}
+                value="" onChange={e => { if (!e.target.value) return; const val = e.target.value === "__clear__" ? "" : e.target.value; setData(d => d.map(g => selected.has(g.id) ? { ...g, round: val } : g)); }}>
+                <option value="">Assign Round...</option>
+                {compData.rounds.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                <option value="__clear__">— Unassign Round —</option>
+              </select>
+              <select className="select" style={{ fontSize: 12, padding: "4px 24px 4px 8px", width: "auto", minWidth: 120 }}
+                value="" onChange={e => { if (!e.target.value) return; setData(d => d.map(g => selected.has(g.id) ? { ...g, level: e.target.value } : g)); }}>
+                <option value="">Assign Level...</option>
+                {compData.levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+              {(compData.ageRanges || []).length > 0 && (
+                <select className="select" style={{ fontSize: 12, padding: "4px 24px 4px 8px", width: "auto", minWidth: 120 }}
+                  value="" onChange={e => { if (!e.target.value) return; setData(d => d.map(g => selected.has(g.id) ? { ...g, age: e.target.value } : g)); }}>
+                  <option value="">Assign Age...</option>
+                  {compData.ageRanges.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              )}
+              {compData.clubs.length > 0 && (
+                <select className="select" style={{ fontSize: 12, padding: "4px 24px 4px 8px", width: "auto", minWidth: 120 }}
+                  value="" onChange={e => { if (!e.target.value) return; const val = e.target.value === "__clear__" ? "" : e.target.value; setData(d => d.map(g => selected.has(g.id) ? { ...g, club: val } : g)); }}>
+                  <option value="">Assign Club...</option>
+                  {compData.clubs.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  <option value="__clear__">— Clear Club —</option>
+                </select>
+              )}
+              <select className="select" style={{ fontSize: 12, padding: "4px 24px 4px 8px", width: "auto", minWidth: 120 }}
+                value="" onChange={e => { if (!e.target.value) return; const val = e.target.value === "__clear__" ? "" : e.target.value; setData(d => d.map(g => selected.has(g.id) ? { ...g, group: val } : g)); }}>
+                <option value="">Assign Group...</option>
+                {allGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                <option value="__clear__">— Clear Group —</option>
+              </select>
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 12px" }}
+                onClick={() => setPendingRemove({ ids: [...selected], msg: `Remove ${selectedVisible} selected gymnast${selectedVisible > 1 ? "s" : ""}?` })}>
+                Delete Selected
+              </button>
+              <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }}
+                onClick={() => setSelected(new Set())}>
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
         {Object.keys(grouped).length === 0 && <div className="empty">No gymnasts in this round yet</div>}
         {Object.entries(grouped).map(([level, groups]) => (
           <div key={level}>
@@ -350,26 +430,51 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
             </div>
             {Object.entries(groups).map(([grp, gymnasts]) => (
               <div key={grp} style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{grp}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                  {editingGroup?.old === grp ? (
+                    <input className="input" autoFocus value={editingGroup.value}
+                      onChange={e => setEditingGroup(g => ({ ...g, value: e.target.value }))}
+                      onBlur={commitGroupRename}
+                      onKeyDown={e => { if (e.key === "Enter") commitGroupRename(); if (e.key === "Escape") setEditingGroup(null); }}
+                      style={{ fontSize: 13, padding: "2px 8px", width: 160, height: 28 }} />
+                  ) : (
+                    <>{grp} <button className="btn btn-sm btn-secondary" style={{ fontSize: 10, padding: "2px 8px", lineHeight: 1 }}
+                      onClick={() => setEditingGroup({ old: grp, value: grp === "—" ? "" : grp })}>Rename</button></>
+                  )}
+                </div>
                 <div className="table-wrap">
-                  <table>
+                  <table style={{ tableLayout: "fixed", width: "100%" }}>
+                    <colgroup>
+                      <col style={{ width: "5%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "13%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "20%" }} />
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th style={{ width: 52 }}>#</th>
+                        <th>
+                          <input type="checkbox" checked={gymnasts.every(g => selected.has(g.id))}
+                            onChange={() => toggleAll(gymnasts.map(g => g.id))} />
+                        </th>
+                        <th>#</th>
                         <th>Name</th>
                         <th>Club</th>
-                        <th style={{ width: 80 }}>Age</th>
-                        <th style={{ width: 56, textAlign: "center" }}>DNS</th>
-                        <th style={{ width: 140, textAlign: "right" }}>Actions</th>
+                        <th>Age</th>
+                        <th style={{ textAlign: "center" }}>DNS</th>
+                        <th style={{ textAlign: "right" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {gymnasts.map(g => (
                         <tr key={g.id} style={{ opacity: g.dns ? 0.45 : 1 }}>
-                          <td style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12 }}>{g.number}</td>
-                          <td style={{ fontWeight: 600, textDecoration: g.dns ? "line-through" : "none" }}>{g.name}</td>
-                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
-                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age}</td>
+                          <td><input type="checkbox" checked={selected.has(g.id)} onChange={() => toggleSelect(g.id)} /></td>
+                          <td style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.number}</td>
+                          <td style={{ fontWeight: 600, textDecoration: g.dns ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.club}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.age}</td>
                           <td style={{ textAlign: "center" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <button
@@ -403,62 +508,31 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
         ))}
       </div>
 
-      {/* Rotation Schedule */}
+      {/* Rotation Overview (read-only) */}
       {allGroups2.length > 0 && compData.apparatus.length > 0 && (
         <div className="card">
-          <div className="card-title">Apparatus Rotation Schedule</div>
-          <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
-            Set the rotation for {allGroups2[0] || "Group 1"} — remaining groups cascade automatically
-          </p>
-          {compData.rounds.map(round => (
-            <div key={round.id}>
-              <div className="group-header">
-                <span className="group-label">{round.name}</span>
-                <div className="group-line" />
-              </div>
-              <div className="table-wrap" style={{ marginBottom: 20 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 120 }}>Group</th>
-                      {compData.apparatus.map((_, i) => <th key={i}>Position {i + 1}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allGroups2.map((group, gi) => (
-                      <tr key={group}>
-                        <td style={{ fontWeight: 600 }}>{group}</td>
-                        {compData.apparatus.map((_, i) => (
-                          <td key={i}>
-                            {gi === 0 ? (
-                              <select className="select" style={{ padding: "4px 8px", fontSize: 12 }}
-                                value={rotations[group]?.[i] || ""}
-                                onChange={e => {
-                                  const newBase = [...(rotations[group] || compData.apparatus)];
-                                  newBase[i] = e.target.value;
-                                  const cascaded = {};
-                                  allGroups2.forEach((g, gIdx) => {
-                                    cascaded[g] = newBase.map((_, ai) => newBase[(ai + gIdx) % newBase.length]);
-                                  });
-                                  setRotations(cascaded);
-                                }}>
-                                <option value="">—</option>
-                                {compData.apparatus.map(a => <option key={a} value={a}>{a}</option>)}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                                {rotations[group]?.[i] || "—"}
-                              </span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
+          <div className="card-title">Rotation Overview</div>
+          <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Based on apparatus order set in Event Setup. Each group cascades automatically.</p>
+          <div className="table-wrap">
+            <table style={{ tableLayout: "fixed", width: "100%" }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 100 }}>Group</th>
+                  {compData.apparatus.map((_, i) => <th key={i}>Pos {i + 1}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {allGroups2.map(group => (
+                  <tr key={group}>
+                    <td style={{ fontWeight: 600, fontSize: 12 }}>{group}</td>
+                    {compData.apparatus.map((_, i) => (
+                      <td key={i} style={{ fontSize: 12, color: "var(--muted)" }}>{rotations[group]?.[i] || "—"}</td>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
