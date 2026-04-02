@@ -378,12 +378,12 @@
   const getScore = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
   const getTotal = (rid, gid) => (compData.apparatus || []).reduce((s, a) => s + getScore(rid, gid, a), 0);
 
-  // ── Dense ranking ──
-  function denseRank(items, scoreKey) {
+  // ── Standard competition ranking (1,2,2,4,5,6) ──
+  function standardRank(items, scoreKey) {
     const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
     let rank = 1;
     return sorted.map((item, i) => {
-      if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank++;
+      if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank = i + 1;
       return { ...item, rank };
     });
   }
@@ -398,10 +398,14 @@
 
   function getUniqueLevels(rid) {
     const roundG = gymnasts.filter(g => g.round === rid);
-    return [...new Set(roundG.map(g => {
+    const present = new Set(roundG.map(g => {
       const lo = (compData.levels || []).find(l => l.id === g.level);
       return lo ? lo.name : "Unknown";
-    }))].sort();
+    }));
+    // Return in compData.levels order
+    const ordered = (compData.levels || []).map(l => l.name).filter(n => present.has(n));
+    if (present.has("Unknown")) ordered.push("Unknown");
+    return ordered;
   }
 
   function getUniqueAges(rid) {
@@ -480,8 +484,15 @@
       if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
       map[key].gymnasts.push(g);
     });
+    const levelOrder = (compData.levels || []).map(l => l.name);
     return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => {
+        const aLevel = a.split("|||")[0];
+        const bLevel = b.split("|||")[0];
+        const ai = levelOrder.indexOf(aLevel);
+        const bi = levelOrder.indexOf(bLevel);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
       .map(([, val]) => val);
   }
 
@@ -517,7 +528,7 @@
         const hasSomeScore = withScores.some(g => g.score > 0);
         if (!hasSomeScore) return "";
 
-        const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
+        const ranked = standardRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
         const dns = withScores.filter(g => g.score === 0 || g.dns);
 
         const rows = [
@@ -578,8 +589,16 @@
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
       const filterHtml = idx === 0 ? buildFilterHtml(rid) : "";
       const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
-      const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
+      const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns);
+
+      // Find top score per apparatus for highlighting
+      const topScores = {};
+      apparatus.forEach(a => {
+        let best = 0;
+        glist.forEach(g => { if (!g.dns) { const s = getScore(rid, g.id, a); if (s > best) best = s; } });
+        if (best > 0) topScores[a] = best;
+      });
 
       const appHeaders = apparatus.map(a => `<th>${escHtml(a)}</th>`).join("");
 
@@ -587,7 +606,8 @@
         ...ranked.map(g => {
           const appCells = apparatus.map(a => {
             const s = getScore(rid, g.id, a);
-            return `<td class="app-score">${s > 0 ? s.toFixed(2) : "—"}</td>`;
+            const isTop = s > 0 && topScores[a] && s === topScores[a];
+            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(2) : "—"}</td>`;
           }).join("");
           return `
             <tr>

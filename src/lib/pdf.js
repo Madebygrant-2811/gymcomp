@@ -45,7 +45,7 @@ export function getPrintHeader(compData, subtitle) {
 }
 
 export const PRINT_BASE_CSS = `
-  @media print { @page { margin: 15mm 12mm; } }
+  @media print { @page { margin: 15mm 12mm 20mm 12mm; } }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; }
   .print-header { margin-bottom: 18px; }
@@ -65,6 +65,8 @@ export const PRINT_BASE_CSS = `
   tr:nth-child(even) td { background: #fafafa; }
   .score-box { border: 1.5px solid #999; border-radius: 3px; display: inline-block; width: 48px; height: 22px; }
   .page-break { page-break-before: always; margin-top: 20px; }
+  .round-page { page-break-before: always; padding-bottom: 10px; }
+  .round-page:first-child { page-break-before: auto; }
   .round-header { background: #eee; padding: 7px 12px; font-weight: 700; font-size: 12px; border-radius: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
   .round-time { font-size: 10px; color: #666; font-weight: 400; }
   .group-block { margin-bottom: 16px; }
@@ -82,22 +84,63 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
   if (imgs.length) await Promise.all([...imgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
   // Small delay for layout
   await new Promise(r => setTimeout(r, 200));
+
+  // Detect page-break positions (container px from container top)
+  const containerTop = container.getBoundingClientRect().top;
+  const breakPx = [];
+  container.querySelectorAll(".page-break").forEach(el => {
+    breakPx.push(el.getBoundingClientRect().top - containerTop);
+  });
+  container.querySelectorAll(".round-page").forEach((el, i) => {
+    if (i > 0) breakPx.push(el.getBoundingClientRect().top - containerTop);
+  });
+  const uniqueBreakPx = [...new Set(breakPx)].filter(b => b > 10).sort((a, b) => a - b);
+
   try {
     const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, windowWidth: 794 });
     const imgData = canvas.toDataURL("image/jpeg", 0.92);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 8;
-    const contentW = pageW - margin * 2;
-    const imgH = (canvas.height / canvas.width) * contentW;
-    let yOffset = 0;
-    const sliceH = pageH - margin * 2;
-    while (yOffset < imgH) {
-      if (yOffset > 0) pdf.addPage();
-      pdf.addImage(imgData, "JPEG", margin, margin - yOffset, contentW, imgH);
-      yOffset += sliceH;
+    const marginX = 8;
+    const marginTop = 8;
+    const marginBottom = 14; // ~40px bottom margin
+    const contentW = pageW - marginX * 2;
+    const sliceH = pageH - marginTop - marginBottom;
+    const mmPerPx = contentW / 794;
+    const totalMmH = (canvas.height / canvas.width) * contentW;
+
+    // Convert break positions to mm
+    const breaksMm = uniqueBreakPx.map(px => px * mmPerPx);
+
+    // Build page slices — each entry is the startMm for that page
+    const slices = [];
+    let cursor = 0;
+    while (cursor < totalMmH - 0.5) {
+      slices.push(cursor);
+      let hitBreak = false;
+      for (const bp of breaksMm) {
+        if (bp > cursor + 1 && bp <= cursor + sliceH) {
+          cursor = bp;
+          hitBreak = true;
+          break;
+        }
+      }
+      if (!hitBreak) cursor += sliceH;
     }
+
+    // Render each page, clipping content at break boundaries
+    slices.forEach((startMm, i) => {
+      if (i > 0) pdf.addPage();
+      const nextStart = i < slices.length - 1 ? slices[i + 1] : startMm + sliceH;
+      const contentH = Math.min(nextStart - startMm, sliceH);
+      pdf.addImage(imgData, "JPEG", marginX, marginTop - startMm, contentW, totalMmH);
+      // White-out: top margin + everything below this page's content
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 0, pageW, marginTop, "F");
+      pdf.rect(0, marginTop + contentH, pageW, pageH - marginTop - contentH, "F");
+    });
+
     pdf.save(filename);
   } finally {
     document.body.removeChild(container);
@@ -114,6 +157,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
   const colour = "#000dff";
   const rounds = compData.rounds || [];
   const apparatus = compData.apparatus || [];
+  const levelName = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
 
   // Group gymnasts by round then group
   const byRound = {};
@@ -196,7 +240,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
             <td>${g.number || idx + 1}</td>
             <td>${escHtml(g.name) || "—"}</td>
             <td>${escHtml(g.club) || "—"}</td>
-            <td>${escHtml(g.level) || "—"}</td>
+            <td>${escHtml(levelName(g.level))}</td>
             <td>${escHtml(startApp)}</td>
           </tr>`;
         });
@@ -235,7 +279,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
   }
 
   html += `<div class="print-footer">
-    <span>Generated by GymScore · ${new Date().toLocaleDateString("en-GB")}</span>
+    <span>Generated by GymComp · ${new Date().toLocaleDateString("en-GB")}</span>
     <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
@@ -387,91 +431,67 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
 // Build attendance list
 export function buildAttendanceHTML(compData, gymnasts) {
   const colour = "#000dff";
-  const sorted = [...gymnasts].sort((a, b) => (a.number || 0) - (b.number || 0));
+  const levelName = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
+  const rounds = compData.rounds || [];
+  const compName = escHtml(compData.name) || "Competition";
 
-  // Group by club
-  const byClub = {};
-  sorted.forEach(g => {
-    const club = g.club || "Unassigned";
-    if (!byClub[club]) byClub[club] = [];
-    byClub[club].push(g);
-  });
+  let html = "";
 
-  let html = getPrintHeader(compData, "Attendance List");
+  // One page per round
+  rounds.forEach((round, ri) => {
+    const roundGymnasts = [...gymnasts.filter(g => g.round === round.id)].sort((a, b) => (a.number || 0) - (b.number || 0));
+    if (!roundGymnasts.length) return;
 
-  // Summary
-  html += `<div style="display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap;">
-    <div style="background:#f5f5f5;border-radius:6px;padding:10px 16px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:${colour};">${gymnasts.length}</div>
-      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:#666;">Total Gymnasts</div>
-    </div>
-    <div style="background:#f5f5f5;border-radius:6px;padding:10px 16px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:${colour};">${Object.keys(byClub).length}</div>
-      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:#666;">Clubs</div>
-    </div>
-    <div style="background:#f5f5f5;border-radius:6px;padding:10px 16px;text-align:center;">
-      <div style="font-size:22px;font-weight:800;color:${colour};">${(compData.rounds || []).length}</div>
-      <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:#666;">Rounds</div>
-    </div>
-  </div>`;
+    // Each round on its own page
+    html += `<div class="round-page">`;
 
-  // Full list
-  html += `<h2>Full Registration — All Gymnasts</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:36px;">#</th>
-        <th>Gymnast Name</th>
-        <th>Club</th>
-        <th>Level</th>
-        <th>Group</th>
-        <th>Round</th>
-        <th style="width:60px;text-align:center;">Present ✓</th>
-      </tr>
-    </thead>
-    <tbody>`;
+    // Custom header: comp name with round suffix, blue badge with logo
+    html += `
+      <div class="print-header">
+        <div class="print-header-top" style="border-bottom: 3px solid ${colour};">
+          <div class="print-header-text">
+            <div class="print-comp-name" style="color:${colour};">${compName} — ${escHtml(round.name)}</div>
+            ${compData.organiserName ? `<div class="print-organiser">${escHtml(compData.organiserName)}</div>` : ""}
+            <div class="print-meta">
+              ${compData.date ? formatDate(compData.date) : ""}
+              ${compData.venue ? ` &nbsp;·&nbsp; ${escHtml(compData.venue)}` : ""}
+            </div>
+          </div>
+          <div style="background:${colour};color:#fff;padding:8px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;white-space:nowrap;align-self:flex-start;">
+            <img src="./Logo-mono-white.svg" alt="GymComp" height="16" style="display:block;" />
+            <span style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">Attendance List</span>
+          </div>
+        </div>
+      </div>
+    `;
 
-  sorted.forEach((g, i) => {
-    const round = (compData.rounds || []).find(r => r.id === g.round);
-    html += `<tr>
-      <td>${g.number || i + 1}</td>
-      <td>${escHtml(g.name) || "—"}</td>
-      <td>${escHtml(g.club) || "—"}</td>
-      <td>${escHtml(g.level) || "—"}</td>
-      <td>${escHtml(g.group) || "—"}</td>
-      <td>${round ? escHtml(round.name) : "—"}</td>
-      <td style="text-align:center;"><span class="score-box" style="width:28px;height:20px;"></span></td>
-    </tr>`;
-  });
-
-  html += `</tbody></table>`;
-
-  // By club breakdown
-  html += `<div class="page-break"></div>`;
-  html += getPrintHeader(compData, "Attendance by Club");
-  html += `<h2>By Club</h2>`;
-
-  Object.entries(byClub).sort(([a],[b]) => a.localeCompare(b)).forEach(([club, members]) => {
-    html += `<h3 style="border-left:3px solid ${colour};padding-left:8px;">${escHtml(club)} <span style="font-weight:400;color:#666;">(${members.length})</span></h3>
-    <table style="margin-bottom:14px;">
-      <thead><tr><th>#</th><th>Name</th><th>Level</th><th>Group</th><th>Round</th><th style="width:60px;text-align:center;">Present ✓</th></tr></thead>
+    // Table
+    html += `<table>
+      <thead>
+        <tr>
+          <th style="width:36px;">#</th>
+          <th>Gymnast Name</th>
+          <th>Club</th>
+          <th style="width:60px;text-align:center;">Present ✓</th>
+        </tr>
+      </thead>
       <tbody>`;
-    members.forEach((g, i) => {
-      const round = (compData.rounds || []).find(r => r.id === g.round);
+
+    roundGymnasts.forEach((g, i) => {
       html += `<tr>
         <td>${g.number || i + 1}</td>
         <td>${escHtml(g.name) || "—"}</td>
-        <td>${escHtml(g.level) || "—"}</td>
-        <td>${escHtml(g.group) || "—"}</td>
-        <td>${round ? escHtml(round.name) : "—"}</td>
+        <td>${escHtml(g.club) || "—"}</td>
         <td style="text-align:center;"><span class="score-box" style="width:28px;height:20px;"></span></td>
       </tr>`;
     });
+
     html += `</tbody></table>`;
+    html += `</div>`; // close round-page
   });
 
   html += `<div class="print-footer">
-    <span>GymScore · ${escHtml(compData.name) || ""} · ${compData.date ? formatDate(compData.date) : ""}</span>
+    <span>GymComp · ${compName} · ${compData.date ? formatDate(compData.date) : ""}</span>
     <span>${gymnasts.length} gymnasts registered</span>
   </div>`;
 
@@ -795,7 +815,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
   });
 
   html += `<div class="print-footer">
-    <span>GymScore · Gymnast Diagnostic Report · Generated ${new Date().toLocaleDateString("en-GB")}</span>
+    <span>GymComp · Gymnast Diagnostic Report · Generated ${new Date().toLocaleDateString("en-GB")}</span>
     <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
@@ -826,8 +846,15 @@ export function buildResultsHTML(compData, gymnasts, scores) {
       if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
       map[key].gymnasts.push(g);
     });
+    const levelOrder = (compData.levels || []).map(l => l.name);
     return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => {
+        const aLevel = a.split("|||")[0];
+        const bLevel = b.split("|||")[0];
+        const ai = levelOrder.indexOf(aLevel);
+        const bi = levelOrder.indexOf(bLevel);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+      })
       .map(([key, val]) => ({ key, ...val }));
   };
 
@@ -962,7 +989,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
   });
 
   html += `<div class="print-footer">
-    <span>GymScore · Official Results · Generated ${new Date().toLocaleDateString("en-GB")}</span>
+    <span>GymComp · Official Results · Generated ${new Date().toLocaleDateString("en-GB")}</span>
     <span>${escHtml(compData.organiserName) || ""}</span>
   </div>`;
 
@@ -983,7 +1010,7 @@ export function exportResultsPDF(compData, gymnasts, scores) {
     const result = [];
     let rank = 1;
     for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank++;
+      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank = i + 1;
       result.push({ ...sorted[i], rank });
     }
     return result;
@@ -1076,7 +1103,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     const result = [];
     let rank = 1;
     for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank++;
+      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank = i + 1;
       result.push({ ...sorted[i], rank });
     }
     return result;

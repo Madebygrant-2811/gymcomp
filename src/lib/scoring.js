@@ -1,10 +1,10 @@
-// TRUE dense ranking: equal scores share rank, next rank is +1 (never skipped)
+// Standard competition ranking: equal scores share rank, next rank skips (1,2,2,4,5,6)
 export const denseRank = (items, scoreKey) => {
   const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
   const result = [];
   let rank = 1;
   for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank++;
+    if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank = i + 1;
     result.push({ ...sorted[i], rank });
   }
   return result;

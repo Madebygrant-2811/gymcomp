@@ -97,7 +97,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const hasGymnasts = gymnasts.length > 0;
   const hasJudges = judges.length > 0;
   const hasApparatus = (compData.apparatus || []).length > 0;
-  const requiredFields = ["name", "club", "level", "round", "age", "group"];
+  const requiredFields = ["name", "club", "level", "round"];
   const incompleteGymnasts = gymnasts.filter(g => requiredFields.some(f => !g[f] || !g[f].toString().trim()));
   const allGymnastsComplete = incompleteGymnasts.length === 0;
   const canStart = hasGymnasts && hasJudges && allGymnastsComplete;

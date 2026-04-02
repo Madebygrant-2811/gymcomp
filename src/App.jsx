@@ -93,7 +93,7 @@ export default function App() {
   const currentEvent = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
   const eventStatus = currentEvent?.status;
   const allGymnastsComplete = useMemo(() => {
-    const rf = ["name","club","level","round","age","group"];
+    const rf = ["name","club","level","round","age"];
     return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim()));
   }, [gymnasts]);
 

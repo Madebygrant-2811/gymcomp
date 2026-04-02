@@ -362,6 +362,83 @@
       font-style: italic;
     }
 
+    /* ── View toggle ─────────────────────────────────────────── */
+    .view-toggle {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+    .toggle-btn {
+      padding: 7px 16px;
+      border-radius: 56px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle-btn.active {
+      border-color: transparent;
+      background: var(--accent3);
+      color: var(--accent);
+    }
+
+    /* ── Overall table styles ──────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr.dns-row td { opacity: 0.45; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-gold { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+    .badge-silver { background: rgba(148, 163, 184, 0.12); color: #64748b; }
+    .badge-bronze { background: rgba(180, 83, 9, 0.12); color: #b45309; }
+    .badge-rank { background: var(--surface2); color: var(--muted); }
+    .badge-dns { background: rgba(144,144,144,0.1); color: var(--muted); }
+
+    .score-total {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--accent);
+    }
+    .app-score {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .gymnast-club-cell { font-weight: 500; color: var(--muted); }
+
     /* ── Empty / loading / error states ─────────────────────── */
     .state-full {
       display: flex;
@@ -447,6 +524,7 @@
   const POLL_MS = 10000;
 
   let activeRound = null;
+  let activeView = "detailed"; // "detailed" | "overall"
   let clubFilter = "all";
   let pollTimer = null;
   let compData = null;
@@ -535,6 +613,125 @@
         ${clubFilter !== "all" ? `<button class="filter-clear" onclick="clearFilters()">Clear</button>` : ""}
       </div>
     `;
+  }
+
+  // ── Standard competition ranking (1,2,2,4,5,6) ──
+  function standardRank(items, scoreKey) {
+    const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
+    let rank = 1;
+    return sorted.map((item, i) => {
+      if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank = i + 1;
+      return { ...item, rank };
+    });
+  }
+
+  function rankBadge(rank) {
+    if (rank === null) return `<span class="badge badge-dns">DNS</span>`;
+    if (rank === 1) return `<span class="badge badge-gold">1st</span>`;
+    if (rank === 2) return `<span class="badge badge-silver">2nd</span>`;
+    if (rank === 3) return `<span class="badge badge-bronze">3rd</span>`;
+    return `<span class="badge badge-rank">${rank}th</span>`;
+  }
+
+  function renderOverallView(round) {
+    const rid = round.id;
+    const allGroups = buildRankGroups(rid);
+    const groups = allGroups.map(rg => {
+      const filtered = clubFilter !== "all"
+        ? rg.gymnasts.filter(g => (g.club || "") === clubFilter)
+        : rg.gymnasts;
+      return { ...rg, gymnasts: filtered };
+    }).filter(rg => rg.gymnasts.length > 0);
+
+    const apparatus = compData.apparatus || [];
+    if (!groups.length) return `<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
+
+    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
+      const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
+      const filterHtml = idx === 0 ? buildFilterHtml() : "";
+      const withTotals = glist.map(g => ({ ...g, total: getOverall(rid, g.id) }));
+      const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
+      const dns = withTotals.filter(g => g.total === 0 || g.dns);
+
+      // Find top score per apparatus for highlighting
+      const topScores = {};
+      apparatus.forEach(a => {
+        let best = 0;
+        glist.forEach(g => { if (!g.dns) { const s = getTotal(rid, g.id, a); if (s > best) best = s; } });
+        if (best > 0) topScores[a] = best;
+      });
+
+      const appHeaders = apparatus.map(a => `<th>${escHtml(a)}</th>`).join("");
+
+      const rows = [
+        ...ranked.map(g => {
+          const appCells = apparatus.map(a => {
+            const s = getTotal(rid, g.id, a);
+            const isTop = s > 0 && topScores[a] && s === topScores[a];
+            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(2) : "—"}</td>`;
+          }).join("");
+          return `
+            <tr>
+              <td>${rankBadge(g.rank)}</td>
+              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+              <td class="gymnast-name">${escHtml(g.name)}</td>
+              <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
+              ${appCells}
+              <td><span class="score-total">${g.total.toFixed(2)}</span></td>
+            </tr>
+          `;
+        }),
+        ...dns.map(g => {
+          const appCells = apparatus.map(() => `<td style="color:var(--muted)">—</td>`).join("");
+          return `
+            <tr class="dns-row">
+              <td>${rankBadge(null)}</td>
+              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+              <td>${escHtml(g.name)}</td>
+              <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+              ${appCells}
+              <td style="color:var(--muted)">—</td>
+            </tr>
+          `;
+        })
+      ].join("");
+
+      const hasAnyScore = withTotals.some(g => g.total > 0);
+
+      if (!hasAnyScore) {
+        return `
+          <div class="level-section">
+            <div class="level-heading">${escHtml(levelName)}${agePill}${filterHtml}</div>
+            <div style="color:var(--muted);font-size:13px;padding:12px 0">No scores yet</div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="level-section">
+          <div class="level-heading">${escHtml(levelName)}${agePill}${filterHtml}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:16px 20px">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
+                    ${appHeaders}
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function switchView(v) {
+    activeView = v;
+    renderPage();
   }
 
   // ── Fetch ──
@@ -696,8 +893,15 @@
       if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
       map[key].gymnasts.push(g);
     });
+    const levelOrder = (compData.levels || []).map(l => l.name);
     return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => {
+        const aLevel = a.split("|||")[0];
+        const bLevel = b.split("|||")[0];
+        const ai = levelOrder.indexOf(aLevel);
+        const bi = levelOrder.indexOf(bLevel);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
       .map(([, val]) => val);
   }
 
@@ -746,7 +950,9 @@
     `).join("") : "";
 
     const currentRound = rounds.find(r => r.id === activeRound) || rounds[0];
-    const roundContent = currentRound ? buildRoundContent(currentRound) : "";
+    const roundContent = currentRound
+      ? (activeView === "overall" ? renderOverallView(currentRound) : buildRoundContent(currentRound))
+      : "";
 
     const colour = "#000dff";
     const dateStr = compData.date
@@ -775,6 +981,11 @@
           <span style="color:var(--warn);font-weight:700">⚠ ${queryCount} active ${queryCount === 1 ? "query" : "queries"} under review</span>
         </div>
       ` : ""}
+
+      <div class="view-toggle">
+        <button class="toggle-btn ${activeView === "detailed" ? "active" : ""}" onclick="switchView('detailed')">Detailed</button>
+        <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
+      </div>
 
       ${roundContent}
     `;
