@@ -611,8 +611,8 @@
     const clubs = getUniqueClubs();
     if (clubs.length < 2) return "";
     return `
-      <div style="flex:1"></div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Filter by Club</span>
         <select class="filter-select" onchange="setClubFilterVal(this.value)" style="border-left:3px solid ${clubFilter !== "all" ? clubColour(clubFilter) : "var(--border)"}">
           <option value="all"${clubFilter === "all" ? " selected" : ""}>All Clubs</option>
           ${clubs.map(c => `<option value="${escHtml(c)}"${c === clubFilter ? " selected" : ""}>${escHtml(c)}</option>`).join("")}
@@ -652,11 +652,10 @@
     }).filter(rg => rg.gymnasts.length > 0);
 
     const apparatus = compData.apparatus || [];
-    if (!groups.length) return `<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
+    if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
+    return buildFilterHtml() + groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
       const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
-      const filterHtml = idx === 0 ? buildFilterHtml() : "";
       const withTotals = glist.map(g => ({ ...g, total: getOverall(rid, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns);
@@ -709,7 +708,7 @@
       if (!hasAnyScore) {
         return `
           <div class="level-section">
-            <div class="level-heading">${escHtml(levelName)}${agePill}${filterHtml}</div>
+            <div class="level-heading">${escHtml(levelName)}${agePill}</div>
             <div style="color:var(--muted);font-size:13px;padding:12px 0">No scores yet</div>
           </div>
         `;
@@ -717,7 +716,7 @@
 
       return `
         <div class="level-section">
-          <div class="level-heading">${escHtml(levelName)}${agePill}${filterHtml}</div>
+          <div class="level-heading">${escHtml(levelName)}${agePill}</div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:16px 20px">
             <div class="table-wrap">
               <table>
@@ -1010,16 +1009,15 @@
     }).filter(rg => rg.gymnasts.length > 0);
 
     if (!groups.length) {
-      return `<div class="level-section"><div class="level-heading">No results${buildFilterHtml()}</div></div>`;
+      return `${buildFilterHtml()}<div class="level-section"><div class="level-heading">No results</div></div>`;
     }
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
+    return buildFilterHtml() + groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
       const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
-      const filterHtml = idx === 0 ? buildFilterHtml() : "";
       const sortedGymnasts = [...glist].sort((a, b) => (a.number || 0) - (b.number || 0));
       return `
         <div class="level-section">
-          <div class="level-heading">${escHtml(levelName)}${agePill}${filterHtml}</div>
+          <div class="level-heading">${escHtml(levelName)}${agePill}</div>
           ${sortedGymnasts.map(g => renderGymnastCard(rid, g)).join("")}
         </div>
       `;
@@ -1051,15 +1049,13 @@
 
     document.getElementById("main").innerHTML = `
       <div class="comp-hero">
-        <div class="comp-title-row">
-          <div class="comp-title">${escHtml(compData.name || "Competition")}</div>
-          ${roundBtns ? `<div style="flex:1"></div><div style="display:flex;gap:4px;flex-wrap:wrap">${roundBtns}</div>` : ""}
-        </div>
+        <div class="comp-title">${escHtml(compData.name || "Competition")}</div>
         <div class="comp-meta">
           ${dateStr ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v4M11 1v4"/></svg>${dateStr}</span>` : ""}
           ${venue ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 014.5 4.5c0 3.5-4.5 8.5-4.5 8.5S3.5 9.5 3.5 6A4.5 4.5 0 018 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>${escHtml(venue)}</span>` : ""}
           ${fig ? `<span style="color:var(--accent2);font-weight:700">D/E Scoring</span>` : ""}
         </div>
+        ${roundBtns ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:12px">${roundBtns}</div>` : ""}
       </div>
 
       ${queryCount > 0 ? `
