@@ -540,7 +540,7 @@
               <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club">${escHtml(g.club || "")}</td>
-              <td class="score-cell"><span class="score-val">${g.score.toFixed(2)}</span></td>
+              <td class="score-cell"><span class="score-val">${g.score.toFixed(3)}</span></td>
             </tr>
           `),
           ...dns.map(g => `
@@ -608,7 +608,7 @@
           const appCells = apparatus.map(a => {
             const s = getScore(rid, g.id, a);
             const isTop = s > 0 && topScores[a] && s === topScores[a];
-            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(2) : "—"}</td>`;
+            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
           }).join("");
           return `
             <tr>
@@ -617,7 +617,7 @@
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td class="score-cell"><span class="score-total">${g.total.toFixed(2)}</span></td>
+              <td class="score-cell"><span class="score-total">${g.total.toFixed(3)}</span></td>
             </tr>
           `;
         }),

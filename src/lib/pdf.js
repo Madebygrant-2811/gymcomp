@@ -694,7 +694,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
           <div style="text-align:right;font-size:11px;color:#444;">
             <strong>${escHtml(diag.groupLabel)}</strong><br/>
             ${diag.overallTotal > 0
-              ? `Overall: <strong style="color:${colour};">${diag.overallTotal.toFixed(2)}</strong>
+              ? `Overall: <strong style="color:${colour};">${diag.overallTotal.toFixed(3)}</strong>
                  · Rank <strong>${diag.overallRank}</strong> of ${diag.overallOf}
                  · ${diag.peerCount} peer${diag.peerCount !== 1 ? "s" : ""}`
               : "No scores recorded"}
@@ -925,9 +925,9 @@ export function buildResultsHTML(compData, gymnasts, scores) {
             <td style="color:#666;">${escHtml(g.club) || ""}</td>
             ${apparatus.map(a => {
               const s = getScore(round.id, g.id, a);
-              return `<td style="text-align:right;color:#555;">${s > 0 ? s.toFixed(2) : "—"}</td>`;
+              return `<td style="text-align:right;color:#555;">${s > 0 ? s.toFixed(3) : "—"}</td>`;
             }).join("")}
-            <td style="text-align:right;font-weight:800;color:${colour};">${g.total.toFixed(2)}</td>
+            <td style="text-align:right;font-weight:800;color:${colour};">${g.total.toFixed(3)}</td>
           </tr>`).join("")}
           ${dns.map(g => `<tr style="opacity:0.4;">
             <td style="color:#aaa;font-size:10px;">DNS</td>
@@ -973,7 +973,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
             <td style="color:#888;">${g.number || ""}</td>
             <td>${escHtml(g.name)}</td>
             <td style="color:#666;">${escHtml(g.club) || ""}</td>
-            <td style="text-align:right;font-weight:700;color:${colour};">${g.score.toFixed(2)}</td>
+            <td style="text-align:right;font-weight:700;color:${colour};">${g.score.toFixed(3)}</td>
           </tr>`).join("")}
           ${dns.map(g => `<tr style="opacity:0.4;">
             <td style="color:#aaa;font-size:10px;">DNS</td>
@@ -1048,9 +1048,9 @@ export function exportResultsPDF(compData, gymnasts, scores) {
 
       body += `<table><thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>${appHeaders}<th>Total</th></tr></thead><tbody>`;
       [...ranked, ...dns.map(g=>({...g,rank:null}))].forEach(g => {
-        const cells = compData.apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(2) : "—"}</td>`).join("");
+        const cells = compData.apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(3) : "—"}</td>`).join("");
         const rankCell = g.rank === null ? `<td class="dns">DNS</td>` : `<td class="rank">${medalEmoji(g.rank)}</td>`;
-        body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${escHtml(g.name)}</strong></td><td>${escHtml(g.club) || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(2) : "—"}</strong></td></tr>`;
+        body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${escHtml(g.name)}</strong></td><td>${escHtml(g.club) || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(3) : "—"}</strong></td></tr>`;
       });
       body += `</tbody></table>`;
     });
@@ -1150,7 +1150,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
       [...ranked, ...dns.map(g => ({ ...g, rank: null }))].forEach(g => {
         const appScores = compData.apparatus.map(a => {
           const s = getScore(round.id, g.id, a);
-          return s > 0 ? parseFloat(s.toFixed(2)) : "";
+          return s > 0 ? parseFloat(s.toFixed(3)) : "";
         });
         resultsRows.push([
           g.rank === null ? "DNS" : g.rank,
@@ -1159,7 +1159,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
           g.club || "",
           ageLabel || "",
           ...appScores,
-          g.total > 0 ? parseFloat(g.total.toFixed(2)) : ""
+          g.total > 0 ? parseFloat(g.total.toFixed(3)) : ""
         ]);
       });
       resultsRows.push([]);
@@ -1219,7 +1219,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
             row.push(eAvg, bon, pen);
           }
         }
-        row.push(finalScore > 0 ? parseFloat(finalScore.toFixed(2)) : "");
+        row.push(finalScore > 0 ? parseFloat(finalScore.toFixed(3)) : "");
         rawRows.push(row);
       });
     });

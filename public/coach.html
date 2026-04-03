@@ -590,7 +590,7 @@
   };
 
   const fmt = (v) => v > 0 ? v.toFixed(3) : "—";
-  const fmt2 = (v) => v > 0 ? v.toFixed(2) : "—";
+  const fmt2 = (v) => v > 0 ? v.toFixed(3) : "—";
 
   // ── Filter helpers ──
   function getUniqueClubs() {
@@ -675,7 +675,7 @@
           const appCells = apparatus.map(a => {
             const s = getTotal(rid, g.id, a);
             const isTop = s > 0 && topScores[a] && s === topScores[a];
-            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(2) : "—"}</td>`;
+            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
           }).join("");
           return `
             <tr>
@@ -684,7 +684,7 @@
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td class="score-total-cell"><span class="score-total">${g.total.toFixed(2)}</span></td>
+              <td class="score-total-cell"><span class="score-total">${g.total.toFixed(3)}</span></td>
             </tr>
           `;
         }),
@@ -829,7 +829,7 @@
     if (isQueried && !isResolved) scoreClass += " queried-val";
     const displayVal = (isQueried && !isResolved)
       ? "Under Review"
-      : (total > 0 ? total.toFixed(2) : "—");
+      : (total > 0 ? total.toFixed(3) : "—");
 
     // Breakdown cells
     let breakdownHtml = "";
@@ -854,7 +854,7 @@
         if (fin > 0) {
           return `
             <div style="flex:1">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:4px">${label} <span style="float:right;font-size:12px;font-weight:800;color:var(--text)">${fin.toFixed(2)}</span></div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:4px">${label} <span style="float:right;font-size:12px;font-weight:800;color:var(--text)">${fin.toFixed(3)}</span></div>
               <div class="app-breakdown">
                 <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val">${bdFmt(dv)}</span></div>
                 <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val">${bdFmt(eDed)}</span></div>
@@ -880,7 +880,7 @@
       if (v2HasData) {
         breakdownHtml = `
           <div style="display:flex;gap:8px">${vaultHalf("v1", "Vault 1", v1fin)}${vaultHalf("v2", "Vault 2", v2fin)}</div>
-          <div style="text-align:center;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)">Average <span style="color:var(--accent);font-weight:800;font-size:13px;margin-left:4px">${total > 0 ? total.toFixed(2) : "—"}</span></div>
+          <div style="text-align:center;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)">Average <span style="color:var(--accent);font-weight:800;font-size:13px;margin-left:4px">${total > 0 ? total.toFixed(3) : "—"}</span></div>
         `;
       } else {
         breakdownHtml = vaultHalf("v1", "Vault 1", v1fin);
@@ -958,7 +958,7 @@
           ${g.club ? `<div class="gymnast-club" style="background:${clubColour(g.club)}">${escHtml(g.club)}</div>` : ""}
           <div class="gymnast-overall">
             <div class="gymnast-overall-label">Overall</div>
-            <div class="gymnast-overall-val">${overall > 0 ? overall.toFixed(2) : "—"}</div>
+            <div class="gymnast-overall-val">${overall > 0 ? overall.toFixed(3) : "—"}</div>
           </div>
         </div>
         <div class="apparatus-grid">${appBlocksHtml}</div>
