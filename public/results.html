@@ -276,6 +276,7 @@
     .badge-gold { background: rgba(245, 158, 11, 0.12); color: #d97706; }
     .badge-silver { background: rgba(148, 163, 184, 0.12); color: #64748b; }
     .badge-bronze { background: rgba(180, 83, 9, 0.12); color: #b45309; }
+    .badge-medal { background: rgba(0, 13, 255, 0.07); color: #4a50c7; }
     .badge-rank { background: var(--surface2); color: var(--muted); }
     .badge-dns { background: rgba(144,144,144,0.1); color: var(--muted); }
 
@@ -294,6 +295,8 @@
     }
     .gymnast-name { font-weight: 500; }
     .gymnast-club { font-weight: 500; color: var(--muted); }
+    td.app-score, td.score-cell { text-align: center; }
+    th.col-score { text-align: center; }
 
     /* ── Empty / loading / error states ─────────────────────── */
     .state-full {
@@ -448,8 +451,7 @@
     const showAge = isAgeFilterEnabled();
     const hasActive = levelFilter !== "all" || ageFilter !== "all";
     return `
-      <div style="flex:1"></div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:16px;flex-wrap:wrap">
         <select class="filter-select" onchange="setLevelFilterVal(this.value)">
           <option value="all"${levelFilter === "all" ? " selected" : ""}>All Levels</option>
           ${levels.map(l => `<option value="${escHtml(l)}"${l === levelFilter ? " selected" : ""}>${escHtml(l)}</option>`).join("")}
@@ -468,6 +470,7 @@
     if (rank === 1) return `<span class="badge badge-gold">🥇 1st</span>`;
     if (rank === 2) return `<span class="badge badge-silver">🥈 2nd</span>`;
     if (rank === 3) return `<span class="badge badge-bronze">🥉 3rd</span>`;
+    if (rank <= 6) return `<span class="badge badge-medal">${rank}th</span>`;
     return `<span class="badge badge-rank">${rank}th</span>`;
   }
 
@@ -507,9 +510,8 @@
     const apparatus = compData.apparatus || [];
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
+    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
-      const filterHtml = idx === 0 ? buildFilterHtml(rid) : "";
 
       // Check if any scores exist across all apparatus for this group
       const groupHasScores = apparatus.some(app => glist.some(g => getScore(rid, g.id, app) > 0));
@@ -517,7 +519,7 @@
       if (!groupHasScores) {
         return `
           <div class="level-card">
-            <div class="level-card-header">${groupLabel}${filterHtml}</div>
+            <div class="level-card-header">${groupLabel}</div>
             <div style="padding:32px 20px;text-align:center;color:var(--muted);font-size:13px">No scores yet</div>
           </div>
         `;
@@ -538,7 +540,7 @@
               <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club">${escHtml(g.club || "")}</td>
-              <td><span class="score-val">${g.score.toFixed(2)}</span></td>
+              <td class="score-cell"><span class="score-val">${g.score.toFixed(2)}</span></td>
             </tr>
           `),
           ...dns.map(g => `
@@ -547,7 +549,7 @@
               <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
-              <td style="color:var(--muted)">—</td>
+              <td class="score-cell" style="color:var(--muted)">—</td>
             </tr>
           `)
         ].join("");
@@ -557,7 +559,7 @@
             <div class="app-label">${escHtml(app)}</div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th>Score</th></tr></thead>
+                <thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th class="col-score">Score</th></tr></thead>
                 <tbody>${rows}</tbody>
               </table>
             </div>
@@ -567,7 +569,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${groupLabel}${filterHtml}</div>
+          <div class="level-card-header">${groupLabel}</div>
           ${appSections}
         </div>
       `;
@@ -585,9 +587,8 @@
     const apparatus = compData.apparatus || [];
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }, idx) => {
+    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
-      const filterHtml = idx === 0 ? buildFilterHtml(rid) : "";
       const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns);
@@ -600,7 +601,7 @@
         if (best > 0) topScores[a] = best;
       });
 
-      const appHeaders = apparatus.map(a => `<th>${escHtml(a)}</th>`).join("");
+      const appHeaders = apparatus.map(a => `<th class="col-score">${escHtml(a)}</th>`).join("");
 
       const rows = [
         ...ranked.map(g => {
@@ -616,12 +617,12 @@
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td><span class="score-total">${g.total.toFixed(2)}</span></td>
+              <td class="score-cell"><span class="score-total">${g.total.toFixed(2)}</span></td>
             </tr>
           `;
         }),
         ...dns.map(g => {
-          const appCells = apparatus.map(() => `<td style="color:var(--muted)">—</td>`).join("");
+          const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
           return `
             <tr class="dns-row">
               <td>${rankBadge(null)}</td>
@@ -629,7 +630,7 @@
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td style="color:var(--muted)">—</td>
+              <td class="score-cell" style="color:var(--muted)">—</td>
             </tr>
           `;
         })
@@ -640,7 +641,7 @@
       if (!hasAnyScore) {
         return `
           <div class="level-card">
-            <div class="level-card-header">${groupLabel}${filterHtml}</div>
+            <div class="level-card-header">${groupLabel}</div>
             <div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic">No scores yet</div>
           </div>
         `;
@@ -648,7 +649,7 @@
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${groupLabel}${filterHtml}</div>
+          <div class="level-card-header">${groupLabel}</div>
           <div style="padding:16px 20px">
             <div class="table-wrap">
               <table>
@@ -656,7 +657,7 @@
                   <tr>
                     <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
                     ${appHeaders}
-                    <th>Total</th>
+                    <th class="col-score">Total</th>
                   </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -691,6 +692,7 @@
       </div>
     `;
 
+    const filterHtml = buildFilterHtml(activeRound);
     const contentHtml = activeView === "apparatus"
       ? renderApparatusView(activeRound)
       : renderOverallView(activeRound);
@@ -704,6 +706,7 @@
         </div>
       </div>
       ${controlsHtml}
+      ${filterHtml}
       ${contentHtml}
     `;
   }
@@ -753,12 +756,23 @@
     for (const row of rows) {
       const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
       flat[bk] = row.final_score != null ? String(row.final_score) : "";
+
+      const eScores = row.e_scores;
+
+      // Dual vault: e_scores is an object — just use final_score (already set above)
+      if (eScores && typeof eScores === "object" && !Array.isArray(eScores) && eScores.dualVault) {
+        continue;
+      }
+
+      // Normal score
       if (row.d_score != null) flat[`${bk}__dv`] = String(row.d_score);
       if (row.bonus != null && row.bonus !== 0) flat[`${bk}__bon`] = String(row.bonus);
       if (row.penalty != null && row.penalty !== 0) flat[`${bk}__pen`] = String(row.penalty);
-      const eScores = row.e_scores || [];
-      for (let i = 0; i < eScores.length; i++) {
-        if (eScores[i] != null) flat[`${bk}__e${i + 1}`] = String(eScores[i]);
+      const eArr = eScores || [];
+      if (Array.isArray(eArr)) {
+        for (let i = 0; i < eArr.length; i++) {
+          if (eArr[i] != null) flat[`${bk}__e${i + 1}`] = String(eArr[i]);
+        }
       }
     }
     return flat;

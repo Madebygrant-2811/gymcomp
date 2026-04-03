@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { gymnast_key } from "../../lib/scoring.js";
+import { gymnast_key, isDualVault } from "../../lib/scoring.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import GymCompLogomark from "../../assets/Logomark.svg";
@@ -91,6 +91,37 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const getGymnastTotal = (gid) =>
     compData.apparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
 
+  // ── Dual vault helpers ──────────────────────────────────
+  const isDualVaultForGymnast = (gid, app) => {
+    const g = gymnasts.find(x => x.id === gid);
+    if (!g) return false;
+    return isDualVault(app, g.level, compData);
+  };
+
+  const calcVaultFinal = (fields, prefix, app) => {
+    const dv = parseFloat(fields[`${prefix}dv`]) || 0;
+    const bonus = parseFloat(fields[`${prefix}bon`]) || 0;
+    const pen = parseFloat(fields[`${prefix}pen`]) || 0;
+    const n = judgeCount(app);
+    let eSum = 0, eCount = 0;
+    for (let i = 1; i <= Math.max(n, 1); i++) {
+      const v = parseFloat(fields[`${prefix}e${i}`]);
+      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+    }
+    const eAvg = eCount > 0 ? eSum / eCount : 0;
+    const hasAny = dv > 0 || bonus > 0 || eAvg > 0;
+    return hasAny ? Math.max(0, dv + bonus + eAvg - pen) : 0;
+  };
+
+  const calcDualVaultModalTotal = () => {
+    const app = scoreModal?.app || "";
+    const v1 = calcVaultFinal(modalFields, "v1", app);
+    const v2 = calcVaultFinal(modalFields, "v2", app);
+    if (v1 > 0 && v2 > 0) return (v1 + v2) / 2;
+    if (v1 > 0) return v1;
+    return 0;
+  };
+
   // ── Query helpers ────────────────────────────────────────
   const isQueried = (gid, app) => !!scores[queryKey(gid, app)];
   const isResolved = (gid, app) => !!scores[queryResolvedKey(gid, app)];
@@ -168,14 +199,25 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const grouped = useMemo(() => {
     const g = {};
     filteredGymnasts.forEach(gym => {
-      const levelName = compData.levels.find(l => l.id === gym.level)?.name || gym.level;
-      if (!g[levelName]) g[levelName] = {};
       const grp = gym.group || "\u2014";
-      if (!g[levelName][grp]) g[levelName][grp] = [];
-      g[levelName][grp].push(gym);
+      const levelName = compData.levels.find(l => l.id === gym.level)?.name || gym.level || "No Level";
+      if (!g[grp]) g[grp] = {};
+      if (!g[grp][levelName]) g[grp][levelName] = [];
+      g[grp][levelName].push(gym);
+    });
+    // Sort gymnasts by number within each level
+    Object.values(g).forEach(levels => {
+      Object.values(levels).forEach(arr => arr.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
     });
     return g;
   }, [filteredGymnasts, compData.levels]);
+
+  const sortedGroupKeys = useMemo(() =>
+    Object.keys(grouped).sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, "")) || 0;
+      const nb = parseInt(b.replace(/\D/g, "")) || 0;
+      return na - nb;
+    }), [grouped]);
 
   // ── Score Modal helpers ──────────────────────────────────
   const openScoreModal = (gid, app, isEdit) => {
@@ -183,20 +225,38 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     const bufs = {};
     const toBuf = (v) => { const n = parseFloat(v); return (!v || isNaN(n) || n === 0) ? "" : n.toFixed(2); };
     fields.app = app;
-    for (const sub of ["dv", "bon", "pen"]) {
-      const v = readVal(gid, app, sub);
-      fields[sub] = v;
-      bufs[sub] = toBuf(v);
-    }
-    const n = judgeCount(app);
-    for (let i = 1; i <= Math.max(n, 1); i++) {
-      const v = readVal(gid, app, `e${i}`);
-      fields[`e${i}`] = v;
-      bufs[`e${i}`] = toBuf(v);
+    const dual = isDualVaultForGymnast(gid, app);
+    fields._dual = dual;
+
+    if (dual) {
+      const n = judgeCount(app);
+      for (const prefix of ["v1", "v2"]) {
+        for (const sub of ["dv", "bon", "pen"]) {
+          const v = readVal(gid, app, `${prefix}${sub}`);
+          fields[`${prefix}${sub}`] = v;
+          bufs[`${prefix}${sub}`] = toBuf(v);
+        }
+        for (let i = 1; i <= Math.max(n, 1); i++) {
+          const v = readVal(gid, app, `${prefix}e${i}`);
+          fields[`${prefix}e${i}`] = v;
+          bufs[`${prefix}e${i}`] = toBuf(v);
+        }
+      }
+    } else {
+      for (const sub of ["dv", "bon", "pen"]) {
+        const v = readVal(gid, app, sub);
+        fields[sub] = v;
+        bufs[sub] = toBuf(v);
+      }
+      const n = judgeCount(app);
+      for (let i = 1; i <= Math.max(n, 1); i++) {
+        const v = readVal(gid, app, `e${i}`);
+        fields[`e${i}`] = v;
+        bufs[`e${i}`] = toBuf(v);
+      }
     }
     setModalFields(fields);
     setModalBufs(bufs);
-    // Mark fields with existing values as pristine — first keystroke clears them
     const pristine = {};
     for (const k in bufs) if (bufs[k]) pristine[k] = true;
     setModalPristine(pristine);
@@ -221,39 +281,84 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
 
   const submitScoreModal = () => {
     const { gid, app } = scoreModal;
-    setScores(s => {
-      const next = { ...s };
-      next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
-      next[subKey(gid, app, "bon")] = round2dp(modalFields.bon);
-      const n = judgeCount(app);
-      for (let i = 1; i <= Math.max(n, 1); i++) next[subKey(gid, app, `e${i}`)] = round2dp(modalFields[`e${i}`]);
-      next[subKey(gid, app, "pen")] = round2dp(modalFields.pen);
-      recalcTotal(next, gid, app);
-      return next;
-    });
-    // Push to scores table (fire-and-forget)
-    if (onScoreCommit) {
-      const bk = baseKey(gid, app);
-      const flatSubset = {};
-      flatSubset[bk] = ""; // will be recalculated; we need the sub-keys
-      flatSubset[`${bk}__dv`] = round2dp(modalFields.dv);
-      flatSubset[`${bk}__bon`] = round2dp(modalFields.bon);
-      flatSubset[`${bk}__pen`] = round2dp(modalFields.pen);
-      const n = judgeCount(app);
-      for (let i = 1; i <= Math.max(n, 1); i++) flatSubset[`${bk}__e${i}`] = round2dp(modalFields[`e${i}`]);
-      // Compute final for the table row
-      const dv = parseFloat(round2dp(modalFields.dv)) || 0;
-      const bon = parseFloat(round2dp(modalFields.bon)) || 0;
-      const pen = parseFloat(round2dp(modalFields.pen)) || 0;
-      let eSum = 0, eCount = 0;
-      for (let i = 1; i <= Math.max(n, 1); i++) {
-        const v = parseFloat(round2dp(modalFields[`e${i}`]));
-        if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+    const dual = modalFields._dual;
+
+    if (dual) {
+      // Dual vault submit
+      const v1Final = calcVaultFinal(modalFields, "v1", app);
+      const v2Final = calcVaultFinal(modalFields, "v2", app);
+      const avg = (v1Final > 0 && v2Final > 0) ? (v1Final + v2Final) / 2 : (v1Final > 0 ? v1Final : 0);
+
+      setScores(s => {
+        const next = { ...s };
+        next[subKey(gid, app, "dualVault")] = "1";
+        const n = judgeCount(app);
+        for (const prefix of ["v1", "v2"]) {
+          for (const sub of ["dv", "bon", "pen"]) {
+            next[subKey(gid, app, `${prefix}${sub}`)] = round2dp(modalFields[`${prefix}${sub}`]);
+          }
+          for (let i = 1; i <= Math.max(n, 1); i++) {
+            next[subKey(gid, app, `${prefix}e${i}`)] = round2dp(modalFields[`${prefix}e${i}`]);
+          }
+          const fin = calcVaultFinal(modalFields, prefix, app);
+          next[subKey(gid, app, `${prefix}fin`)] = fin > 0 ? String(parseFloat(fin.toFixed(3))) : "";
+        }
+        next[baseKey(gid, app)] = avg > 0 ? String(parseFloat(avg.toFixed(3))) : "";
+        return next;
+      });
+
+      if (onScoreCommit) {
+        const bk = baseKey(gid, app);
+        const flatSubset = {};
+        flatSubset[`${bk}__dualVault`] = "1";
+        const n = judgeCount(app);
+        for (const prefix of ["v1", "v2"]) {
+          for (const sub of ["dv", "bon", "pen"]) {
+            flatSubset[`${bk}__${prefix}${sub}`] = round2dp(modalFields[`${prefix}${sub}`]);
+          }
+          for (let i = 1; i <= Math.max(n, 1); i++) {
+            flatSubset[`${bk}__${prefix}e${i}`] = round2dp(modalFields[`${prefix}e${i}`]);
+          }
+          const fin = calcVaultFinal(modalFields, prefix, app);
+          flatSubset[`${bk}__${prefix}fin`] = fin > 0 ? String(parseFloat(fin.toFixed(3))) : "";
+        }
+        flatSubset[bk] = avg > 0 ? String(parseFloat(avg.toFixed(3))) : "";
+        onScoreCommit(activeRound, gid, app, flatSubset);
       }
-      const eAvg = eCount > 0 ? eSum / eCount : 0;
-      const hasAny = dv > 0 || bon > 0 || eAvg > 0;
-      flatSubset[bk] = hasAny ? String(parseFloat(Math.max(0, dv + bon + eAvg - pen).toFixed(3))) : "";
-      onScoreCommit(activeRound, gid, app, flatSubset);
+    } else {
+      // Normal submit
+      setScores(s => {
+        const next = { ...s };
+        next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
+        next[subKey(gid, app, "bon")] = round2dp(modalFields.bon);
+        const n = judgeCount(app);
+        for (let i = 1; i <= Math.max(n, 1); i++) next[subKey(gid, app, `e${i}`)] = round2dp(modalFields[`e${i}`]);
+        next[subKey(gid, app, "pen")] = round2dp(modalFields.pen);
+        recalcTotal(next, gid, app);
+        return next;
+      });
+      if (onScoreCommit) {
+        const bk = baseKey(gid, app);
+        const flatSubset = {};
+        flatSubset[bk] = "";
+        flatSubset[`${bk}__dv`] = round2dp(modalFields.dv);
+        flatSubset[`${bk}__bon`] = round2dp(modalFields.bon);
+        flatSubset[`${bk}__pen`] = round2dp(modalFields.pen);
+        const n = judgeCount(app);
+        for (let i = 1; i <= Math.max(n, 1); i++) flatSubset[`${bk}__e${i}`] = round2dp(modalFields[`e${i}`]);
+        const dv = parseFloat(round2dp(modalFields.dv)) || 0;
+        const bon = parseFloat(round2dp(modalFields.bon)) || 0;
+        const pen = parseFloat(round2dp(modalFields.pen)) || 0;
+        let eSum = 0, eCount = 0;
+        for (let i = 1; i <= Math.max(n, 1); i++) {
+          const v = parseFloat(round2dp(modalFields[`e${i}`]));
+          if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+        }
+        const eAvg = eCount > 0 ? eSum / eCount : 0;
+        const hasAny = dv > 0 || bon > 0 || eAvg > 0;
+        flatSubset[bk] = hasAny ? String(parseFloat(Math.max(0, dv + bon + eAvg - pen).toFixed(3))) : "";
+        onScoreCommit(activeRound, gid, app, flatSubset);
+      }
     }
     setScoreModal(null);
   };
@@ -265,6 +370,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       for (const sub of ["dv","bon","pen"]) delete next[subKey(gid, app, sub)];
       const n = judgeCount(app);
       for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `e${i}`)];
+      // Clean up dual vault keys
+      delete next[subKey(gid, app, "dualVault")];
+      for (const prefix of ["v1", "v2"]) {
+        for (const sub of ["dv","bon","pen","fin"]) delete next[subKey(gid, app, `${prefix}${sub}`)];
+        for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `${prefix}e${i}`)];
+      }
       return next;
     });
     if (onScoreDelete) onScoreDelete(activeRound, gid, app);
@@ -485,15 +596,15 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         {Object.keys(grouped).length === 0 && <div className="empty">{searchQuery ? "No gymnasts match your search" : "No gymnasts in this round"}</div>}
 
         {/* ── Grouped Tables ── */}
-        {Object.entries(grouped).map(([level, groups]) => (
-          <div key={level}>
+        {sortedGroupKeys.map(grp => (
+          <div key={grp}>
             <div className="group-header">
-              <span className="group-label">{level}</span>
+              <span className="group-label">{grp}</span>
               <div className="group-line" />
             </div>
-            {Object.entries(groups).map(([grp, glist]) => (
-              <div key={grp} style={{ marginBottom: 24 }}>
-                <div className="sub-group-label">{grp}</div>
+            {Object.entries(grouped[grp]).map(([level, glist]) => (
+              <div key={level} style={{ marginBottom: 24 }}>
+                <div className="sub-group-label">{level}</div>
                 <div className="table-wrap">
                   <table className="si-table" style={{ minWidth: 388 + compData.apparatus.length * 100 + 140 }}>
                     <colgroup>
@@ -594,11 +705,35 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       {scoreModal && (() => {
         const g = gymnasts.find(x => x.id === scoreModal.gid);
         if (!g) return null;
-        const modalTotal = calcModalTotal();
+        const dual = modalFields._dual;
+        const modalTotal = dual ? calcDualVaultModalTotal() : calcModalTotal();
         const n = judgeCount(scoreModal.app);
+
+        const vaultSection = (prefix, label, autoFocusFirst) => (
+          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--accent)", marginBottom: 8 }}>
+              {label}
+              {(() => { const f = calcVaultFinal(modalFields, prefix, scoreModal.app); return f > 0 ? <span style={{ float: "right", fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{f.toFixed(3)}</span> : null; })()}
+            </div>
+            <div className="si-modal-fields">
+              <div className="si-modal-field"><label>D Score</label>{scoreInput(`${prefix}dv`, 10, autoFocusFirst)}</div>
+              <div className="si-modal-field"><label>Bonus</label>{scoreInput(`${prefix}bon`, 2)}</div>
+              <div className="si-modal-field"><label>Penalty</label>{scoreInput(`${prefix}pen`, 10)}</div>
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 4, marginTop: 6 }}>
+              E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}
+            </div>
+            <div className="si-modal-fields">
+              {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                <div className="si-modal-field" key={i}><label>J{i + 1}</label>{scoreInput(`${prefix}e${i + 1}`, 10)}</div>
+              ))}
+            </div>
+          </div>
+        );
+
         return createPortal(
           <div className="modal-backdrop" onClick={() => setScoreModal(null)}>
-            <div className="modal-box" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-box" style={{ maxWidth: dual ? 680 : 500 }} onClick={e => e.stopPropagation()}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{scoreModal.isEdit ? "Edit Score" : "Add Score"}</div>
                 <button className="btn-icon" onClick={() => setScoreModal(null)} aria-label="Close" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
@@ -614,38 +749,53 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                 <label className="label">Apparatus</label>
                 <div className="input" style={{ cursor: "default", background: "var(--surface2)", color: "var(--text)", fontWeight: 600 }}>
                   {getApparatusIcon(scoreModal.app)} {scoreModal.app}
+                  {dual && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "rgba(0,13,255,0.08)", padding: "2px 8px", borderRadius: 4 }}>Dual Vault</span>}
                 </div>
               </div>
 
-              <div className="si-modal-fields">
-                <div className="si-modal-field">
-                  <label>D Score</label>
-                  {scoreInput("dv", 10, true)}
-                </div>
-                <div className="si-modal-field">
-                  <label>Bonus</label>
-                  {scoreInput("bon", 2)}
-                </div>
-                <div className="si-modal-field">
-                  <label>Penalty</label>
-                  {scoreInput("pen", 10)}
-                </div>
-              </div>
-
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6 }}>
-                E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
-              </div>
-              <div className="si-modal-fields">
-                {Array.from({ length: Math.max(n, 1) }, (_, i) => (
-                  <div className="si-modal-field" key={i}>
-                    <label>Judge {i + 1}</label>
-                    {scoreInput(`e${i + 1}`, 10)}
+              {dual ? (
+                <>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ flex: 1 }}>{vaultSection("v1", "Vault 1", true)}</div>
+                    <div style={{ flex: 1 }}>{vaultSection("v2", "Vault 2", false)}</div>
                   </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
-                Enter deductions — subtracted from 10 (e.g. 2.50 = E score of 7.50)
-              </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5, fontStyle: "italic" }}>
+                    Enter deductions — subtracted from 10. Final = average of both vaults.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="si-modal-fields">
+                    <div className="si-modal-field">
+                      <label>D Score</label>
+                      {scoreInput("dv", 10, true)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>Bonus</label>
+                      {scoreInput("bon", 2)}
+                    </div>
+                    <div className="si-modal-field">
+                      <label>Penalty</label>
+                      {scoreInput("pen", 10)}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6 }}>
+                    E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
+                  </div>
+                  <div className="si-modal-fields">
+                    {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                      <div className="si-modal-field" key={i}>
+                        <label>Judge {i + 1}</label>
+                        {scoreInput(`e${i + 1}`, 10)}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
+                    Enter deductions — subtracted from 10 (e.g. 2.50 = E score of 7.50)
+                  </div>
+                </>
+              )}
 
               <div className="si-modal-total">
                 {modalTotal > 0 ? modalTotal.toFixed(3) : "\u2014"}

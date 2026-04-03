@@ -277,6 +277,9 @@
       padding: 12px;
       border: 1px solid transparent;
     }
+    .app-block.dual {
+      grid-column: span 2;
+    }
     .app-block.queried {
       border-color: var(--warn);
       background: rgba(245, 158, 11, 0.04);
@@ -296,17 +299,17 @@
       font-weight: 700;
       color: var(--text);
     }
-    .app-score {
+    .app-block .app-score {
       background: var(--surface);
       padding: 6px 12px;
       border-radius: 8px;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
-      color: var(--text);
+      color: var(--accent);
       line-height: 1;
     }
-    .app-score.no-score { color: var(--muted); font-size: 16px; }
-    .app-score.queried-val { color: var(--warn); font-size: 14px; }
+    .app-block .app-score.no-score { color: var(--muted); font-size: 16px; }
+    .app-block .app-score.queried-val { color: var(--warn); font-size: 14px; }
     .app-breakdown {
       display: flex;
       gap: 6px;
@@ -425,6 +428,7 @@
     .badge-gold { background: rgba(245, 158, 11, 0.12); color: #d97706; }
     .badge-silver { background: rgba(148, 163, 184, 0.12); color: #64748b; }
     .badge-bronze { background: rgba(180, 83, 9, 0.12); color: #b45309; }
+    .badge-medal { background: rgba(0, 13, 255, 0.07); color: #4a50c7; }
     .badge-rank { background: var(--surface2); color: var(--muted); }
     .badge-dns { background: rgba(144,144,144,0.1); color: var(--muted); }
 
@@ -438,6 +442,9 @@
       font-size: 12px;
     }
     .gymnast-club-cell { font-weight: 500; color: var(--muted); }
+    td.gymnast-name { font-size: 13px; font-weight: 500; }
+    td.app-score, td.score-total-cell { text-align: center; }
+    th.col-score { text-align: center; }
 
     /* ── Empty / loading / error states ─────────────────────── */
     .state-full {
@@ -627,9 +634,10 @@
 
   function rankBadge(rank) {
     if (rank === null) return `<span class="badge badge-dns">DNS</span>`;
-    if (rank === 1) return `<span class="badge badge-gold">1st</span>`;
-    if (rank === 2) return `<span class="badge badge-silver">2nd</span>`;
-    if (rank === 3) return `<span class="badge badge-bronze">3rd</span>`;
+    if (rank === 1) return `<span class="badge badge-gold">🥇 1st</span>`;
+    if (rank === 2) return `<span class="badge badge-silver">🥈 2nd</span>`;
+    if (rank === 3) return `<span class="badge badge-bronze">🥉 3rd</span>`;
+    if (rank <= 6) return `<span class="badge badge-medal">${rank}th</span>`;
     return `<span class="badge badge-rank">${rank}th</span>`;
   }
 
@@ -661,7 +669,7 @@
         if (best > 0) topScores[a] = best;
       });
 
-      const appHeaders = apparatus.map(a => `<th>${escHtml(a)}</th>`).join("");
+      const appHeaders = apparatus.map(a => `<th class="col-score">${escHtml(a)}</th>`).join("");
 
       const rows = [
         ...ranked.map(g => {
@@ -677,12 +685,12 @@
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td><span class="score-total">${g.total.toFixed(2)}</span></td>
+              <td class="score-total-cell"><span class="score-total">${g.total.toFixed(2)}</span></td>
             </tr>
           `;
         }),
         ...dns.map(g => {
-          const appCells = apparatus.map(() => `<td style="color:var(--muted)">—</td>`).join("");
+          const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
           return `
             <tr class="dns-row">
               <td>${rankBadge(null)}</td>
@@ -690,7 +698,7 @@
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td style="color:var(--muted)">—</td>
+              <td class="score-total-cell" style="color:var(--muted)">—</td>
             </tr>
           `;
         })
@@ -717,7 +725,7 @@
                   <tr>
                     <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
                     ${appHeaders}
-                    <th>Total</th>
+                    <th class="col-score">Total</th>
                   </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -765,12 +773,37 @@
     for (const row of rows) {
       const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
       flat[bk] = row.final_score != null ? String(row.final_score) : "";
+
+      const eScores = row.e_scores;
+
+      // Dual vault: e_scores is an object with dualVault flag
+      if (eScores && typeof eScores === "object" && !Array.isArray(eScores) && eScores.dualVault) {
+        flat[`${bk}__dualVault`] = "1";
+        for (const prefix of ["v1", "v2"]) {
+          const v = eScores[prefix];
+          if (!v) continue;
+          if (v.d != null) flat[`${bk}__${prefix}dv`] = String(v.d);
+          if (v.e && Array.isArray(v.e)) {
+            for (let i = 0; i < v.e.length; i++) {
+              if (v.e[i] != null) flat[`${bk}__${prefix}e${i + 1}`] = String(v.e[i]);
+            }
+          }
+          if (v.bon != null && v.bon !== 0) flat[`${bk}__${prefix}bon`] = String(v.bon);
+          if (v.pen != null && v.pen !== 0) flat[`${bk}__${prefix}pen`] = String(v.pen);
+          if (v.final != null) flat[`${bk}__${prefix}fin`] = String(v.final);
+        }
+        continue;
+      }
+
+      // Normal score
       if (row.d_score != null) flat[`${bk}__dv`] = String(row.d_score);
       if (row.bonus != null && row.bonus !== 0) flat[`${bk}__bon`] = String(row.bonus);
       if (row.penalty != null && row.penalty !== 0) flat[`${bk}__pen`] = String(row.penalty);
-      const eScores = row.e_scores || [];
-      for (let i = 0; i < eScores.length; i++) {
-        if (eScores[i] != null) flat[`${bk}__e${i + 1}`] = String(eScores[i]);
+      const eArr = eScores || [];
+      if (Array.isArray(eArr)) {
+        for (let i = 0; i < eArr.length; i++) {
+          if (eArr[i] != null) flat[`${bk}__e${i + 1}`] = String(eArr[i]);
+        }
       }
     }
     return flat;
@@ -784,7 +817,10 @@
     const isResolved = !!scores[subKey(rid, gid, app, "queryResolved")];
     const queryNote = scores[subKey(rid, gid, app, "queryNote")] || "";
 
+    const isDual = !!scores[subKey(rid, gid, app, "dualVault")];
+    const v2HasData = isDual && parseFloat(scores[subKey(rid, gid, app, "v2fin")]) > 0;
     let blockClass = "app-block";
+    if (isDual && v2HasData) blockClass += " dual";
     if (isQueried && !isResolved) blockClass += " queried";
     if (isResolved) blockClass += " resolved";
 
@@ -800,7 +836,57 @@
     let breakdownHtml = "";
     const bdFmt = (v) => v > 0 ? v.toFixed(2) : "0";
 
-    if (fig) {
+    if (fig && isDual) {
+      // Dual vault breakdown — full D/E/B/P for each vault, side by side
+      const v1fin = parseFloat(scores[subKey(rid, gid, app, "v1fin")]) || 0;
+      const v2fin = parseFloat(scores[subKey(rid, gid, app, "v2fin")]) || 0;
+
+      const vaultHalf = (prefix, label, fin) => {
+        const dv = parseFloat(scores[subKey(rid, gid, app, `${prefix}dv`)]) || 0;
+        const n = Math.max(judgeCount(app), 1);
+        let eSum = 0, eCnt = 0;
+        for (let i = 1; i <= n; i++) {
+          const v = parseFloat(scores[subKey(rid, gid, app, `${prefix}e${i}`)]);
+          if (!isNaN(v) && v > 0) { eSum += v; eCnt++; }
+        }
+        const eDed = eCnt > 0 ? eSum / eCnt : 0;
+        const bon = parseFloat(scores[subKey(rid, gid, app, `${prefix}bon`)]) || 0;
+        const pen = parseFloat(scores[subKey(rid, gid, app, `${prefix}pen`)]) || 0;
+        if (fin > 0) {
+          return `
+            <div style="flex:1">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:4px">${label} <span style="float:right;font-size:12px;font-weight:800;color:var(--text)">${fin.toFixed(2)}</span></div>
+              <div class="app-breakdown">
+                <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val">${bdFmt(dv)}</span></div>
+                <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val">${bdFmt(eDed)}</span></div>
+                <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val">${bdFmt(bon)}</span></div>
+                <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val${pen > 0 ? " penalty" : ""}">${pen > 0 ? pen.toFixed(2) : "0"}</span></div>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div style="flex:1">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:4px">${label}</div>
+            <div class="app-breakdown">
+              <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val na">—</span></div>
+              <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val na">—</span></div>
+              <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val na">—</span></div>
+              <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val na">—</span></div>
+            </div>
+          </div>
+        `;
+      };
+
+      if (v2HasData) {
+        breakdownHtml = `
+          <div style="display:flex;gap:8px">${vaultHalf("v1", "Vault 1", v1fin)}${vaultHalf("v2", "Vault 2", v2fin)}</div>
+          <div style="text-align:center;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)">Average <span style="color:var(--accent);font-weight:800;font-size:13px;margin-left:4px">${total > 0 ? total.toFixed(2) : "—"}</span></div>
+        `;
+      } else {
+        breakdownHtml = vaultHalf("v1", "Vault 1", v1fin);
+      }
+    } else if (fig) {
       const dv = sv(rid, gid, app, "dv");
       const eDeduction = getEDeductionAvg(rid, gid, app);
       const bonus = sv(rid, gid, app, "bon");

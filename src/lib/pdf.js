@@ -1185,26 +1185,39 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
       compData.apparatus.forEach(app => {
         const finalScore = getScore(round.id, g.id, app);
         if (finalScore === 0 && !fig) return;
+        const bk = `${round.id}__${g.id}__${app}`;
+        const isDual = scores[`${bk}__dualVault`] === "1";
         const row = [g.number || "", g.name, round.name, app];
         if (fig) {
-          const bk = `${round.id}__${g.id}__${app}`;
-          const dv = parseFloat(scores[`${bk}__dv`]) || 0;
-          row.push(dv || "");
-          const n = judgeCount(app);
-          let eSum = 0, eCount = 0;
-          for (let i = 1; i <= maxJudges; i++) {
-            if (i <= Math.max(n, 1)) {
-              const v = parseFloat(scores[`${bk}__e${i}`]);
-              if (!isNaN(v)) { eSum += (10 - v); eCount++; row.push(v); }
+          if (isDual) {
+            // Dual vault: output V1 Final, V2 Final, then pad remaining columns, then Average
+            const v1fin = parseFloat(scores[`${bk}__v1fin`]) || 0;
+            const v2fin = parseFloat(scores[`${bk}__v2fin`]) || 0;
+            row.push(v1fin > 0 ? v1fin : ""); // D Score column → V1 Final
+            for (let i = 1; i <= maxJudges; i++) {
+              if (i === 1) row.push(v2fin > 0 ? v2fin : ""); // First E Judge column → V2 Final
               else row.push("");
-            } else {
-              row.push("");
             }
+            row.push("", "", ""); // Avg E, Bonus, Penalty blank for dual vault
+          } else {
+            const dv = parseFloat(scores[`${bk}__dv`]) || 0;
+            row.push(dv || "");
+            const n = judgeCount(app);
+            let eSum = 0, eCount = 0;
+            for (let i = 1; i <= maxJudges; i++) {
+              if (i <= Math.max(n, 1)) {
+                const v = parseFloat(scores[`${bk}__e${i}`]);
+                if (!isNaN(v)) { eSum += (10 - v); eCount++; row.push(v); }
+                else row.push("");
+              } else {
+                row.push("");
+              }
+            }
+            const eAvg = eCount > 0 ? parseFloat((eSum / eCount).toFixed(3)) : "";
+            const bon = parseFloat(scores[`${bk}__bon`]) || "";
+            const pen = parseFloat(scores[`${bk}__pen`]) || "";
+            row.push(eAvg, bon, pen);
           }
-          const eAvg = eCount > 0 ? parseFloat((eSum / eCount).toFixed(3)) : "";
-          const bon = parseFloat(scores[`${bk}__bon`]) || "";
-          const pen = parseFloat(scores[`${bk}__pen`]) || "";
-          row.push(eAvg, bon, pen);
         }
         row.push(finalScore > 0 ? parseFloat(finalScore.toFixed(2)) : "");
         rawRows.push(row);
