@@ -13,10 +13,15 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
   // Unique levels in this round
-  const uniqueLevels = useMemo(() => [...new Set(roundGymnasts.map(g => {
-    const lo = compData.levels.find(l => l.id === g.level);
-    return lo?.name || "Unknown";
-  }))].sort(), [roundGymnasts, compData.levels]);
+  const uniqueLevels = useMemo(() => {
+    const present = new Set(roundGymnasts.map(g => {
+      const lo = compData.levels.find(l => l.id === g.level);
+      return lo?.name || "Unknown";
+    }));
+    const ordered = (compData.levels || []).map(l => l.name).filter(n => present.has(n));
+    if (present.has("Unknown") && !ordered.includes("Unknown")) ordered.push("Unknown");
+    return ordered;
+  }, [roundGymnasts, compData.levels]);
 
   // Check if selected level uses level+age ranking
   const selectedLevelObj = levelFilter !== "all" ? compData.levels.find(l => l.name === levelFilter) : null;
@@ -53,8 +58,17 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
       if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
       map[key].gymnasts.push(g);
     });
+    // Sort gymnasts by number within each group
+    Object.values(map).forEach(g => g.gymnasts.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
+    const levelOrder = (compData.levels || []).map(l => l.name);
     return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => {
+        const aLevel = a.split("|||")[0];
+        const bLevel = b.split("|||")[0];
+        const ai = levelOrder.indexOf(aLevel);
+        const bi = levelOrder.indexOf(bLevel);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      })
       .map(([key, val]) => ({ key, ...val }));
   };
 
@@ -168,7 +182,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                                <td><strong>{g.score.toFixed(2)}</strong></td>
+                                <td><strong>{g.score.toFixed(3)}</strong></td>
                               </tr>
                             ))}
                             {dns.map(g => (
@@ -244,10 +258,10 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                           {compData.apparatus.map(a => (
                             <td key={a} style={{ color: "var(--muted)" }}>
-                              {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(2) : "—"}
+                              {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(3) : "—"}
                             </td>
                           ))}
-                          <td><strong style={{ color: "var(--accent)" }}>{g.total.toFixed(2)}</strong></td>
+                          <td><strong style={{ color: "var(--accent)" }}>{g.total.toFixed(3)}</strong></td>
                         </tr>
                       ))}
                       {dns.map(g => (

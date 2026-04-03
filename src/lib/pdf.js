@@ -168,35 +168,48 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
     byRound[g.round][g.group].push(g);
   });
 
-  // Build rotations map from groups × apparatus
-  const allGroups = [...new Set(gymnasts.map(g => g.group).filter(Boolean))];
-  const rotMap = {};
-  allGroups.forEach((grp, gi) => {
-    rotMap[grp] = apparatus.map((_, ai) => apparatus[(ai + gi) % apparatus.length]);
+  // Sort groups numerically (matching Manage Gymnasts order)
+  const sortGroupNames = (names) => [...names].sort((a, b) => {
+    const na = parseInt(String(a).replace(/\D/g, "")) || 0;
+    const nb = parseInt(String(b).replace(/\D/g, "")) || 0;
+    return na - nb;
   });
 
-  let html = getPrintHeader(compData, "Competition Agenda");
+  const compName = escHtml(compData.name) || "Competition";
+
+  let html = "";
+
+  // Header with logo badge (matching Attendance List)
+  html += `
+    <div class="print-header">
+      <div class="print-header-top" style="border-bottom: 3px solid ${colour};">
+        <div class="print-header-text">
+          <div class="print-comp-name" style="color:${colour};">${compName}</div>
+          ${compData.organiserName ? `<div class="print-organiser">${escHtml(compData.organiserName)}</div>` : ""}
+          <div class="print-meta">
+            ${compData.date ? formatDate(compData.date) : ""}
+            ${compData.venue ? ` &nbsp;·&nbsp; ${escHtml(compData.venue)}` : ""}
+          </div>
+        </div>
+        <div style="background:${colour};color:#fff;padding:8px 16px;border-radius:6px;display:flex;align-items:center;gap:10px;white-space:nowrap;align-self:flex-start;">
+          <img src="./Logo-mono-white.svg" alt="GymComp" height="16" style="display:block;" />
+          <span style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;">Competition Agenda</span>
+        </div>
+      </div>
+    </div>
+  `;
 
   // Summary table
   html += `<table style="margin-bottom:20px;">
     <tr><th>Competition</th><th>Date</th><th>Venue</th><th>Levels</th><th>Total Gymnasts</th></tr>
     <tr>
-      <td><strong>${escHtml(compData.name) || "—"}</strong></td>
+      <td><strong>${compName}</strong></td>
       <td>${compData.date ? formatDate(compData.date) : "—"}</td>
       <td>${escHtml(compData.venue || compData.location) || "—"}</td>
       <td>${(compData.levels || []).map(l => escHtml(l.name)).join(", ") || "—"}</td>
       <td>${gymnasts.length}</td>
     </tr>
   </table>`;
-
-  // Apparatus key
-  if (apparatus.length) {
-    html += `<div style="margin-bottom:16px;"><strong style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;">Apparatus: </strong>`;
-    apparatus.forEach((a, i) => {
-      html += `<span class="apparatus-tag">${i + 1}. ${escHtml(a)}</span>`;
-    });
-    html += `</div>`;
-  }
 
   // Rounds
   rounds.forEach((round, ri) => {
@@ -207,41 +220,31 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
     </div>`;
 
     const groups = byRound[round.id] || {};
-    const groupNames = Object.keys(groups);
+    const groupNames = sortGroupNames(Object.keys(groups));
 
     if (!groupNames.length) {
       html += `<p style="color:#999;font-size:10px;padding:8px 0;">No gymnasts assigned to this round.</p>`;
     } else {
-      // Rotation overview for this round
-      html += `<table style="margin-bottom:14px;">
-        <thead><tr><th>Group</th>${apparatus.map((_, i) => `<th>Position ${i + 1}</th>`).join("")}</tr></thead>
-        <tbody>`;
-      groupNames.forEach(grp => {
-        html += `<tr><td><strong>${escHtml(grp)}</strong></td>`;
-        apparatus.forEach((_, i) => {
-          const app = rotMap[grp]?.[i] || "—";
-          html += `<td>${escHtml(app)}</td>`;
-        });
-        html += `</tr>`;
-      });
-      html += `</tbody></table>`;
-
       // Gymnast lists per group
       groupNames.forEach(grp => {
-        const gList = (groups[grp] || []).sort((a, b) => (a.number || 0) - (b.number || 0));
+        const gList = (groups[grp] || []).sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
         html += `<div class="group-block">
           <div class="group-name">${escHtml(grp)} — ${gList.length} gymnast${gList.length !== 1 ? "s" : ""}</div>
           <table>
-            <thead><tr><th>#</th><th>Name</th><th>Club</th><th>Level</th><th>Start App.</th></tr></thead>
+            <colgroup>
+              <col style="width:40px;" />
+              <col style="width:auto;" />
+              <col style="width:30%;" />
+              <col style="width:20%;" />
+            </colgroup>
+            <thead><tr><th>#</th><th>Name</th><th>Club</th><th>Level</th></tr></thead>
             <tbody>`;
         gList.forEach((g, idx) => {
-          const startApp = rotMap[grp]?.[0] || "—";
           html += `<tr>
             <td>${g.number || idx + 1}</td>
             <td>${escHtml(g.name) || "—"}</td>
             <td>${escHtml(g.club) || "—"}</td>
             <td>${escHtml(levelName(g.level))}</td>
-            <td>${escHtml(startApp)}</td>
           </tr>`;
         });
         html += `</tbody></table></div>`;
