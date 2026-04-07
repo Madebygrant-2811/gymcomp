@@ -9,27 +9,6 @@ function AddressLookup({ value, onChange, placeholder }) {
   const debounceRef = useRef(null);
   const wrapRef = useRef(null);
   const abortRef = useRef(null);
-  const sessionTokenRef = useRef(null);
-
-  // Generate a new session token (groups autocomplete + place details into one billing session)
-  const getSessionToken = () => {
-    if (!sessionTokenRef.current && window.google?.maps?.places?.AutocompleteSessionToken) {
-      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
-    }
-    return sessionTokenRef.current;
-  };
-
-  // Load Google Maps JS API if not already loaded
-  useEffect(() => {
-    if (!GOOGLE_KEY) return;
-    if (window.google?.maps?.places) return;
-    if (document.querySelector("script[data-google-places]")) return;
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&libraries=places`;
-    script.async = true;
-    script.dataset.googlePlaces = "1";
-    document.head.appendChild(script);
-  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -55,30 +34,30 @@ function AddressLookup({ value, onChange, placeholder }) {
     setStatus("searching");
 
     try {
-      // Use REST endpoint for autocomplete
-      const params = new URLSearchParams({
-        input: q,
-        key: GOOGLE_KEY,
-        components: "country:gb",
-        language: "en",
+      const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY },
+        body: JSON.stringify({
+          input: q,
+          includedRegionCodes: ["gb"],
+          languageCode: "en",
+        }),
+        signal: abortRef.current.signal,
       });
-      const token = getSessionToken();
-      if (token) params.set("sessiontoken", token);
-
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`,
-        { signal: abortRef.current.signal }
-      );
 
       if (res.ok) {
         const data = await res.json();
-        const results = (data.predictions || []).map(p => ({
-          label: p.structured_formatting?.main_text || p.description,
-          sub: p.structured_formatting?.secondary_text || "",
-          full: p.description,
-          placeId: p.place_id,
-          types: p.types || [],
-        }));
+        const results = (data.suggestions || [])
+          .filter(s => s.placePrediction)
+          .map(s => {
+            const p = s.placePrediction;
+            return {
+              label: p.structuredFormat?.mainText?.text || p.text?.text || "",
+              sub: p.structuredFormat?.secondaryText?.text || "",
+              full: p.text?.text || "",
+              types: p.types || [],
+            };
+          });
         setSuggestions(results);
       } else {
         setSuggestions([]);
@@ -92,39 +71,12 @@ function AddressLookup({ value, onChange, placeholder }) {
     }
   };
 
-  // Fallback: use JS API AutocompleteService if REST fails (CORS)
-  const searchViaJsApi = (val) => {
-    const q = val.trim();
-    if (q.length < 3) { setSuggestions([]); setStatus("idle"); return; }
-    if (!window.google?.maps?.places) { search(val); return; }
-
-    setStatus("searching");
-    const service = new window.google.maps.places.AutocompleteService();
-    service.getPlacePredictions(
-      { input: q, componentRestrictions: { country: "gb" }, sessionToken: getSessionToken() },
-      (predictions, gStatus) => {
-        if (gStatus === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-          setSuggestions(predictions.map(p => ({
-            label: p.structured_formatting?.main_text || p.description,
-            sub: p.structured_formatting?.secondary_text || "",
-            full: p.description,
-            placeId: p.place_id,
-            types: p.types || [],
-          })));
-        } else {
-          setSuggestions([]);
-        }
-        setStatus("idle");
-      }
-    );
-  };
-
   const handleChange = (e) => {
     const val = e.target.value;
     setQuery(val);
     onChange(val);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => searchViaJsApi(val), 250);
+    debounceRef.current = setTimeout(() => search(val), 250);
   };
 
   const select = (s) => {
@@ -132,8 +84,6 @@ function AddressLookup({ value, onChange, placeholder }) {
     setQuery(display);
     onChange(display);
     setSuggestions([]);
-    // Reset session token after selection (per Google billing best practice)
-    sessionTokenRef.current = null;
   };
 
   const iconFor = (types) => {
@@ -150,7 +100,7 @@ function AddressLookup({ value, onChange, placeholder }) {
           placeholder={placeholder || "Search by venue name, address or postcode\u2026"}
           value={query}
           onChange={handleChange}
-          onFocus={() => query.length >= 3 && searchViaJsApi(query)}
+          onFocus={() => query.length >= 3 && search(query)}
           autoComplete="off"
         />
         {status === "searching" && (
