@@ -103,7 +103,10 @@ export default function App() {
   // ── Auth initialisation ──────────────────────────────────────────────────
   const loadUserProfile = async (user) => {
     try {
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      // Ensure we have a fresh token before querying
+      await supabase.auth.refreshSession();
+      const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (error) console.warn("Profile fetch error:", error.message);
       setCurrentProfile(profile || null);
       setAuthLoading(false);
       // Only navigate on initial auth — not on token refreshes that re-trigger loadUserProfile
