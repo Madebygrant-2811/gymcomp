@@ -222,10 +222,11 @@ export const css = `
   .group-line { flex: 1; height: 1px; background: var(--border); }
   .sub-group-label { font-size: 16px; font-weight: 500; color: var(--accent); margin: 10px 0 16px; }
 
-  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 56px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 56px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
   .badge-gold { background: rgba(255,200,0,0.12); color: #b8860b; }
   .badge-silver { background: rgba(140,140,160,0.12); color: #6b6b85; }
   .badge-bronze { background: rgba(180,100,40,0.12); color: #a0522d; }
+  .badge-medal { background: rgba(0,13,255,0.07); color: #4a50c7; }
   .badge-rank { background: var(--surface2); color: var(--muted); }
 
   .summary-box { background: rgba(0,13,255,0.04); border: 1px solid rgba(0,13,255,0.15); border-radius: 12px; padding: 12px 18px; font-size: 13px; color: var(--accent); }

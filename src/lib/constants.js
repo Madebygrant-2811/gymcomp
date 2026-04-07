@@ -22,6 +22,7 @@ APPARATUS_GROUPS.forEach(g => {
 });
 
 export const UK_LEVELS = [
+  { group: "Excel", options: ["Pre-Excel", "Excel Grade 1", "Excel Grade 2", "Excel Grade 3"] },
   { group: "Classic Challenge", options: ["Tin", "Zinc", "Copper", "Bronze", "Silver", "Gold"] },
   { group: "NDP Grades (Club/County)", options: ["Prep Grade 1", "Prep Grade 2", "Prep Grade 3", "Dev Grade 1", "Dev Grade 2", "Dev Grade 3", "Performance Grade 1", "Performance Grade 2", "Performance Grade 3"] },
   { group: "NDP Grades (Regional/National)", options: ["Grade 14", "Grade 13", "Grade 12", "Grade 11", "Grade 10", "Grade 9", "Grade 8", "Grade 7", "Grade 6", "Grade 5"] },

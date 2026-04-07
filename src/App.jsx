@@ -667,15 +667,11 @@ export default function App() {
   };
   const handleCompleteComp = () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    pushToSupabase(compData, gymnasts);
     if (currentEventId) {
-      snapshotWithPin(currentEventId, compData, gymnasts);
       events.update(currentEventId, { status: "completed" });
-      const ev = events.getAll().find(e => e.id === currentEventId);
-      if (ev?.compId) {
-        supabase.from("competitions").update({ status: "completed" }).eq("id", ev.compId);
-      }
+      snapshotWithPin(currentEventId, compData, gymnasts);
     }
+    pushToSupabase(compData, gymnasts, undefined, "completed");
     setScreen("org-dashboard");
   };
   const handleEditSetup = () => { setPhase(1); setStep(1); };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { denseRank, gymnast_key } from "../../lib/scoring.js";
 import { exportResultsXLSX } from "../../lib/pdf.js";
+import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 
 function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
@@ -95,6 +96,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
     if (rank === 1) return <span className="badge badge-gold">🥇 1st</span>;
     if (rank === 2) return <span className="badge badge-silver">🥈 2nd</span>;
     if (rank === 3) return <span className="badge badge-bronze">🥉 3rd</span>;
+    if (rank <= 6) return <span className="badge badge-medal">🎖️ {rank}th</span>;
     return <span className="badge badge-rank">{rank}th</span>;
   };
 
@@ -288,6 +290,9 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
 
       {showCompleteConfirm && (
         <ConfirmModal
+          icon="🏆"
+          isDanger={false}
+          confirmStyle={{ background: "#15803d", color: "#fff", borderColor: "#15803d" }}
           message="Are you sure you want to complete this competition? The event status will change to Completed."
           confirmLabel="Complete"
           onConfirm={() => { setShowCompleteConfirm(false); onComplete(); }}

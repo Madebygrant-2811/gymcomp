@@ -16,6 +16,8 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const [showWarnings, setShowWarnings] = useState(false);
   const [topbarHidden, setTopbarHidden] = useState(false);
   const lastScrollY = useRef(0);
+  const appDragFrom = useRef(null);
+  const appTouchFrom = useRef(null);
 
   useEffect(() => {
     const el = document.querySelector(".app-main");
@@ -316,16 +318,28 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           <>
             <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Apparatus Order</div>
-            <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Set the starting rotation order. Groups will cascade automatically from this sequence.</p>
+            <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Drag to reorder. Groups will cascade automatically from this sequence.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {data.apparatus.map((a, i) => (
-                <div key={a} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13 }}>
+                <div key={a} draggable
+                  onDragStart={e => { appDragFrom.current = i; e.dataTransfer.effectAllowed = "move"; e.currentTarget.style.opacity = "0.5"; }}
+                  onDragEnd={e => { e.currentTarget.style.opacity = "1"; }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); const from = appDragFrom.current; if (from !== i) setData(d => { const arr = [...d.apparatus]; const [item] = arr.splice(from, 1); arr.splice(i, 0, item); return { ...d, apparatus: arr }; }); }}
+                  onTouchStart={e => { appTouchFrom.current = i; e.currentTarget.style.opacity = "0.5"; }}
+                  onTouchMove={e => e.preventDefault()}
+                  onTouchEnd={e => {
+                    e.currentTarget.style.opacity = "1";
+                    const touch = e.changedTouches[0];
+                    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const row = el?.closest("[data-app-idx]");
+                    if (row) { const from = appTouchFrom.current; const to = parseInt(row.dataset.appIdx); if (from !== to) setData(d => { const arr = [...d.apparatus]; const [item] = arr.splice(from, 1); arr.splice(to, 0, item); return { ...d, apparatus: arr }; }); }
+                  }}
+                  data-app-idx={i}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, cursor: "grab", userSelect: "none", touchAction: "none" }}>
+                  <span style={{ color: "var(--muted)", fontSize: 14 }}>⠿</span>
                   <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, minWidth: 20 }}>{i + 1}</span>
                   <span style={{ flex: 1 }}>{a}</span>
-                  <button className="btn btn-sm btn-secondary" style={{ padding: "2px 6px", fontSize: 11, visibility: i === 0 ? "hidden" : "visible" }}
-                    onClick={() => setData(d => { const arr = [...d.apparatus]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; return { ...d, apparatus: arr }; })}>↑</button>
-                  <button className="btn btn-sm btn-secondary" style={{ padding: "2px 6px", fontSize: 11, visibility: i === data.apparatus.length - 1 ? "hidden" : "visible" }}
-                    onClick={() => setData(d => { const arr = [...d.apparatus]; [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]; return { ...d, apparatus: arr }; })}>↓</button>
                 </div>
               ))}
             </div>
