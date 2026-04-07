@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
-const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_PLACES_KEY;
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
 
 function AddressLookup({ value, onChange, placeholder }) {
   const [query, setQuery] = useState(value || "");
@@ -18,6 +19,7 @@ function AddressLookup({ value, onChange, placeholder }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Cleanup debounce timer and in-flight fetch on unmount
   useEffect(() => {
     return () => {
       clearTimeout(debounceRef.current);
@@ -34,30 +36,17 @@ function AddressLookup({ value, onChange, placeholder }) {
     setStatus("searching");
 
     try {
-      const res = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY },
-        body: JSON.stringify({
-          input: q,
-          includedRegionCodes: ["gb"],
-          languageCode: "en",
-        }),
-        signal: abortRef.current.signal,
-      });
-
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&country=gb&limit=6&types=address,poi,place,postcode,locality&language=en`,
+        { signal: abortRef.current.signal }
+      );
       if (res.ok) {
         const data = await res.json();
-        const results = (data.suggestions || [])
-          .filter(s => s.placePrediction)
-          .map(s => {
-            const p = s.placePrediction;
-            return {
-              label: p.structuredFormat?.mainText?.text || p.text?.text || "",
-              sub: p.structuredFormat?.secondaryText?.text || "",
-              full: p.text?.text || "",
-              types: p.types || [],
-            };
-          });
+        const results = (data.features || []).map(f => ({
+          label: f.place_name.replace(/, United Kingdom$/, ""),
+          sub: f.place_type?.[0]?.replace(/_/g, " ") || "",
+          type: f.place_type?.[0] || "address",
+        }));
         setSuggestions(results);
       } else {
         setSuggestions([]);
@@ -80,17 +69,12 @@ function AddressLookup({ value, onChange, placeholder }) {
   };
 
   const select = (s) => {
-    const display = s.full || s.label;
-    setQuery(display);
-    onChange(display);
+    setQuery(s.label);
+    onChange(s.label);
     setSuggestions([]);
   };
 
-  const iconFor = (types) => {
-    if (types.includes("establishment") || types.includes("point_of_interest")) return "📍";
-    if (types.includes("postal_code")) return "🏷";
-    return "📍";
-  };
+  const iconFor = (type) => type === "poi" ? "📍" : type === "postcode" ? "🏷" : "📍";
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
@@ -107,7 +91,7 @@ function AddressLookup({ value, onChange, placeholder }) {
           <div style={{
             position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
             fontSize: 11, color: "var(--muted)"
-          }}>{"\u23F3"}</div>
+          }}>\u23F3</div>
         )}
       </div>
       {suggestions.length > 0 && (
@@ -115,7 +99,7 @@ function AddressLookup({ value, onChange, placeholder }) {
           {suggestions.map((s, i) => (
             <div key={i} className="pc-option" onClick={() => select(s)}
               style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <span style={{ flexShrink: 0, marginTop: 1 }}>{iconFor(s.types)}</span>
+              <span style={{ flexShrink: 0, marginTop: 1 }}>{iconFor(s.type)}</span>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{s.label}</div>
                 {s.sub && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{s.sub}</div>}
@@ -127,5 +111,7 @@ function AddressLookup({ value, onChange, placeholder }) {
     </div>
   );
 }
+
+// ============================================================
 
 export default AddressLookup;
