@@ -89,6 +89,13 @@ export default function App() {
   const [scores, setScores] = useState({});
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
 
+  // ── Draft buffer for Setup — isolates edits until explicit save ──
+  const [draftCompData, setDraftCompData] = useState(null);
+  const [draftGymnasts, setDraftGymnasts] = useState(null);
+  const [setupSnapshot, setSetupSnapshot] = useState(null);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const discardCallbackRef = useRef(null);
+
   // Derived values — avoid redundant events.getAll().find() in render path
   const currentEvent = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
   const eventStatus = currentEvent?.status;
@@ -96,6 +103,12 @@ export default function App() {
     const rf = ["name","club","level","round","age"];
     return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim()));
   }, [gymnasts]);
+
+  const inSetupMode = phase === 1 || phase === "gymnasts";
+  const isDirty = inSetupMode && setupSnapshot !== null && (
+    JSON.stringify(draftCompData) !== JSON.stringify(setupSnapshot.compData) ||
+    JSON.stringify(draftGymnasts) !== JSON.stringify(setupSnapshot.gymnasts)
+  );
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
@@ -356,8 +369,50 @@ export default function App() {
     }
   }, [compId, inSandbox]);
 
+  // ── Draft-only setters for Setup ──
+  const setDraftCompDataLocal = useCallback((updater) => {
+    setDraftCompData(prev => {
+      if (prev === null) return prev;
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if ((draftGymnasts || []).length > 0) {
+        const apparatusChanged = JSON.stringify(prev.apparatus) !== JSON.stringify(next.apparatus);
+        const roundsChanged = JSON.stringify(prev.rounds.map(r => r.id)) !== JSON.stringify(next.rounds.map(r => r.id));
+        const levelsChanged = JSON.stringify(prev.levels.map(l => l.id)) !== JSON.stringify(next.levels.map(l => l.id));
+        if (apparatusChanged || roundsChanged || levelsChanged) {
+          setPendingChange(next);
+          setSetupWarn("Changing this setup may affect gymnast data already entered. Do you want to continue?");
+          return prev;
+        }
+      }
+      return next;
+    });
+  }, [draftGymnasts]);
+
+  const setDraftGymnastsLocal = useCallback((updater) => {
+    setDraftGymnasts(prev => typeof updater === "function" ? updater(prev) : updater);
+  }, []);
+
+  const clearDraft = () => {
+    setDraftCompData(null);
+    setDraftGymnasts(null);
+    setSetupSnapshot(null);
+  };
+
+  const commitDraft = () => {
+    const cd = draftCompData || compData;
+    const g = draftGymnasts || gymnasts;
+    setCompDataRaw(cd);
+    setGymnasts(g);
+    clearDraft();
+    return { compData: cd, gymnasts: g };
+  };
+
   const confirmSetupChange = () => {
-    setCompDataRaw(pendingChange);
+    if (draftCompData !== null) {
+      setDraftCompData(pendingChange);
+    } else {
+      setCompDataRaw(pendingChange);
+    }
     setSetupWarn(null);
     setPendingChange(null);
   };
@@ -385,9 +440,15 @@ export default function App() {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
-    setCompDataRaw({ name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
-    setGymnasts([]);
+    const freshCompData = { name:"", location:"", date:"", holder: currentProfile?.full_name || "", organiserName: currentProfile?.club_name || "", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
+    const freshGymnasts = [];
+    setCompDataRaw(freshCompData);
+    setGymnasts(freshGymnasts);
     setScores({});
+    // Initialize draft buffer
+    setSetupSnapshot({ compData: structuredClone(freshCompData), gymnasts: [] });
+    setDraftCompData(structuredClone(freshCompData));
+    setDraftGymnasts([]);
     setPhase(1); setStep(1);
     setSyncStatus("idle");
 
@@ -612,7 +673,21 @@ export default function App() {
 
   // Navigate back to org dashboard
   const goBackToDashboard = () => {
-    // Auto-save draft before navigating back
+    // If in setup with unsaved changes, prompt before discarding
+    if (inSetupMode && isDirty) {
+      discardCallbackRef.current = () => {
+        clearDraft();
+        if (currentEventId) {
+          if (syncTimer.current) clearTimeout(syncTimer.current);
+          snapshotWithPin(currentEventId, compData, gymnasts);
+          pushToSupabase(compData, gymnasts);
+        }
+        setScreen("org-dashboard");
+      };
+      setShowDiscardModal(true);
+      return;
+    }
+    clearDraft();
     if (currentEventId) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
       snapshotWithPin(currentEventId, compData, gymnasts);
@@ -623,26 +698,29 @@ export default function App() {
 
   // ---- Sidebar nav callbacks for active screen ----
   const handleSaveSetup = () => {
+    const { compData: cd, gymnasts: g } = commitDraft();
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    pushToSupabase(compData, gymnasts);
-    if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
+    pushToSupabase(cd, g);
+    if (currentEventId) snapshotWithPin(currentEventId, cd, g);
   };
 
-  const setupCanProceed = compData.name && compData.date &&
-    (compData.rounds || []).length > 0 &&
-    (compData.apparatus || []).length > 0 && (compData.levels || []).length > 0 &&
-    compData.dataConsentConfirmed;
-  const setupCanSave = !!compData.name;
+  const setupCheckData = draftCompData || compData;
+  const setupCanProceed = setupCheckData.name && setupCheckData.date &&
+    (setupCheckData.rounds || []).length > 0 &&
+    (setupCheckData.apparatus || []).length > 0 && (setupCheckData.levels || []).length > 0 &&
+    setupCheckData.dataConsentConfirmed;
+  const setupCanSave = !!setupCheckData.name;
 
   const handleMobileSave = () => {
     if (setupCanProceed) {
-      // All fields complete — full save & continue (PIN flow + dashboard)
+      // All fields complete — commit draft, full save & continue
+      const { compData: cd, gymnasts: g } = commitDraft();
       if (syncTimer.current) clearTimeout(syncTimer.current);
       const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
       const isDraft = ev && ev.status === "draft";
-      pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);
+      pushToSupabase(cd, g, undefined, isDraft ? "active" : undefined);
       if (currentEventId) {
-        snapshotWithPin(currentEventId, compData, gymnasts);
+        snapshotWithPin(currentEventId, cd, g);
         if (isDraft) events.update(currentEventId, { status: "active" });
       }
       if (!compPin) {
@@ -652,10 +730,11 @@ export default function App() {
         setPhase("dashboard");
       }
     } else if (setupCanSave) {
-      // Partial save — persist and go back to dashboard
+      // Partial save — commit draft, persist and go back to dashboard
+      const { compData: cd, gymnasts: g } = commitDraft();
       if (syncTimer.current) clearTimeout(syncTimer.current);
-      pushToSupabase(compData, gymnasts);
-      if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
+      pushToSupabase(cd, g);
+      if (currentEventId) snapshotWithPin(currentEventId, cd, g);
       setScreen("org-dashboard");
     }
   };
@@ -679,9 +758,33 @@ export default function App() {
     pushToSupabase(compData, gymnasts, undefined, "completed");
     setScreen("org-dashboard");
   };
-  const handleEditSetup = () => { setPhase(1); setStep(1); };
-  const handleManageGymnasts = () => setPhase("gymnasts");
-  const handleGoToDashboard = () => { setPhase("dashboard"); setStep(1); };
+  const handleEditSetup = () => {
+    setSetupSnapshot({ compData: structuredClone(compData), gymnasts: structuredClone(gymnasts) });
+    setDraftCompData(structuredClone(compData));
+    setDraftGymnasts(structuredClone(gymnasts));
+    setPhase(1); setStep(1);
+  };
+  const handleManageGymnasts = () => {
+    // If not already in setup (coming from dashboard), init draft buffer
+    if (phase !== 1) {
+      setSetupSnapshot({ compData: structuredClone(compData), gymnasts: structuredClone(gymnasts) });
+      setDraftCompData(structuredClone(compData));
+      setDraftGymnasts(structuredClone(gymnasts));
+    }
+    setPhase("gymnasts");
+  };
+  const handleGoToDashboard = () => {
+    if (inSetupMode && isDirty) {
+      discardCallbackRef.current = () => {
+        clearDraft();
+        setPhase("dashboard"); setStep(1);
+      };
+      setShowDiscardModal(true);
+      return;
+    }
+    clearDraft();
+    setPhase("dashboard"); setStep(1);
+  };
 
   // Scroll .app-main to top on phase/screen transitions
   const appMainRef = useRef(null);
@@ -706,6 +809,14 @@ export default function App() {
     }, 100);
     return () => { clearTimeout(t); observer.disconnect(); };
   }, [screen, phase]);
+
+  // Warn before browser close/refresh with unsaved setup changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   // ---- Resume competition (PIN-only path for judges / no-account users) ----
   const handleResume = async (id, savedData) => {
@@ -1034,24 +1145,26 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={compData} setData={setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")}
+          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")}
             onSaveExit={async () => {
-              // Partial save — persist and go back to organiser dashboard (event list)
+              // Partial save — commit draft, persist and go back
+              const { compData: cd, gymnasts: g } = commitDraft();
               if (syncTimer.current) clearTimeout(syncTimer.current);
-              if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
-              await pushToSupabase(compData, gymnasts);
+              if (currentEventId) snapshotWithPin(currentEventId, cd, g);
+              await pushToSupabase(cd, g);
               setScreen("org-dashboard");
             }}
             onNext={async () => {
-              // Full save — all mandatory fields complete
+              // Full save — commit draft, all mandatory fields complete
+              const { compData: cd, gymnasts: g } = commitDraft();
               if (syncTimer.current) clearTimeout(syncTimer.current);
               const ev = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
               const isDraft = ev && ev.status === "draft";
               if (currentEventId) {
-                snapshotWithPin(currentEventId, compData, gymnasts);
+                snapshotWithPin(currentEventId, cd, g);
                 if (isDraft) events.update(currentEventId, { status: "active" });
               }
-              await pushToSupabase(compData, gymnasts, undefined, isDraft ? "active" : undefined);
+              await pushToSupabase(cd, g, undefined, isDraft ? "active" : undefined);
               if (!compPin) {
                 pinModalCallback.current = () => setPhase("dashboard");
                 setShowPinModal(true);
@@ -1067,8 +1180,21 @@ export default function App() {
       {phase === "gymnasts" && (
         <ErrorBoundary label="gymnast management">
         <div style={{ flex: 1 }}>
-          <Step2_Gymnasts compData={compData} setCompDataFn={setCompData} data={gymnasts} setData={setGymnastsWithSync}
-            onNext={() => setPhase("dashboard")} onBack={() => setPhase("dashboard")} />
+          <Step2_Gymnasts compData={draftCompData || compData} setCompDataFn={draftCompData !== null ? setDraftCompDataLocal : setCompData} data={draftGymnasts || gymnasts} setData={draftGymnasts !== null ? setDraftGymnastsLocal : setGymnastsWithSync}
+            onNext={() => {
+              const { compData: cd, gymnasts: g } = commitDraft();
+              if (syncTimer.current) clearTimeout(syncTimer.current);
+              pushToSupabase(cd, g);
+              if (currentEventId) snapshotWithPin(currentEventId, cd, g);
+              setPhase("dashboard");
+            }}
+            onBack={() => {
+              const { compData: cd, gymnasts: g } = commitDraft();
+              if (syncTimer.current) clearTimeout(syncTimer.current);
+              pushToSupabase(cd, g);
+              if (currentEventId) snapshotWithPin(currentEventId, cd, g);
+              setPhase("dashboard");
+            }} />
         </div>
         </ErrorBoundary>
       )}
@@ -1093,7 +1219,7 @@ export default function App() {
       ) : (
         <ErrorBoundary label={step === 3 ? "exports" : "MC mode"}>
         <main className="content" style={{ maxWidth: 1200 }}>
-          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
+          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} compId={compId} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
         </ErrorBoundary>
@@ -1155,6 +1281,18 @@ export default function App() {
         <ConfirmModal message={setupWarn} confirmLabel="Yes, continue" isDanger={false}
           onConfirm={confirmSetupChange}
           onCancel={() => { setSetupWarn(null); setPendingChange(null); }} />
+      )}
+
+      {showDiscardModal && (
+        <ConfirmModal
+          icon="⚠️"
+          isDanger={true}
+          message="You have unsaved changes to this competition setup. Leaving now will discard all changes made since your last save."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          onConfirm={() => { setShowDiscardModal(false); if (discardCallbackRef.current) discardCallbackRef.current(); }}
+          onCancel={() => setShowDiscardModal(false)}
+        />
       )}
 
       {showPinModal && (

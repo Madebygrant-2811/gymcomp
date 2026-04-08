@@ -1,6 +1,6 @@
-import { printDocument, buildDiagnosticHTML, buildResultsHTML } from "../../lib/pdf.js";
+import { printDocument, buildDiagnosticHTML, buildResultsHTML, buildPublicQRPdf, buildCoachQRPdf } from "../../lib/pdf.js";
 
-function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
+function Phase2_Exports({ compData, gymnasts, scores, compId, onSharePublic, onShareCoach }) {
   const colour = "#000dff";
   const hasGymnasts = gymnasts.length > 0;
   const hasScores = Object.keys(scores).length > 0;
@@ -35,6 +35,24 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
       available: hasScores,
       unavailableMsg: "Enter D/E scores in Score Input to generate diagnostics.",
       action: () => printDocument(buildDiagnosticHTML(compData, gymnasts, scores), "gymcomp-diagnostic.pdf"),
+    },
+    {
+      id: "qr-public",
+      title: "Public Live Scores QR",
+      icon: "📱",
+      desc: "Printable A4 page with a large QR code linking to the live public results page. Display at the venue for parents and spectators to scan.",
+      use: "Print and display at the venue entrance or near the scoreboard.",
+      available: true,
+      action: () => buildPublicQRPdf(compData, compId),
+    },
+    {
+      id: "qr-coach",
+      title: "Coach View QR",
+      icon: "📱",
+      desc: "Printable A4 page with a QR code linking to the coach live view. Coaches will need their unique Club ID to access their club's scores.",
+      use: "Print and display in the coaches' waiting area.",
+      available: true,
+      action: () => buildCoachQRPdf(compData, compId),
     },
   ];
 

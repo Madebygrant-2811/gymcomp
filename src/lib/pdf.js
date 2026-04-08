@@ -1240,3 +1240,64 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
   const filename = `${(compData.name || "competition").replace(/[^a-zA-Z0-9]/g, "_")}_results.xlsx`;
   XLSX.writeFile(wb, filename);
 }
+
+// ── QR Code PDF exports (printable A4 pages) ──────────────────────────────
+function sanitizeFilename(name) {
+  return (name || "competition").replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "-") || "competition";
+}
+
+function buildQRPageHTML(compId, type) {
+  const BRAND = "#000dff";
+  const TEXT_PRIMARY = "#2e2e2e";
+  const TEXT_SECONDARY = "#575757";
+  const FONT = "'Saans', sans-serif";
+
+  const baseUrl = "https://gymcomp.co.uk";
+  const url = type === "public"
+    ? `${baseUrl}/results.html?comp=${compId}`
+    : `${baseUrl}/coach.html?comp=${compId}`;
+
+  const qrSrc = `https://quickchart.io/chart?cht=qr&chs=600x600&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+  const pillLabel = type === "public" ? "Parent View" : "Coach View";
+  const subheading = type === "public"
+    ? 'Scan the QR code below to access <strong>Live Scores</strong> for the competition.'
+    : 'Scan the QR code below to access <strong>Live Scores</strong> for the competition. A unique <strong>Club ID</strong> will be shared with you to access your club\'s view.';
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: ${FONT}; background: #fff; margin: 0; padding: 0; }
+  .page { width: 794px; height: 1123px; position: relative; display: flex; flex-direction: column; align-items: center; }
+  .heading { margin-top: 160px; font-size: 60px; font-weight: 700; color: ${TEXT_PRIMARY}; letter-spacing: 2px; text-align: center; }
+  .subheading { max-width: 75%; margin: 24px auto 0; font-size: 14px; color: ${TEXT_SECONDARY}; line-height: 1.7; text-align: center; }
+  .subheading strong { color: ${TEXT_PRIMARY}; }
+  .pill { display: inline-block; background: ${BRAND}; color: #fff; border-radius: 72px; padding: 8px 24px; font-size: 12px; font-weight: 700; margin-top: 20px; letter-spacing: 0.5px; }
+  .qr-wrap { margin-top: 48px; }
+  .qr-wrap img { display: block; width: 280px; height: 280px; }
+  .footer { position: absolute; bottom: 48px; left: 0; right: 0; text-align: center; }
+  .footer-text { font-size: 10px; color: ${TEXT_SECONDARY}; margin-bottom: 8px; }
+  .footer img { height: 28px; display: inline-block; }
+</style>
+</head><body>
+<div class="page">
+  <div class="heading">Live Scores</div>
+  <div class="subheading">${subheading}</div>
+  <div class="pill">${escHtml(pillLabel)}</div>
+  <div class="qr-wrap"><img src="${qrSrc}" alt="QR Code" width="280" height="280" /></div>
+  <div class="footer">
+    <div class="footer-text">Powered by</div>
+    <img src="./Logomark.svg" alt="GymComp" height="28" />
+  </div>
+</div>
+</body></html>`;
+}
+
+export async function buildPublicQRPdf(compData, compId) {
+  const html = buildQRPageHTML(compId, "public");
+  await generatePDF(html, `${sanitizeFilename(compData.name)}-Public-QR.pdf`);
+}
+
+export async function buildCoachQRPdf(compData, compId) {
+  const html = buildQRPageHTML(compId, "coach");
+  await generatePDF(html, `${sanitizeFilename(compData.name)}-Coach-QR.pdf`);
+}
