@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 
 // ── lib imports ──
 import { supabase } from "./lib/supabase.js";
-import { generateId, hashPin, isHashed } from "./lib/utils.js";
+import { generateId, generateClubCode, hashPin, isHashed } from "./lib/utils.js";
 import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
 import { events, syncQueue } from "./lib/storage.js";
 import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
@@ -569,7 +569,12 @@ export default function App() {
     let baseData;
     if (snapshot?.compData) {
       const src = structuredClone(snapshot.compData);
-      src.clubs = (src.clubs || []).map(c => ({ ...c, id: generateId() }));
+      const freshCodes = [];
+      src.clubs = (src.clubs || []).map(c => {
+        const code = generateClubCode(freshCodes);
+        freshCodes.push(code);
+        return { ...c, id: generateId(), clubCode: code };
+      });
       src.rounds = (src.rounds || []).map(r => ({ ...r, id: generateId() }));
       src.levels = (src.levels || []).map(l => ({ ...l, id: generateId() }));
       src.name = `${src.name || "Competition"} (Copy)`;

@@ -1,5 +1,5 @@
 import { APPARATUS_OPTIONS, APPARATUS_MIGRATE } from "./constants.js";
-import { generateId, normalizeStr } from "./utils.js";
+import { generateId, normalizeStr, generateClubCode } from "./utils.js";
 
 export function migrateApparatus(list) {
   if (!list || !list.length) return list;
@@ -15,10 +15,18 @@ export function migrateCompData(cd) {
     id: j.id || generateId(),
     apparatus: APPARATUS_OPTIONS.includes(j.apparatus) ? j.apparatus : (APPARATUS_MIGRATE[j.apparatus] || j.apparatus)
   }));
-  // Ensure clubs have IDs
-  if (migrated.clubs) migrated.clubs = migrated.clubs.map(c =>
-    typeof c === "string" ? { id: generateId(), name: c } : { ...c, id: c.id || generateId() }
-  );
+  // Ensure clubs have IDs and clubCodes
+  if (migrated.clubs) {
+    const existingCodes = migrated.clubs.map(c => c.clubCode).filter(Boolean);
+    migrated.clubs = migrated.clubs.map(c => {
+      const club = typeof c === "string" ? { id: generateId(), name: c } : { ...c, id: c.id || generateId() };
+      if (!club.clubCode) {
+        club.clubCode = generateClubCode(existingCodes);
+        existingCodes.push(club.clubCode);
+      }
+      return club;
+    });
+  }
   // Clean stray keys from duplicate
   delete migrated.gymnasts;
   return migrated;

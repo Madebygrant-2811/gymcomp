@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { generateId, parseCSV, downloadTemplate, normalizeStr, buildRotations } from "../../lib/utils.js";
+import { generateId, generateClubCode, parseCSV, downloadTemplate, normalizeStr, buildRotations } from "../../lib/utils.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
@@ -60,7 +60,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     if (!clubName) return;
     const exists = compData.clubs.some(c => c.name === clubName);
     if (!exists) {
-      const newClub = { id: Math.random().toString(36).slice(2, 10), name: clubName };
+      const existingCodes = compData.clubs.map(c => c.clubCode).filter(Boolean);
+      const newClub = { id: generateId(), name: clubName, clubCode: generateClubCode(existingCodes) };
       setCompDataFn(d => ({ ...d, clubs: [...d.clubs, newClub] }));
     }
     selectCb(clubName);
@@ -137,6 +138,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
       const errors = [];  // hard skips
       const toAdd = [];
       const newClubs = []; // clubs from CSV not yet in setup
+      const allExistingCodes = compData.clubs.map(c => c.clubCode).filter(Boolean);
 
       rows.forEach((row, i) => {
         const rowNum = i + 2;
@@ -159,7 +161,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
           const existsInSetup = compData.clubs.find(c => c.name.toLowerCase() === clubName.toLowerCase());
           const alreadyQueued = newClubs.find(c => c.name.toLowerCase() === clubName.toLowerCase());
           if (!existsInSetup && !alreadyQueued) {
-            newClubs.push({ id: generateId(), name: clubName });
+            const code = generateClubCode([...allExistingCodes, ...newClubs.map(c => c.clubCode)]);
+            newClubs.push({ id: generateId(), name: clubName, clubCode: code });
             warns.push(`"${clubName}" added to Participating Clubs`);
           }
         }

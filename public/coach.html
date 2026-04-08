@@ -368,6 +368,7 @@
     /* ── View toggle ─────────────────────────────────────────── */
     .view-toggle {
       display: flex;
+      align-items: center;
       gap: 6px;
       margin-bottom: 24px;
     }
@@ -441,7 +442,7 @@
       color: var(--muted);
       font-size: 12px;
     }
-    .gymnast-club-cell { font-weight: 500; color: var(--muted); }
+    .gymnast-club-cell { font-weight: 500; color: var(--muted); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     td.gymnast-name { font-size: 13px; font-weight: 500; }
     td.app-score, td.score-total-cell { text-align: center; }
     th.col-score { text-align: center; }
@@ -471,10 +472,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .last-updated {
-      font-size: 11px;
-      color: rgba(255,255,255,0.6);
-    }
 
     .info-bar {
       display: flex;
@@ -490,6 +487,91 @@
       flex-wrap: wrap;
     }
 
+    /* ── Lock screen ─────────────────────────────────────────── */
+    .lock-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 80vh;
+      padding: 40px 20px;
+    }
+    .lock-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .lock-box .lock-icon { font-size: 48px; margin-bottom: 16px; }
+    .lock-box .lock-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .lock-box .lock-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
+    .lock-input {
+      font-family: monospace;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 14px 20px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      outline: none;
+      text-transform: uppercase;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .lock-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,13,255,0.1); }
+    .lock-input.error { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,0.1); animation: shake 0.4s; }
+    .lock-error { font-size: 12px; color: var(--danger); margin-top: 8px; font-weight: 600; min-height: 18px; }
+    .lock-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 12px 36px;
+      border-radius: 56px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .lock-btn:hover { opacity: 0.9; }
+    .lock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(6px); }
+    }
+
+    .header-club-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .switch-club-btn {
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 56px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .switch-club-btn:hover { color: var(--text); }
+
+    tr.my-club-row td { background: rgba(0,13,255,0.04); }
+
     @media (max-width: 600px) {
       .comp-title { font-size: 24px; }
       .apparatus-grid { grid-template-columns: 1fr 1fr; }
@@ -498,6 +580,7 @@
       .gymnast-name { font-size: 16px; }
       .gymnast-club { display: none; }
       .gymnast-overall-val { font-size: 18px; }
+      .lock-box { padding: 32px 24px; }
     }
     @media (max-width: 400px) {
       .apparatus-grid { grid-template-columns: 1fr; }
@@ -510,11 +593,11 @@
   <div class="site-header-inner">
     <div class="logo"><img src="./Logo-mono-white.svg" alt="GymComp" height="20" /></div>
     <span class="view-badge">Coach View</span>
+    <span class="header-club-name" id="headerClubName" style="display:none"></span>
     <div style="flex:1"></div>
     <div class="live-pill" id="livePill" style="display:none">
       <span class="live-dot"></span> LIVE
     </div>
-    <span class="last-updated" id="lastUpdated"></span>
   </div>
 </header>
 
@@ -531,12 +614,16 @@
   const POLL_MS = 10000;
 
   let activeRound = null;
-  let activeView = "detailed"; // "detailed" | "overall"
+  let activeView = "myclub"; // "myclub" | "overall"
   let clubFilter = "all";
   let pollTimer = null;
   let compData = null;
   let gymnasts = [];
   let scores = {};
+
+  // ── Club auth state ──
+  let authedClubCode = null;  // e.g. "UGC-4821"
+  let authedClubName = null;  // resolved from compData on each poll
 
   // ── Club colour ──
   const CLUB_COLOURS = [
@@ -608,6 +695,8 @@
   }
 
   function buildFilterHtml() {
+    // No filter dropdown in myclub (already scoped) or overall (show everyone)
+    if (activeView === "myclub" || activeView === "overall") return "";
     const clubs = getUniqueClubs();
     if (clubs.length < 2) return "";
     return `
@@ -620,6 +709,106 @@
         ${clubFilter !== "all" ? `<button class="filter-clear" onclick="clearFilters()">Clear</button>` : ""}
       </div>
     `;
+  }
+
+  // ── Lock screen ──
+  function renderLockScreen() {
+    document.getElementById("main").innerHTML = `
+      <div class="lock-screen">
+        <div class="lock-box">
+          <div class="lock-icon">🔐</div>
+          <div class="lock-title">Club Access</div>
+          <div class="lock-sub">Enter your Club ID to view your gymnasts' scores and results. Your organiser can provide this code.</div>
+          <input class="lock-input" id="clubCodeInput" type="text" maxlength="8" placeholder="ABC-1234"
+            oninput="formatClubInput(this)" onkeydown="if(event.key==='Enter')submitClubCode()" />
+          <div class="lock-error" id="lockError"></div>
+          <button class="lock-btn" onclick="submitClubCode()">Enter</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("clubCodeInput").focus();
+  }
+
+  function formatClubInput(el) {
+    let v = el.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (v.length > 3) v = v.slice(0, 3) + "-" + v.slice(3);
+    if (v.length > 8) v = v.slice(0, 8);
+    el.value = v;
+    // Clear error on input
+    const errEl = document.getElementById("lockError");
+    if (errEl) errEl.textContent = "";
+    el.classList.remove("error");
+  }
+
+  function submitClubCode() {
+    const input = document.getElementById("clubCodeInput");
+    const code = (input.value || "").trim().toUpperCase();
+    const errEl = document.getElementById("lockError");
+
+    if (!code || code.length < 8) {
+      input.classList.add("error");
+      errEl.textContent = "Please enter a valid Club ID (e.g. ABC-1234)";
+      return;
+    }
+
+    // Validate against compData clubs
+    const club = (compData.clubs || []).find(c => c.clubCode === code);
+    if (!club) {
+      input.classList.add("error");
+      errEl.textContent = "Club ID not recognised. Please check and try again.";
+      return;
+    }
+
+    // Success — authenticate
+    authedClubCode = code;
+    authedClubName = club.name;
+    activeView = "myclub";
+
+    // Persist in sessionStorage
+    try { sessionStorage.setItem("coach_club_" + compId, code); } catch {}
+
+    // Update header
+    showClubHeader();
+
+    // Render the coach view
+    renderPage();
+    updateTimestamp();
+    document.getElementById("livePill").style.display = "flex";
+
+    // Start polling
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => poll(), POLL_MS);
+  }
+
+  function showClubHeader() {
+    const nameEl = document.getElementById("headerClubName");
+    if (nameEl && authedClubName) {
+      nameEl.textContent = authedClubName;
+      nameEl.style.display = "";
+    }
+  }
+
+  function hideClubHeader() {
+    const nameEl = document.getElementById("headerClubName");
+    if (nameEl) { nameEl.style.display = "none"; nameEl.textContent = ""; }
+  }
+
+  function switchClub() {
+    authedClubCode = null;
+    authedClubName = null;
+    try { sessionStorage.removeItem("coach_club_" + compId); } catch {}
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    hideClubHeader();
+    document.getElementById("livePill").style.display = "none";
+    renderLockScreen();
+  }
+
+  function resolveClubName() {
+    if (!authedClubCode || !compData) return;
+    const club = (compData.clubs || []).find(c => c.clubCode === authedClubCode);
+    if (club) authedClubName = club.name;
+    const nameEl = document.getElementById("headerClubName");
+    if (nameEl && authedClubName) nameEl.textContent = authedClubName;
   }
 
   // ── Standard competition ranking (1,2,2,4,5,6) ──
@@ -644,12 +833,7 @@
   function renderOverallView(round) {
     const rid = round.id;
     const allGroups = buildRankGroups(rid);
-    const groups = allGroups.map(rg => {
-      const filtered = clubFilter !== "all"
-        ? rg.gymnasts.filter(g => (g.club || "") === clubFilter)
-        : rg.gymnasts;
-      return { ...rg, gymnasts: filtered };
-    }).filter(rg => rg.gymnasts.length > 0);
+    const groups = allGroups.filter(rg => rg.gymnasts.length > 0);
 
     const apparatus = compData.apparatus || [];
     if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
@@ -658,7 +842,8 @@
       const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
       const withTotals = glist.map(g => ({ ...g, total: getOverall(rid, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
-      const dns = withTotals.filter(g => g.total === 0 || g.dns);
+      const unscored = withTotals.filter(g => g.total === 0 && !g.dns);
+      const dns = withTotals.filter(g => !!g.dns);
 
       // Find top score per apparatus for highlighting
       const topScores = {};
@@ -672,15 +857,16 @@
 
       const rows = [
         ...ranked.map(g => {
+          const isMyClub = authedClubName && (g.club || "") === authedClubName;
           const appCells = apparatus.map(a => {
             const s = getTotal(rid, g.id, a);
             const isTop = s > 0 && topScores[a] && s === topScores[a];
             return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
           }).join("");
           return `
-            <tr>
+            <tr${isMyClub ? ' class="my-club-row"' : ''}>
               <td>${rankBadge(g.rank)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
               ${appCells}
@@ -688,12 +874,30 @@
             </tr>
           `;
         }),
+        ...unscored.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)).map(g => {
+          const isMyClub = authedClubName && (g.club || "") === authedClubName;
+          const appCells = apparatus.map(a => {
+            const s = getTotal(rid, g.id, a);
+            return `<td class="app-score"${s > 0 ? '' : ' style="color:var(--muted)"'}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
+          }).join("");
+          return `
+            <tr${isMyClub ? ' class="my-club-row"' : ''}>
+              <td></td>
+
+              <td class="gymnast-name">${escHtml(g.name)}</td>
+              <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
+              ${appCells}
+              <td class="score-total-cell" style="color:var(--muted)">—</td>
+            </tr>
+          `;
+        }),
         ...dns.map(g => {
+          const isMyClub = authedClubName && (g.club || "") === authedClubName;
           const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
           return `
-            <tr class="dns-row">
+            <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
               <td>${rankBadge(null)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
               ${appCells}
@@ -705,13 +909,41 @@
 
       const hasAnyScore = withTotals.some(g => g.total > 0);
 
+      // If no scores yet, show all gymnasts in number order without ranks
+      let finalRows = rows;
       if (!hasAnyScore) {
-        return `
-          <div class="level-section">
-            <div class="level-heading">${escHtml(levelName)}${agePill}</div>
-            <div style="color:var(--muted);font-size:13px;padding:12px 0">No scores yet</div>
-          </div>
-        `;
+        const sorted = [...withTotals].filter(g => !g.dns).sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+        const dnsOnly = withTotals.filter(g => !!g.dns);
+        finalRows = [
+          ...sorted.map(g => {
+            const isMyClub = authedClubName && (g.club || "") === authedClubName;
+            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+            return `
+              <tr${isMyClub ? ' class="my-club-row"' : ''}>
+                <td></td>
+  
+                <td class="gymnast-name">${escHtml(g.name)}</td>
+                <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
+                ${appCells}
+                <td class="score-total-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `;
+          }),
+          ...dnsOnly.map(g => {
+            const isMyClub = authedClubName && (g.club || "") === authedClubName;
+            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+            return `
+              <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
+                <td>${rankBadge(null)}</td>
+  
+                <td>${escHtml(g.name)}</td>
+                <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+                ${appCells}
+                <td class="score-total-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `;
+          })
+        ].join("");
       }
 
       return `
@@ -722,12 +954,12 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
+                    <th>Rank</th><th>Gymnast</th><th>Club</th>
                     ${appHeaders}
                     <th class="col-score">Total</th>
                   </tr>
                 </thead>
-                <tbody>${rows}</tbody>
+                <tbody>${finalRows}</tbody>
               </table>
             </div>
           </div>
@@ -1000,16 +1232,19 @@
 
     const allGroups = buildRankGroups(rid);
 
-    // Apply club filter at gymnast level within each group
+    // In "myclub" view, filter to authed club only
     const groups = allGroups.map(rg => {
-      const filtered = clubFilter !== "all"
-        ? rg.gymnasts.filter(g => (g.club || "") === clubFilter)
-        : rg.gymnasts;
+      let filtered = rg.gymnasts;
+      if (activeView === "myclub" && authedClubName) {
+        filtered = filtered.filter(g => (g.club || "") === authedClubName);
+      } else if (clubFilter !== "all") {
+        filtered = filtered.filter(g => (g.club || "") === clubFilter);
+      }
       return { ...rg, gymnasts: filtered };
     }).filter(rg => rg.gymnasts.length > 0);
 
     if (!groups.length) {
-      return `${buildFilterHtml()}<div class="level-section"><div class="level-heading">No results</div></div>`;
+      return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No gymnasts from your club in this round.</div>`;
     }
 
     return buildFilterHtml() + groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
@@ -1038,6 +1273,9 @@
       ? (activeView === "overall" ? renderOverallView(currentRound) : buildRoundContent(currentRound))
       : "";
 
+    // Re-resolve club name in case it was renamed
+    resolveClubName();
+
     const colour = "#000dff";
     const dateStr = compData.date
       ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
@@ -1065,8 +1303,10 @@
       ` : ""}
 
       <div class="view-toggle">
-        <button class="toggle-btn ${activeView === "detailed" ? "active" : ""}" onclick="switchView('detailed')">Detailed</button>
+        <button class="toggle-btn ${activeView === "myclub" ? "active" : ""}" onclick="switchView('myclub')">My Club</button>
         <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
+        <div style="flex:1"></div>
+        <button class="switch-club-btn" onclick="switchClub()">Switch Club</button>
       </div>
 
       ${roundContent}
@@ -1127,6 +1367,7 @@
       return;
     }
 
+    // Fetch comp data first (needed for lock screen validation)
     const [row, tableRows] = await Promise.all([fetchData(), fetchTableScores()]);
     if (!row || !row.data) {
       document.getElementById("main").innerHTML = `
@@ -1140,16 +1381,31 @@
 
     compData = row.data.compData || {};
     gymnasts = row.data.gymnasts || [];
-    // Scores come exclusively from the scores table
     scores = tableRows.length > 0 ? scoresToFlat(tableRows) : {};
 
-    renderPage();
-    updateTimestamp();
-    document.getElementById("livePill").style.display = "flex";
+    // Check for saved session
+    let savedCode = null;
+    try { savedCode = sessionStorage.getItem("coach_club_" + compId); } catch {}
 
-    pollTimer = setInterval(async () => {
-      await poll();
-    }, POLL_MS);
+    if (savedCode) {
+      const club = (compData.clubs || []).find(c => c.clubCode === savedCode);
+      if (club) {
+        authedClubCode = savedCode;
+        authedClubName = club.name;
+        activeView = "myclub";
+        showClubHeader();
+        renderPage();
+        updateTimestamp();
+        document.getElementById("livePill").style.display = "flex";
+        pollTimer = setInterval(() => poll(), POLL_MS);
+        return;
+      }
+      // Saved code no longer valid — clear it
+      try { sessionStorage.removeItem("coach_club_" + compId); } catch {}
+    }
+
+    // No valid session — show lock screen
+    renderLockScreen();
   }
 
   init();

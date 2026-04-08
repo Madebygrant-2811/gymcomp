@@ -294,7 +294,7 @@
       font-size: 12px;
     }
     .gymnast-name { font-weight: 500; }
-    .gymnast-club { font-weight: 500; color: var(--muted); }
+    .gymnast-club { font-weight: 500; color: var(--muted); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     td.app-score, td.score-cell { text-align: center; }
     th.col-score { text-align: center; }
 
@@ -323,10 +323,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .last-updated {
-      font-size: 11px;
-      color: rgba(255,255,255,0.6);
-    }
     .empty-row td {
       color: var(--muted);
       font-style: italic;
@@ -349,7 +345,6 @@
     <div class="live-pill" id="livePill" style="display:none">
       <span class="live-dot"></span> LIVE
     </div>
-    <span class="last-updated" id="lastUpdated"></span>
   </div>
 </header>
 
@@ -513,53 +508,76 @@
     return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
 
-      // Check if any scores exist across all apparatus for this group
-      const groupHasScores = apparatus.some(app => glist.some(g => getScore(rid, g.id, app) > 0));
-
-      if (!groupHasScores) {
-        return `
-          <div class="level-card">
-            <div class="level-card-header">${groupLabel}</div>
-            <div style="padding:32px 20px;text-align:center;color:var(--muted);font-size:13px">No scores yet</div>
-          </div>
-        `;
-      }
-
       const appSections = apparatus.map(app => {
         const withScores = glist.map(g => ({ ...g, score: getScore(rid, g.id, app) }));
         const hasSomeScore = withScores.some(g => g.score > 0);
-        if (!hasSomeScore) return "";
 
-        const ranked = standardRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
-        const dns = withScores.filter(g => g.score === 0 || g.dns);
-
-        const rows = [
-          ...ranked.map(g => `
-            <tr>
-              <td>${rankBadge(g.rank)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
-              <td class="gymnast-name">${escHtml(g.name)}</td>
-              <td class="gymnast-club">${escHtml(g.club || "")}</td>
-              <td class="score-cell"><span class="score-val">${g.score.toFixed(3)}</span></td>
-            </tr>
-          `),
-          ...dns.map(g => `
-            <tr class="dns-row">
-              <td>${rankBadge(null)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
-              <td>${escHtml(g.name)}</td>
-              <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
-              <td class="score-cell" style="color:var(--muted)">—</td>
-            </tr>
-          `)
-        ].join("");
+        let rows;
+        if (hasSomeScore) {
+          const ranked = standardRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
+          const unscored = withScores.filter(g => (g.score === 0 && !g.dns));
+          const dns = withScores.filter(g => !!g.dns);
+          rows = [
+            ...ranked.map(g => `
+              <tr>
+                <td>${rankBadge(g.rank)}</td>
+  
+                <td class="gymnast-name">${escHtml(g.name)}</td>
+                <td class="gymnast-club">${escHtml(g.club || "")}</td>
+                <td class="score-cell"><span class="score-val">${g.score.toFixed(3)}</span></td>
+              </tr>
+            `),
+            ...unscored.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)).map(g => `
+              <tr>
+                <td></td>
+  
+                <td class="gymnast-name">${escHtml(g.name)}</td>
+                <td class="gymnast-club">${escHtml(g.club || "")}</td>
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `),
+            ...dns.map(g => `
+              <tr class="dns-row">
+                <td>${rankBadge(null)}</td>
+  
+                <td>${escHtml(g.name)}</td>
+                <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `)
+          ].join("");
+        } else {
+          // No scores yet — show all gymnasts in number order
+          const sorted = [...withScores].filter(g => !g.dns).sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+          const dns = withScores.filter(g => !!g.dns);
+          rows = [
+            ...sorted.map(g => `
+              <tr>
+                <td></td>
+  
+                <td class="gymnast-name">${escHtml(g.name)}</td>
+                <td class="gymnast-club">${escHtml(g.club || "")}</td>
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `),
+            ...dns.map(g => `
+              <tr class="dns-row">
+                <td>${rankBadge(null)}</td>
+  
+                <td>${escHtml(g.name)}</td>
+                <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `)
+          ].join("");
+        }
 
         return `
           <div class="app-section">
             <div class="app-label">${escHtml(app)}</div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th class="col-score">Score</th></tr></thead>
+                <thead><tr><th>Rank</th><th>Gymnast</th><th>Club</th><th class="col-score">Score</th></tr></thead>
                 <tbody>${rows}</tbody>
               </table>
             </div>
@@ -591,7 +609,8 @@
       const groupLabel = ageLabel ? `${escHtml(levelName)} <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px;margin-left:8px">${escHtml(ageLabel)}</span>` : escHtml(levelName);
       const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
-      const dns = withTotals.filter(g => g.total === 0 || g.dns);
+      const unscored = withTotals.filter(g => g.total === 0 && !g.dns);
+      const dns = withTotals.filter(g => !!g.dns);
 
       // Find top score per apparatus for highlighting
       const topScores = {};
@@ -613,11 +632,27 @@
           return `
             <tr>
               <td>${rankBadge(g.rank)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+
               <td class="gymnast-name">${escHtml(g.name)}</td>
               <td class="gymnast-club">${escHtml(g.club || "")}</td>
               ${appCells}
               <td class="score-cell"><span class="score-total">${g.total.toFixed(3)}</span></td>
+            </tr>
+          `;
+        }),
+        ...unscored.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)).map(g => {
+          const appCells = apparatus.map(a => {
+            const s = getScore(rid, g.id, a);
+            return `<td class="app-score"${s > 0 ? '' : ' style="color:var(--muted)"'}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
+          }).join("");
+          return `
+            <tr>
+              <td></td>
+
+              <td class="gymnast-name">${escHtml(g.name)}</td>
+              <td class="gymnast-club">${escHtml(g.club || "")}</td>
+              ${appCells}
+              <td class="score-cell" style="color:var(--muted)">—</td>
             </tr>
           `;
         }),
@@ -626,7 +661,7 @@
           return `
             <tr class="dns-row">
               <td>${rankBadge(null)}</td>
-              <td style="color:var(--muted)">${escHtml(String(g.number || ""))}</td>
+
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
               ${appCells}
@@ -638,13 +673,39 @@
 
       const hasAnyScore = withTotals.some(g => g.total > 0);
 
+      // If no scores yet, show all gymnasts in number order without ranks
+      let finalRows = rows;
       if (!hasAnyScore) {
-        return `
-          <div class="level-card">
-            <div class="level-card-header">${groupLabel}</div>
-            <div style="padding:20px;color:var(--muted);font-size:13px;font-style:italic">No scores yet</div>
-          </div>
-        `;
+        const sorted = [...withTotals].filter(g => !g.dns).sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+        const dnsOnly = withTotals.filter(g => !!g.dns);
+        finalRows = [
+          ...sorted.map(g => {
+            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+            return `
+              <tr>
+                <td></td>
+  
+                <td class="gymnast-name">${escHtml(g.name)}</td>
+                <td class="gymnast-club">${escHtml(g.club || "")}</td>
+                ${appCells}
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `;
+          }),
+          ...dnsOnly.map(g => {
+            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+            return `
+              <tr class="dns-row">
+                <td>${rankBadge(null)}</td>
+  
+                <td>${escHtml(g.name)}</td>
+                <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
+                ${appCells}
+                <td class="score-cell" style="color:var(--muted)">—</td>
+              </tr>
+            `;
+          })
+        ].join("");
       }
 
       return `
@@ -655,12 +716,12 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
+                    <th>Rank</th><th>Gymnast</th><th>Club</th>
                     ${appHeaders}
                     <th class="col-score">Total</th>
                   </tr>
                 </thead>
-                <tbody>${rows}</tbody>
+                <tbody>${finalRows}</tbody>
               </table>
             </div>
           </div>

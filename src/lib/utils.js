@@ -15,6 +15,21 @@ export const isHashed = (pin) => typeof pin === "string" && pin.length === 64 &&
 // ============================================================
 export const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// Club access code: 3 uppercase letters (no I/O) + hyphen + 4 digits → "ABC-1234"
+export function generateClubCode(existingCodes = []) {
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const used = new Set(existingCodes);
+  let code;
+  do {
+    let c = "";
+    for (let i = 0; i < 3; i++) c += letters[Math.floor(Math.random() * letters.length)];
+    c += "-";
+    for (let i = 0; i < 4; i++) c += Math.floor(Math.random() * 10);
+    code = c;
+  } while (used.has(code));
+  return code;
+}
+
 export const todayStr = () => new Date().toISOString().split("T")[0];
 export const isFutureOrToday = (dateStr) => !!dateStr && dateStr >= todayStr();
 

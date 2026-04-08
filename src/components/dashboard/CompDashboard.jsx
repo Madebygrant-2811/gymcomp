@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
-import { generateId } from "../../lib/utils.js";
+import { generateId, generateClubCode } from "../../lib/utils.js";
 import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML } from "../../lib/pdf.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
@@ -10,6 +10,7 @@ import SubmissionsReviewPanel from "../public/SubmissionsReviewPanel.jsx";
 function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onSetPin, eventStatus, onUpdateCompData, onUpdateGymnasts }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(null);
   const [showSubmReview, setShowSubmReview] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [topbarHidden, setTopbarHidden] = useState(false);
@@ -278,13 +279,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                     onChange={val => setNewClubName(val)}
                     onKeyDown={e => {
                       if (e.key === "Enter" && newClubName.trim()) {
-                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
                         setNewClubName("");
                       }
                     }} />
                   <button className="btn btn-sm btn-primary" onClick={() => {
                     if (!newClubName.trim()) return;
-                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
                     setNewClubName("");
                   }}>Add</button>
                 </div>
@@ -304,13 +305,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                     onChange={val => setNewClubName(val)}
                     onKeyDown={e => {
                       if (e.key === "Enter" && newClubName.trim()) {
-                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
                         setNewClubName("");
                       }
                     }} />
                   <button className="btn btn-sm btn-primary" onClick={() => {
                     if (!newClubName.trim()) return;
-                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim() }] }));
+                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
                     setNewClubName("");
                   }}>Add</button>
                 </div>
@@ -318,6 +319,46 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             </div>
           )}
         </div>
+
+        {/* ── CLUB ACCESS CODES ─────────────────────────────────── */}
+        {(compData.clubs || []).length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+              Club Access Codes
+            </div>
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+              <div style={{ padding: "12px 18px", fontSize: 12, color: "var(--muted)", borderBottom: "1px solid var(--border)", lineHeight: 1.6 }}>
+                Each club has a unique code to access the Coach View. Share the relevant code with each club representative.
+              </div>
+              {compData.clubs.map((c, i) => (
+                <div key={c.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                  padding: "12px 18px", fontSize: 14,
+                  borderBottom: i < compData.clubs.length - 1 ? "1px solid var(--border)" : "none",
+                  background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)"
+                }}>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                  <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: "var(--accent)", letterSpacing: "0.5px", flexShrink: 0 }}>{c.clubCode || "—"}</div>
+                  <button
+                    onClick={async () => {
+                      if (!c.clubCode) return;
+                      try { await navigator.clipboard.writeText(c.clubCode); } catch {}
+                      setCopiedCode(c.id);
+                      setTimeout(() => setCopiedCode(v => v === c.id ? null : v), 2000);
+                    }}
+                    style={{
+                      padding: "5px 14px", borderRadius: 56, border: "1px solid var(--border)", background: "none",
+                      cursor: c.clubCode ? "pointer" : "default", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
+                      color: copiedCode === c.id ? "var(--success)" : "var(--text-primary)", flexShrink: 0, minWidth: 72, textAlign: "center"
+                    }}
+                  >
+                    {copiedCode === c.id ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── GYMNASTS SECTION ───────────────────────────────────── */}
         <div style={{ marginBottom: 32 }}>
