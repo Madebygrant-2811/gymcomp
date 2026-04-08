@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { generateId, generateClubCode } from "../../lib/utils.js";
-import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML } from "../../lib/pdf.js";
+import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML, buildPublicQRPdf, buildCoachQRPdf } from "../../lib/pdf.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 import QRDisplay from "../shared/QRDisplay.jsx";
@@ -671,6 +671,14 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               hasGymnasts,
               () => printDocument(buildAttendanceHTML(compData, gymnasts), "gymcomp-attendance.pdf"),
               "Add gymnasts in Setup to generate"
+            )}
+            {docBtn(<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h2v2H7zM11 7h2v2h-2zM7 11h2v2H7zM11 11h2v2h-2z"/></svg>, "Public Live Scores QR",
+              true,
+              () => buildPublicQRPdf(compData, compId)
+            )}
+            {docBtn(<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 7h2v2H7zM11 7h2v2h-2zM7 11h2v2H7zM11 11h2v2h-2z"/></svg>, "Coach View QR",
+              true,
+              () => buildCoachQRPdf(compData, compId)
             )}
           </div>
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>

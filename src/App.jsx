@@ -1219,7 +1219,7 @@ export default function App() {
       ) : (
         <ErrorBoundary label={step === 3 ? "exports" : "MC mode"}>
         <main className="content" style={{ maxWidth: 1200 }}>
-          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} compId={compId} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
+          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
         </ErrorBoundary>

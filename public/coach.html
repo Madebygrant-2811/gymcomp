@@ -651,8 +651,8 @@
   const subKey = (rid, gid, app, sub) => `${rid}__${gid}__${app}__${sub}`;
   const sv = (rid, gid, app, sub) => parseFloat(scores[subKey(rid, gid, app, sub)]) || 0;
   const getTotal = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
-  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
-  const getOverall = (rid, gid) => scoringApparatus.reduce((s, a) => s + getTotal(rid, gid, a), 0);
+  const getScoringApparatus = () => (compData?.apparatus || []).filter(a => a !== "Rest");
+  const getOverall = (rid, gid) => getScoringApparatus().reduce((s, a) => s + getTotal(rid, gid, a), 0);
 
   const judgeCount = (app) =>
     (compData.judges || []).filter(j => j.apparatus === app).length;
@@ -836,7 +836,7 @@
     const allGroups = buildRankGroups(rid);
     const groups = allGroups.filter(rg => rg.gymnasts.length > 0);
 
-    const apparatus = scoringApparatus;
+    const apparatus = getScoringApparatus();
     if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
 
     return buildFilterHtml() + groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
@@ -1087,25 +1087,25 @@
         if (fin > 0) {
           return `
             <div style="flex:1">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:4px">${label} <span style="float:right;font-size:12px;font-weight:800;color:var(--text)">${fin.toFixed(3)}</span></div>
               <div class="app-breakdown">
                 <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val">${bdFmt(dv)}</span></div>
                 <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val">${bdFmt(eDed)}</span></div>
                 <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val">${bdFmt(bon)}</span></div>
                 <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val${pen > 0 ? " penalty" : ""}">${pen > 0 ? pen.toFixed(2) : "0"}</span></div>
               </div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-top:4px">${label} <span style="float:right;font-size:12px;font-weight:800;color:var(--text)">${fin.toFixed(3)}</span></div>
             </div>
           `;
         }
         return `
           <div style="flex:1">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-bottom:4px">${label}</div>
             <div class="app-breakdown">
               <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val na">—</span></div>
               <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val na">—</span></div>
               <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val na">—</span></div>
               <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val na">—</span></div>
             </div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin-top:4px">${label}</div>
           </div>
         `;
       };
@@ -1113,7 +1113,6 @@
       if (v2HasData) {
         breakdownHtml = `
           <div style="display:flex;gap:8px">${vaultHalf("v1", "Vault 1", v1fin)}${vaultHalf("v2", "Vault 2", v2fin)}</div>
-          <div style="text-align:center;margin-top:6px;font-size:11px;font-weight:700;color:var(--muted)">Average <span style="color:var(--accent);font-weight:800;font-size:13px;margin-left:4px">${total > 0 ? total.toFixed(3) : "—"}</span></div>
         `;
       } else {
         breakdownHtml = vaultHalf("v1", "Vault 1", v1fin);
@@ -1177,7 +1176,7 @@
 
   function renderGymnastCard(rid, g) {
     const overall = getOverall(rid, g.id);
-    const apparatus = scoringApparatus;
+    const apparatus = getScoringApparatus();
 
     const appBlocksHtml = apparatus
       .map(app => renderApparatusBlock(rid, g.id, app))
@@ -1317,7 +1316,7 @@
   function countActiveQueries() {
     let count = 0;
     gymnasts.forEach(g => {
-      scoringApparatus.forEach(app => {
+      getScoringApparatus().forEach(app => {
         (compData.rounds || []).forEach(r => {
           if (scores[subKey(r.id, g.id, app, "query")] && !scores[subKey(r.id, g.id, app, "queryResolved")]) {
             count++;

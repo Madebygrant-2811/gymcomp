@@ -1257,7 +1257,7 @@ function buildQRPageHTML(compId, type) {
     ? `${baseUrl}/results.html?comp=${compId}`
     : `${baseUrl}/coach.html?comp=${compId}`;
 
-  const qrSrc = `https://quickchart.io/chart?cht=qr&chs=600x600&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+  const qrSrc = `https://quickchart.io/chart?cht=qr&chs=720x720&chl=${encodeURIComponent(url)}&choe=UTF-8`;
   const pillLabel = type === "public" ? "Parent View" : "Coach View";
   const subheading = type === "public"
     ? 'Scan the QR code below to access <strong>Live Scores</strong> for the competition.'
@@ -1268,25 +1268,25 @@ function buildQRPageHTML(compId, type) {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: ${FONT}; background: #fff; margin: 0; padding: 0; }
   .page { width: 794px; height: 1123px; position: relative; display: flex; flex-direction: column; align-items: center; }
-  .heading { margin-top: 160px; font-size: 60px; font-weight: 700; color: ${TEXT_PRIMARY}; letter-spacing: 2px; text-align: center; }
-  .subheading { max-width: 75%; margin: 24px auto 0; font-size: 14px; color: ${TEXT_SECONDARY}; line-height: 1.7; text-align: center; }
+  .heading { margin-top: 120px; font-size: 92px; font-weight: 700; color: ${TEXT_PRIMARY}; letter-spacing: 2px; text-align: center; }
+  .subheading { max-width: 75%; margin: 20px auto 0; font-size: 14px; color: ${TEXT_SECONDARY}; line-height: 1.7; text-align: center; }
   .subheading strong { color: ${TEXT_PRIMARY}; }
-  .pill { display: inline-block; background: ${BRAND}; color: #fff; border-radius: 72px; padding: 8px 24px; font-size: 12px; font-weight: 700; margin-top: 20px; letter-spacing: 0.5px; }
-  .qr-wrap { margin-top: 48px; }
-  .qr-wrap img { display: block; width: 280px; height: 280px; }
+  .pill { display: inline-block; background: ${BRAND}; color: #fff; border-radius: 72px; padding: 8px 24px; font-size: 12px; font-weight: 700; margin-top: 16px; letter-spacing: 0.5px; }
+  .qr-wrap { margin-top: 40px; }
+  .qr-wrap img { display: block; width: 360px; height: 360px; }
   .footer { position: absolute; bottom: 48px; left: 0; right: 0; text-align: center; }
   .footer-text { font-size: 10px; color: ${TEXT_SECONDARY}; margin-bottom: 8px; }
-  .footer img { height: 28px; display: inline-block; }
+  .footer img { width: 140px; display: inline-block; }
 </style>
 </head><body>
 <div class="page">
   <div class="heading">Live Scores</div>
   <div class="subheading">${subheading}</div>
   <div class="pill">${escHtml(pillLabel)}</div>
-  <div class="qr-wrap"><img src="${qrSrc}" alt="QR Code" width="280" height="280" /></div>
+  <div class="qr-wrap"><img src="${qrSrc}" alt="QR Code" width="360" height="360" /></div>
   <div class="footer">
     <div class="footer-text">Powered by</div>
-    <img src="./Logomark.svg" alt="GymComp" height="28" />
+    <img src="./logo.svg" alt="GymComp" />
   </div>
 </div>
 </body></html>`;
