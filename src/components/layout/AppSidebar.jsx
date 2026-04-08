@@ -67,6 +67,15 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     { id: "setup-rounds", label: "Rounds", icon: icons.clock },
   ];
 
+  const dashAnchors = [
+    { id: "card-overview", label: "Comp Overview", icon: icons.info },
+    { id: "card-clubs", label: "Manage Clubs", icon: icons.club },
+    { id: "card-gymnasts", label: "Manage Gymnasts", icon: icons.users },
+    { id: "card-judges", label: "Manage Judges", icon: icons.judge },
+    { id: "card-documents", label: "Comp Documents", icon: icons.doc },
+    { id: "card-live", label: "Live Results", icon: icons.send },
+  ];
+
   const phase2Steps = [
     { label: "Score Input", icon: icons.score, step: 1 },
     { label: "Results", icon: icons.trophy, step: 2 },
@@ -118,20 +127,27 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
           {/* ── active / dashboard ── */}
           {screen === "active" && phase === "dashboard" && (<>
             <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
-            {eventStatus !== "completed" && (<>
             <div className="as-divider" />
-            <NavItem icon={icons.edit} label="Edit Setup" onClick={onEditSetup} />
-            <NavItem icon={icons.users} label="Manage Gymnasts" onClick={onManageGymnasts} />
-            {(() => {
-              const ready = gymnastsCount > 0 && judgesCount > 0 && allGymnastsComplete !== false;
-              const label = eventStatus === "live" ? "Resume Competition" : "Start Competition";
-              return (
-                <div style={ready ? {} : { opacity: 0.4, pointerEvents: "none" }}
-                  title={!ready ? [gymnastsCount === 0 && "Add gymnasts", judgesCount === 0 && "Add judges", allGymnastsComplete === false && "Complete incomplete gymnast data"].filter(Boolean).join(", ") + " to start" : undefined}>
-                  <NavItem icon={icons.play} label={label} onClick={ready ? onStartComp : undefined} />
-                </div>
-              );
-            })()}
+            {eventStatus !== "completed" && (<>
+              <NavItem icon={icons.edit} label="Edit Comp Setup" onClick={onEditSetup} />
+              <div className="as-divider" />
+            </>)}
+            <div className="as-section-title">Dashboard</div>
+            {dashAnchors.map(a => (
+              <NavItem key={a.id} icon={a.icon} label={a.label} onClick={() => scrollTo(a.id)} />
+            ))}
+            {eventStatus !== "completed" && (<>
+              <div className="as-divider" />
+              {(() => {
+                const ready = gymnastsCount > 0 && judgesCount > 0 && allGymnastsComplete !== false;
+                const label = eventStatus === "live" ? "Resume Competition" : "Start Competition";
+                return (
+                  <div style={ready ? {} : { opacity: 0.4, pointerEvents: "none" }}
+                    title={!ready ? [gymnastsCount === 0 && "Add gymnasts", judgesCount === 0 && "Add judges", allGymnastsComplete === false && "Complete incomplete gymnast data"].filter(Boolean).join(", ") + " to start" : undefined}>
+                    <NavItem icon={icons.play} label={label} onClick={ready ? onStartComp : undefined} />
+                  </div>
+                );
+              })()}
             </>)}
           </>)}
 

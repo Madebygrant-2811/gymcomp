@@ -100,6 +100,23 @@ function ClubSubmissionScreen({ compId }) {
     </div>
   );
 
+  if (compConfig && compConfig.allowSubmissions === false) return (
+    <div style={{ minHeight: "100vh", background: "var(--background-neutral)", fontFamily: "var(--font-display)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 440 }}>
+        <div style={{ marginBottom: 24 }}>
+          <img src="/logo.svg" alt="GymComp" style={{ height: 20, opacity: 0.5 }} />
+        </div>
+        <div style={{ background: "var(--background-light)", border: "1px solid #e4e4e4", borderRadius: 16, padding: "40px 32px" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>🚫</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", marginBottom: 10 }}>Submissions are closed</div>
+          <div style={{ fontSize: 14, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
+            The organiser is no longer accepting club submissions for <strong style={{ color: "var(--text-primary)" }}>{compConfig.name}</strong>. Please contact the organiser directly if you need to make changes.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   if (submitted) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--background-neutral)", padding: 24, fontFamily: "var(--font-display)" }}>
       <div style={{ textAlign: "center", maxWidth: 440 }}>

@@ -27,6 +27,8 @@ export function migrateCompData(cd) {
       return club;
     });
   }
+  // Default allowSubmissions to true for existing comps
+  if (migrated.allowSubmissions === undefined) migrated.allowSubmissions = true;
   // Clean stray keys from duplicate
   delete migrated.gymnasts;
   return migrated;

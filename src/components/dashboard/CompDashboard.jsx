@@ -106,6 +106,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const dnsGymnasts = gymnasts.filter(g => !!g.dns);
   const colour = "#000dff";
   const completed = eventStatus === "completed";
+  const submissionsOpen = compData.allowSubmissions !== false;
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
   const coachUrl = `${origin}/coach.html?comp=${compId}`;
@@ -184,11 +185,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
       </div>
 
       <div className="setup-content" style={{ padding: "40px 24px", paddingTop: 24 }}>
-      <div style={{ width: "100%", maxWidth: 860, margin: "0 auto" }}>
+      <div style={{ width: "100%", maxWidth: 1200, margin: "0 auto" }}>
 
-        {/* Title + meta */}
-        <div style={{ marginBottom: 32 }}>
-          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 58, fontWeight: 500, lineHeight: 1, marginBottom: 12 }}>
+        <div className="card" id="card-overview" style={{ marginBottom: 24 }}>
+          <div className="card-title">Comp Overview</div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 500, lineHeight: 1, marginBottom: 12 }}>
             {compData.name}
           </div>
           <div style={{ color: "var(--muted)", fontSize: 14, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
@@ -250,12 +253,10 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           {statCard("Levels", compData.levels.length)}
           {statCard("Apparatus", compData.apparatus.length)}
         </div>
+        </div>
 
-        {/* ── CLUBS SECTION ──────────────────────────────────────── */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-            Clubs
-          </div>
+        <div className="card" id="card-clubs" style={{ marginBottom: 24 }}>
+          <div className="card-title">Manage Clubs</div>
           {(compData.clubs || []).length > 0 ? (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "16px 18px" }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: !completed ? 12 : 0 }}>
@@ -318,14 +319,9 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               </>)}
             </div>
           )}
-        </div>
 
-        {/* ── CLUB ACCESS CODES ─────────────────────────────────── */}
         {(compData.clubs || []).length > 0 && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-              Club Access Codes
-            </div>
+          <div style={{ marginTop: 20 }}>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
               <div style={{ padding: "12px 18px", fontSize: 12, color: "var(--muted)", borderBottom: "1px solid var(--border)", lineHeight: 1.6 }}>
                 Each club has a unique code to access the Coach View. Share the relevant code with each club representative.
@@ -360,12 +356,43 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </div>
         )}
 
-        {/* ── GYMNASTS SECTION ───────────────────────────────────── */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-            Gymnasts
-          </div>
-          {/* Submissions bar */}
+        </div>
+
+        <div className="card" id="card-gymnasts" style={{ marginBottom: 24 }}>
+          <div className="card-title">Manage Gymnasts</div>
+          {/* Submissions toggle + bar */}
+          {!completed && compId && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+              padding: "14px 18px", background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: "var(--radius)", marginBottom: 12
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: "var(--text-primary)", marginBottom: 2 }}>Accept club submissions</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5, fontFamily: "var(--font-display)" }}>
+                  {submissionsOpen
+                    ? "Clubs can submit gymnast lists via the public link."
+                    : "The public submission link will show a Submissions Closed message."}
+                </div>
+              </div>
+              <button
+                onClick={() => onUpdateCompData(d => ({ ...d, allowSubmissions: !submissionsOpen }))}
+                style={{
+                  position: "relative", width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", flexShrink: 0,
+                  background: submissionsOpen ? "var(--brand-01)" : "var(--border)",
+                  transition: "background 0.2s"
+                }}
+                title={submissionsOpen ? "Turn off submissions" : "Turn on submissions"}
+              >
+                <div style={{
+                  position: "absolute", top: 2, left: submissionsOpen ? 22 : 2,
+                  width: 20, height: 20, borderRadius: 10,
+                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  transition: "left 0.2s"
+                }} />
+              </button>
+            </div>
+          )}
           {!completed && compId && (
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
@@ -433,15 +460,17 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                     + Manage Gymnasts
                   </button>
                   <button
-                    onClick={copySubmitLink}
+                    onClick={submissionsOpen ? copySubmitLink : undefined}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 20px", borderRadius: 56,
-                      border: "1.5px solid var(--border)", background: "none", cursor: "pointer",
+                      border: "1.5px solid var(--border)", background: "none",
+                      cursor: submissionsOpen ? "pointer" : "default",
                       fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600,
-                      color: "var(--text-primary)"
+                      color: "var(--text-primary)", opacity: submissionsOpen ? 1 : 0.5
                     }}
                   >
                     {submLinkCopied ? "Copied!" : "Share Submission Link"}
+                    {!submissionsOpen && <span style={{ fontSize: 10, color: "var(--text-tertiary)", background: "var(--surface2)", padding: "2px 8px", borderRadius: 56, fontWeight: 600 }}>Closed</span>}
                   </button>
                 </div>
                 {compId && pendingCount > 0 && (
@@ -490,10 +519,13 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   + Add Gymnasts Manually
                 </button>
                 <button className="btn btn-secondary" style={{
-                    fontSize: 14, padding: "12px 24px"
+                    fontSize: 14, padding: "12px 24px",
+                    opacity: submissionsOpen ? 1 : 0.5,
+                    cursor: submissionsOpen ? "pointer" : "default"
                   }}
-                    onClick={copySubmitLink}>
-                    {submLinkCopied ? "✅ Link copied!" : "Share Submission Link with Clubs"}
+                    onClick={submissionsOpen ? copySubmitLink : undefined}>
+                    {submLinkCopied ? "Copied!" : "Share Submission Link with Clubs"}
+                    {!submissionsOpen && <span style={{ fontSize: 10, marginLeft: 8, color: "var(--text-tertiary)", background: "var(--surface2)", padding: "2px 8px", borderRadius: 56, fontWeight: 600 }}>Closed</span>}
                 </button>
               </div>
               {compId && pendingCount > 0 && (
@@ -513,11 +545,8 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           )}
         </div>
 
-        {/* ── JUDGES SECTION ──────────────────────────────────────── */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-            Judges
-          </div>
+        <div className="card" id="card-judges" style={{ marginBottom: 24 }}>
+          <div className="card-title">Manage Judges</div>
           {hasApparatus ? (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
@@ -624,11 +653,8 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           />
         )}
 
-        {/* ── PRE-COMPETITION DOCUMENTS ─────────────────────────── */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-            Pre-Competition Documents
-          </div>
+        <div className="card" id="card-documents" style={{ marginBottom: 24 }}>
+          <div className="card-title">Comp Documents</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {docBtn(<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="2" width="14" height="16" rx="2"/><path d="M7 6h6M7 10h6M7 14h3"/></svg>, "Competition Agenda",
               hasGymnasts,
@@ -651,13 +677,9 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </div>
         </div>
 
-
-        {/* ── LIVE VIEWS + QR CODES ─────────────────────────────── */}
         {compId && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-              Live View Links
-            </div>
+        <div className="card" id="card-live" style={{ marginBottom: 24 }}>
+          <div className="card-title">Live Results Links</div>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "24px" }}>
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
                 Share these links with coaches and parents <strong style={{ color: "var(--text)" }}>before the competition</strong> — they can scan the QR code on the printed Agenda to follow along in real time.
@@ -667,7 +689,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                 <QRDisplay url={parentUrl} size={140} label="Parent View (scores + rankings)" />
               </div>
             </div>
-          </div>
+        </div>
         )}
 
         {/* ── START CTA ─────────────────────────────────────────── */}
