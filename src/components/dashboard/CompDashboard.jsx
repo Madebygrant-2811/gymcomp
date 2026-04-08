@@ -97,7 +97,8 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const judges = compData.judges || [];
   const hasGymnasts = gymnasts.length > 0;
   const hasJudges = judges.length > 0;
-  const hasApparatus = (compData.apparatus || []).length > 0;
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const hasApparatus = scoringApparatus.length > 0;
   const requiredFields = ["name", "club", "level", "round"];
   const incompleteGymnasts = gymnasts.filter(g => requiredFields.some(f => !g[f] || !g[f].toString().trim()));
   const allGymnastsComplete = incompleteGymnasts.length === 0;
@@ -251,7 +252,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           {statCard("Gymnasts", totalGymnasts, "var(--accent)")}
           {statCard("Clubs", (compData.clubs || []).length)}
           {statCard("Levels", compData.levels.length)}
-          {statCard("Apparatus", compData.apparatus.length)}
+          {statCard("Apparatus", scoringApparatus.length)}
         </div>
         </div>
 
@@ -550,7 +551,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           {hasApparatus ? (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-                {compData.apparatus.map(app => {
+                {scoringApparatus.map(app => {
                   const appJudges = judges.filter(j => j.apparatus === app);
                   return (
                     <div key={app} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
@@ -591,7 +592,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               </div>
 
               {/* FIG validation warning */}
-              {compData.apparatus.some(app => judges.filter(j => j.apparatus === app).length === 0) && (
+              {scoringApparatus.some(app => judges.filter(j => j.apparatus === app).length === 0) && (
                 <div style={{ margin: "12px 0 0", padding: "10px 14px", borderRadius: 12,
                   background: "rgba(240,173,78,0.1)", border: "1px solid rgba(240,173,78,0.4)",
                   fontSize: 12, color: "#c8862a" }}>

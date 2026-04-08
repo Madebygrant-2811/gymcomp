@@ -374,7 +374,8 @@
   // ── Score helpers ──
   const sk = (rid, gid, app) => `${rid}__${gid}__${app}`;
   const getScore = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
-  const getTotal = (rid, gid) => (compData.apparatus || []).reduce((s, a) => s + getScore(rid, gid, a), 0);
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const getTotal = (rid, gid) => scoringApparatus.reduce((s, a) => s + getScore(rid, gid, a), 0);
 
   // ── Standard competition ranking (1,2,2,4,5,6) ──
   function standardRank(items, scoreKey) {
@@ -502,7 +503,7 @@
       if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
       return true;
     });
-    const apparatus = compData.apparatus || [];
+    const apparatus = scoringApparatus;
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
     return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
@@ -602,7 +603,7 @@
       if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
       return true;
     });
-    const apparatus = compData.apparatus || [];
+    const apparatus = scoringApparatus;
     if (!groups.length) return `<div style="color:var(--muted);text-align:center;padding:40px">No results to display yet.</div>`;
 
     return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {

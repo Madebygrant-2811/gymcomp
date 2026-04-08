@@ -156,7 +156,7 @@ export function printDocument(htmlContent, filename = "gymcomp-document.pdf") {
 export function buildAgendaHTML(compData, gymnasts, compId) {
   const colour = "#000dff";
   const rounds = compData.rounds || [];
-  const apparatus = compData.apparatus || [];
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const levelName = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
 
   // Group gymnasts by round then group
@@ -292,7 +292,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
 // Build judge sheets
 export function buildJudgeSheetsHTML(compData, gymnasts) {
   const colour = "#000dff";
-  const apparatus = compData.apparatus || [];
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
   const fig = true;
 
@@ -503,7 +503,7 @@ export function buildAttendanceHTML(compData, gymnasts) {
 
 export function buildDiagnosticHTML(compData, gymnasts, scores) {
   const colour = "#000dff";
-  const apparatus = compData.apparatus || [];
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
 
   // Score helpers — D/E from flat key suffixes
@@ -827,7 +827,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
 
 export function buildResultsHTML(compData, gymnasts, scores) {
   const colour = "#000dff";
-  const apparatus = compData.apparatus || [];
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
 
   const getScore = (roundId, gid, app) => {
@@ -1001,12 +1001,13 @@ export function buildResultsHTML(compData, gymnasts, scores) {
 
 export function exportResultsPDF(compData, gymnasts, scores) {
   const getPlainIcon = () => "";
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
 
   const getScore = (roundId, gid, app) => {
     const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (roundId, gid) => compData.apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
 
   const denseRankLocal = (items, key) => {
     const sorted = [...items].sort((a, b) => b[key] - a[key]);
@@ -1047,11 +1048,11 @@ export function exportResultsPDF(compData, gymnasts, scores) {
       const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
       const dns = withTotals.filter(g => g.total === 0);
 
-      const appHeaders = compData.apparatus.map(a => `<th>${getPlainIcon(a)} ${escHtml(a)}</th>`).join("");
+      const appHeaders = apparatus.map(a => `<th>${getPlainIcon(a)} ${escHtml(a)}</th>`).join("");
 
       body += `<table><thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>${appHeaders}<th>Total</th></tr></thead><tbody>`;
       [...ranked, ...dns.map(g=>({...g,rank:null}))].forEach(g => {
-        const cells = compData.apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(3) : "—"}</td>`).join("");
+        const cells = apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(3) : "—"}</td>`).join("");
         const rankCell = g.rank === null ? `<td class="dns">DNS</td>` : `<td class="rank">${medalEmoji(g.rank)}</td>`;
         body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${escHtml(g.name)}</strong></td><td>${escHtml(g.club) || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(3) : "—"}</strong></td></tr>`;
       });
@@ -1096,11 +1097,12 @@ ${body}
 }
 
 export function exportResultsXLSX(compData, gymnasts, scores) {
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const getScore = (roundId, gid, app) => {
     const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (roundId, gid) => compData.apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
   const denseRankLocal = (items, key) => {
     const sorted = [...items].sort((a, b) => b[key] - a[key]);
     const result = [];
@@ -1138,7 +1140,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     });
 
     resultsRows.push([`${round.name}  ·  ${round.start} – ${round.end}`]);
-    const appHeaders = compData.apparatus;
+    const appHeaders = apparatus;
     const header = ["Position", "#", "Gymnast", "Club", "Age Category", ...appHeaders, "Total"];
     resultsRows.push(header);
 
@@ -1151,7 +1153,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
       const dns = withTotals.filter(g => g.total === 0);
 
       [...ranked, ...dns.map(g => ({ ...g, rank: null }))].forEach(g => {
-        const appScores = compData.apparatus.map(a => {
+        const appScores = apparatus.map(a => {
           const s = getScore(round.id, g.id, a);
           return s > 0 ? parseFloat(s.toFixed(3)) : "";
         });
@@ -1171,7 +1173,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
 
   // ── Sheet 2: Raw Scores ──
   const rawRows = [];
-  const maxJudges = fig ? Math.max(1, ...compData.apparatus.map(a => judgeCount(a))) : 0;
+  const maxJudges = fig ? Math.max(1, ...apparatus.map(a => judgeCount(a))) : 0;
   const rawHeader = ["#", "Gymnast", "Round", "Apparatus"];
   if (fig) {
     rawHeader.push("D Score");
@@ -1185,7 +1187,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     const roundGymnasts = gymnasts.filter(g => g.round === round.id);
     roundGymnasts.sort((a, b) => (a.number || "").localeCompare(b.number || "", undefined, { numeric: true }));
     roundGymnasts.forEach(g => {
-      compData.apparatus.forEach(app => {
+      apparatus.forEach(app => {
         const finalScore = getScore(round.id, g.id, app);
         if (finalScore === 0 && !fig) return;
         const bk = `${round.id}__${g.id}__${app}`;

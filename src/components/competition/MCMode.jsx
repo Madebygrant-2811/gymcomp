@@ -5,7 +5,8 @@ import { getApparatusIcon } from "../../lib/pdf.js";
 function MCMode({ compData, gymnasts, scores }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("overall"); // "overall" | "apparatus"
-  const [activeApparatus, setActiveApparatus] = useState(compData.apparatus[0] || "");
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const [activeApparatus, setActiveApparatus] = useState(scoringApparatus[0] || "");
   const [fullscreen, setFullscreen] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
 
@@ -13,7 +14,7 @@ function MCMode({ compData, gymnasts, scores }) {
     const v = parseFloat(scores[gymnast_key(activeRound, gid, app)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (gid) => compData.apparatus.reduce((s, a) => s + getScore(gid, a), 0);
+  const getTotal = (gid) => scoringApparatus.reduce((s, a) => s + getScore(gid, a), 0);
 
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound && !g.dns), [gymnasts, activeRound]);
 
@@ -78,7 +79,7 @@ function MCMode({ compData, gymnasts, scores }) {
     return list;
   };
 
-  const announcements = useMemo(buildAnnouncementList, [rankGroups, scores, activeRound, compData.apparatus, view, activeApparatus]);
+  const announcements = useMemo(buildAnnouncementList, [rankGroups, scores, activeRound, scoringApparatus, view, activeApparatus]);
   const current = announcements[currentIdx];
 
   const prev = () => setCurrentIdx(i => Math.max(0, i - 1));
@@ -108,7 +109,7 @@ function MCMode({ compData, gymnasts, scores }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button className={`btn btn-sm ${view === "overall" ? "btn-primary" : "btn-secondary"}`}
             onClick={() => { setView("overall"); setCurrentIdx(0); }}>Overall</button>
-          {compData.apparatus.map(a => (
+          {scoringApparatus.map(a => (
             <button key={a} className={`btn btn-sm ${view === "apparatus" && activeApparatus === a ? "btn-primary" : "btn-secondary"}`}
               onClick={() => { setView("apparatus"); setActiveApparatus(a); setCurrentIdx(0); }}>
               {getApparatusIcon(a)} {a}

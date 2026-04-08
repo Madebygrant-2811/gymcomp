@@ -18,6 +18,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const [modalPristine, setModalPristine] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
   const fig = true;
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
 
   // Topbar hide-on-scroll
   const [topbarHidden, setTopbarHidden] = useState(false);
@@ -89,7 +90,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     parseFloat(scores[subKey(gid, app, "pen")]) || 0;
   const getAppTotal = (gid, app) => parseFloat(scores[baseKey(gid, app)]) || 0;
   const getGymnastTotal = (gid) =>
-    compData.apparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
+    scoringApparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
 
   // ── Dual vault helpers ──────────────────────────────────
   const isDualVaultForGymnast = (gid, app) => {
@@ -181,7 +182,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     });
     return groups;
   }, [roundGymnasts, compData.levels]);
-  const appCount = (compData.apparatus || []).length;
+  const appCount = scoringApparatus.length;
   const totalSheets = allGroups.length * appCount;
   const sheetsIn = (roundId) => {
     const rd = sheetReceived[roundId] || {};
@@ -532,18 +533,18 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                   <thead>
                     <tr>
                       <th>Group</th>
-                      {(compData.apparatus || []).map(a => <th key={a} style={{ textAlign: "center" }}>{getApparatusIcon(a)} {a}</th>)}
+                      {scoringApparatus.map(a => <th key={a} style={{ textAlign: "center" }}>{getApparatusIcon(a)} {a}</th>)}
                       <th style={{ textAlign: "center" }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {allGroups.map(({ key, level, group }) => {
-                      const groupDone = (compData.apparatus || []).every(a => isSheetIn(activeRound, key, a));
-                      const groupCount = (compData.apparatus || []).filter(a => isSheetIn(activeRound, key, a)).length;
+                      const groupDone = scoringApparatus.every(a => isSheetIn(activeRound, key, a));
+                      const groupCount = scoringApparatus.filter(a => isSheetIn(activeRound, key, a)).length;
                       return (
                         <tr key={key}>
                           <td style={{ fontWeight: 600, fontSize: 12 }}>{level} · {group}</td>
-                          {(compData.apparatus || []).map(app => {
+                          {scoringApparatus.map(app => {
                             const received = isSheetIn(activeRound, key, app);
                             return (
                               <td key={app} style={{ textAlign: "center", padding: "6px 8px" }}>
@@ -606,13 +607,13 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
               <div key={level} style={{ marginBottom: 24 }}>
                 <div className="sub-group-label">{level}</div>
                 <div className="table-wrap">
-                  <table className="si-table" style={{ minWidth: 388 + compData.apparatus.length * 100 + 140 }}>
+                  <table className="si-table" style={{ minWidth: 388 + scoringApparatus.length * 100 + 140 }}>
                     <colgroup>
                       <col className="si-col-num" />
                       <col className="si-col-name" />
                       <col className="si-col-club" />
                       <col className="si-col-age" />
-                      {compData.apparatus.map(a => <col key={a} className="si-col-app" />)}
+                      {scoringApparatus.map(a => <col key={a} className="si-col-app" />)}
                       <col className="si-col-total" />
                       <col className="si-col-flag" />
                     </colgroup>
@@ -622,7 +623,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                         <th>Gymnast</th>
                         <th>Club</th>
                         <th>Age</th>
-                        {compData.apparatus.map(a => <th key={a}>{getApparatusIcon(a)} {a}</th>)}
+                        {scoringApparatus.map(a => <th key={a}>{getApparatusIcon(a)} {a}</th>)}
                         <th>Total</th>
                         <th></th>
                       </tr>
@@ -631,7 +632,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                       {glist.map(g => {
                         const gymTotal = getGymnastTotal(g.id);
                         const isDns = !!g.dns;
-                        const hasQuery = compData.apparatus.some(a => isQueried(g.id, a));
+                        const hasQuery = scoringApparatus.some(a => isQueried(g.id, a));
                         return (
                           <tr key={g.id} style={{ opacity: isDns ? 0.45 : 1 }}>
                             <td style={{ color: "var(--muted)", fontWeight: 600 }}>{g.number}</td>
@@ -641,7 +642,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                             </td>
                             <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
                             <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "\u2014"}</td>
-                            {compData.apparatus.map(a => {
+                            {scoringApparatus.map(a => {
                               const appScore = getAppTotal(g.id, a);
                               const queried = isQueried(g.id, a);
                               const flashBk = baseKey(g.id, a);
@@ -681,7 +682,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                                     borderRadius: 4, cursor: "pointer"
                                   }}
                                   onClick={() => {
-                                    const firstApp = compData.apparatus[0];
+                                    const firstApp = scoringApparatus[0];
                                     if (hasQuery) resolveQuery(g.id, firstApp);
                                     else openQueryModal(g.id, firstApp);
                                   }}>

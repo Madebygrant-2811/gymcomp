@@ -10,6 +10,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [levelFilter, setLevelFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
 
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
@@ -45,7 +46,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
     const v = parseFloat(scores[gymnast_key(activeRound, gid, apparatus)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (gid) => compData.apparatus.reduce((s, a) => s + getScore(gid, a), 0);
+  const getTotal = (gid) => scoringApparatus.reduce((s, a) => s + getScore(gid, a), 0);
 
   // Build ranking groups respecting level rankBy config
   const buildRankGroups = () => {
@@ -165,7 +166,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                     </div>
                   </>}
                 </div>
-                {compData.apparatus.map(apparatus => {
+                {scoringApparatus.map(apparatus => {
                   const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
                   const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
                   const dns = withScores.filter(g => g.score === 0 || g.dns);
@@ -247,7 +248,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                     <thead>
                       <tr>
                         <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
-                        {compData.apparatus.map(a => <th key={a}>{a}</th>)}
+                        {scoringApparatus.map(a => <th key={a}>{a}</th>)}
                         <th>Total</th>
                       </tr>
                     </thead>
@@ -258,7 +259,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                          {compData.apparatus.map(a => (
+                          {scoringApparatus.map(a => (
                             <td key={a} style={{ color: "var(--muted)" }}>
                               {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(3) : "—"}
                             </td>
@@ -272,7 +273,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                          {compData.apparatus.map(a => <td key={a} style={{ color: "var(--muted)" }}>—</td>)}
+                          {scoringApparatus.map(a => <td key={a} style={{ color: "var(--muted)" }}>—</td>)}
                           <td style={{ color: "var(--muted)" }}>—</td>
                         </tr>
                       ))}

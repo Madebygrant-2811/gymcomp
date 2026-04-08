@@ -651,7 +651,8 @@
   const subKey = (rid, gid, app, sub) => `${rid}__${gid}__${app}__${sub}`;
   const sv = (rid, gid, app, sub) => parseFloat(scores[subKey(rid, gid, app, sub)]) || 0;
   const getTotal = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
-  const getOverall = (rid, gid) => (compData.apparatus || []).reduce((s, a) => s + getTotal(rid, gid, a), 0);
+  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const getOverall = (rid, gid) => scoringApparatus.reduce((s, a) => s + getTotal(rid, gid, a), 0);
 
   const judgeCount = (app) =>
     (compData.judges || []).filter(j => j.apparatus === app).length;
@@ -835,7 +836,7 @@
     const allGroups = buildRankGroups(rid);
     const groups = allGroups.filter(rg => rg.gymnasts.length > 0);
 
-    const apparatus = compData.apparatus || [];
+    const apparatus = scoringApparatus;
     if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
 
     return buildFilterHtml() + groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
@@ -1176,7 +1177,7 @@
 
   function renderGymnastCard(rid, g) {
     const overall = getOverall(rid, g.id);
-    const apparatus = compData.apparatus || [];
+    const apparatus = scoringApparatus;
 
     const appBlocksHtml = apparatus
       .map(app => renderApparatusBlock(rid, g.id, app))
@@ -1316,7 +1317,7 @@
   function countActiveQueries() {
     let count = 0;
     gymnasts.forEach(g => {
-      (compData.apparatus || []).forEach(app => {
+      scoringApparatus.forEach(app => {
         (compData.rounds || []).forEach(r => {
           if (scores[subKey(r.id, g.id, app, "query")] && !scores[subKey(r.id, g.id, app, "queryResolved")]) {
             count++;

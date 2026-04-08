@@ -131,9 +131,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     return `${starts[0]} – ${ends[ends.length - 1]}`;
   };
 
+  const realApparatus = data.apparatus.filter(a => a !== "Rest");
+
   const canProceed = data.name && data.date && !dateError &&
     data.rounds.length > 0 &&
-    data.apparatus.length > 0 && data.levels.length > 0 &&
+    realApparatus.length > 0 && data.levels.length > 0 &&
     data.dataConsentConfirmed;
 
   const missingFields = [
@@ -141,7 +143,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     ...(!data.date ? ["Date"] : []),
     ...(dateError ? ["Valid date (must be today or future)"] : []),
     ...(data.rounds.length === 0 ? ["At least one round"] : []),
-    ...(data.apparatus.length === 0 ? ["At least one apparatus"] : []),
+    ...(realApparatus.length === 0 ? ["At least one apparatus"] : []),
     ...(data.levels.length === 0 ? ["At least one level"] : []),
   ];
 
@@ -320,7 +322,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Apparatus Order</div>
             <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Drag to reorder. Groups will cascade automatically from this sequence.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {data.apparatus.map((a, i) => (
+              {data.apparatus.map((a, i) => {
+                const isRest = a === "Rest";
+                return (
                 <div key={a} draggable
                   onDragStart={e => { appDragFrom.current = i; e.dataTransfer.effectAllowed = "move"; e.currentTarget.style.opacity = "0.5"; }}
                   onDragEnd={e => { e.currentTarget.style.opacity = "1"; }}
@@ -336,12 +340,55 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                     if (row) { const from = appTouchFrom.current; const to = parseInt(row.dataset.appIdx); if (from !== to) setData(d => { const arr = [...d.apparatus]; const [item] = arr.splice(from, 1); arr.splice(to, 0, item); return { ...d, apparatus: arr }; }); }
                   }}
                   data-app-idx={i}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, cursor: "grab", userSelect: "none", touchAction: "none" }}>
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                    background: isRest ? "var(--surface2)" : "var(--bg)",
+                    border: `1px solid ${isRest ? "var(--border)" : "var(--border)"}`,
+                    borderRadius: "var(--radius)", fontSize: 13, cursor: "grab", userSelect: "none", touchAction: "none"
+                  }}>
                   <span style={{ color: "var(--muted)", fontSize: 14 }}>⠿</span>
                   <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, minWidth: 20 }}>{i + 1}</span>
-                  <span style={{ flex: 1 }}>{a}</span>
+                  <span style={{ flex: 1, color: isRest ? "var(--muted)" : undefined, fontStyle: isRest ? "italic" : undefined }}>{a}</span>
                 </div>
-              ))}
+                );
+              })}
+            </div>
+          </>
+        )}
+        {realApparatus.length > 0 && (
+          <>
+            <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16
+            }}>
+              <div>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: "var(--text-primary)", marginBottom: 2 }}>Include Rest in rotation</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, fontFamily: "var(--font-display)" }}>
+                  Adds a Rest slot to the rotation order. Rest does not add an apparatus, does not affect scoring, results, judges or exports — it only appears in the schedule.
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const hasRest = data.apparatus.includes("Rest");
+                  if (hasRest) {
+                    setData(d => ({ ...d, includeRest: false, apparatus: d.apparatus.filter(a => a !== "Rest") }));
+                  } else {
+                    setData(d => ({ ...d, includeRest: true, apparatus: [...d.apparatus, "Rest"] }));
+                  }
+                }}
+                style={{
+                  position: "relative", width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", flexShrink: 0,
+                  background: data.apparatus.includes("Rest") ? "var(--accent)" : "var(--border)",
+                  transition: "background 0.2s"
+                }}
+              >
+                <div style={{
+                  position: "absolute", top: 2, left: data.apparatus.includes("Rest") ? 22 : 2,
+                  width: 20, height: 20, borderRadius: 10,
+                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                  transition: "left 0.2s"
+                }} />
+              </button>
             </div>
           </>
         )}
