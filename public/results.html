@@ -243,6 +243,11 @@
       border-collapse: collapse;
       font-size: 13px;
     }
+    /* ── Column widths (mobile) ── */
+    @media (max-width: 767px) {
+      td.gymnast-name, th:nth-child(2) { white-space: nowrap; }
+      .gymnast-club { white-space: nowrap; }
+    }
     th {
       padding: 8px 12px;
       text-align: left;
@@ -291,7 +296,7 @@
     }
     .app-score {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
     }
     .gymnast-name { font-weight: 500; }
     .gymnast-club { font-weight: 500; color: var(--muted); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -333,6 +338,43 @@
     @media (max-width: 600px) {
       .comp-title { font-size: 26px; }
       td, th { padding: 8px; font-size: 12px; }
+    }
+
+    /* ── Results controls layout ────────────────────────────── */
+    .results-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .results-toggle {
+      display: flex;
+      gap: 6px;
+    }
+    .results-rounds {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+
+    @media (max-width: 767px) {
+      .results-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 24px;
+      }
+      .results-rounds {
+        order: -1;
+        margin-left: 0;
+      }
+      .results-filters {
+        width: 100%;
+      }
+      .results-filters .filter-select {
+        flex: 1;
+      }
     }
   </style>
 </head>
@@ -447,7 +489,7 @@
     const showAge = isAgeFilterEnabled();
     const hasActive = levelFilter !== "all" || ageFilter !== "all";
     return `
-      <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div class="results-filters" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:16px;flex-wrap:wrap">
         <select class="filter-select" onchange="setLevelFilterVal(this.value)">
           <option value="all"${levelFilter === "all" ? " selected" : ""}>All Levels</option>
           ${levels.map(l => `<option value="${escHtml(l)}"${l === levelFilter ? " selected" : ""}>${escHtml(l)}</option>`).join("")}
@@ -747,10 +789,12 @@
     `).join("") : "";
 
     const controlsHtml = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;flex-wrap:wrap">
-        <button class="toggle-btn ${activeView === "apparatus" ? "active" : ""}" onclick="switchView('apparatus')">Per Apparatus</button>
-        <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
-        ${roundBtns ? `<div style="flex:1"></div><div style="display:flex;gap:8px;flex-wrap:wrap">${roundBtns}</div>` : ""}
+      <div class="results-controls">
+        <div class="results-toggle">
+          <button class="toggle-btn ${activeView === "apparatus" ? "active" : ""}" onclick="switchView('apparatus')">Per Apparatus</button>
+          <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
+        </div>
+        ${roundBtns ? `<div class="results-rounds">${roundBtns}</div>` : ""}
       </div>
     `;
 

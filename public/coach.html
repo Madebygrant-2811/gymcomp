@@ -104,18 +104,12 @@
     .comp-hero {
       margin-bottom: 28px;
     }
-    .comp-title-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 8px;
-      flex-wrap: wrap;
-    }
     .comp-title {
       font-family: var(--font);
       font-size: 36px;
       font-weight: 800;
       line-height: 1.1;
+      margin-bottom: 10px;
       color: var(--text);
     }
     .comp-meta {
@@ -142,34 +136,10 @@
     }
     .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
-      color: var(--accent2);
-      border-bottom-color: var(--accent2);
+      color: var(--accent);
+      border-bottom-color: var(--accent);
     }
 
-    /* ── Level section ───────────────────────────────────────── */
-    .level-section {
-      margin-bottom: 32px;
-    }
-    .level-heading {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .level-heading .age-pill {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      background: rgba(0,13,255,0.06);
-      padding: 4px 12px;
-      border-radius: 99px;
-    }
     .filter-select {
       font-family: var(--font);
       font-size: 12px;
@@ -365,12 +335,43 @@
       font-style: italic;
     }
 
-    /* ── View toggle ─────────────────────────────────────────── */
-    .view-toggle {
+    /* ── Level card (overall view) ─────────────────────────────── */
+    .level-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .level-card-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Controls layout ──────────────────────────────────────── */
+    .results-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .results-toggle {
+      display: flex;
+      gap: 6px;
+    }
+    .results-rounds {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-left: auto;
     }
     .toggle-btn {
       padding: 7px 16px;
@@ -396,6 +397,11 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+    }
+    /* ── Column widths (mobile) ── */
+    @media (max-width: 767px) {
+      td.gymnast-name, th:nth-child(2) { white-space: nowrap; }
+      .gymnast-club-cell { white-space: nowrap; }
     }
     th {
       padding: 8px 12px;
@@ -440,7 +446,7 @@
     }
     .app-score {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
     }
     .gymnast-club-cell { font-weight: 500; color: var(--muted); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     td.gymnast-name { font-size: 13px; font-weight: 500; }
@@ -548,42 +554,39 @@
       80% { transform: translateX(6px); }
     }
 
-    .header-club-name {
-      font-size: 12px;
-      font-weight: 600;
-      color: rgba(255,255,255,0.9);
-      max-width: 200px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .switch-club-btn {
-      font-family: var(--font);
-      font-size: 11px;
-      font-weight: 600;
-      padding: 6px 14px;
-      border-radius: 56px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--muted);
-      cursor: pointer;
-    }
-    .switch-club-btn:hover { color: var(--text); }
-
     tr.my-club-row td { background: rgba(0,13,255,0.04); }
 
     @media (max-width: 600px) {
-      .comp-title { font-size: 24px; }
+      .comp-title { font-size: 26px; }
+      td, th { padding: 8px; font-size: 12px; }
       .apparatus-grid { grid-template-columns: 1fr 1fr; }
-      .gymnast-header { gap: 10px; }
-      .gymnast-num { width: 36px; height: 36px; font-size: 16px; }
-      .gymnast-name { font-size: 16px; }
-      .gymnast-club { display: none; }
-      .gymnast-overall-val { font-size: 18px; }
+      .gymnast-card .gymnast-header { gap: 10px; }
+      .gymnast-card .gymnast-num { width: 36px; height: 36px; font-size: 16px; }
+      .gymnast-card .gymnast-name { font-size: 16px; }
+      .gymnast-card .gymnast-club { display: none; }
+      .gymnast-card .gymnast-overall-val { font-size: 18px; }
       .lock-box { padding: 32px 24px; }
     }
     @media (max-width: 400px) {
       .apparatus-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 767px) {
+      .results-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 24px;
+      }
+      .results-rounds {
+        order: -1;
+        margin-left: 0;
+      }
+      .results-filters {
+        width: 100%;
+      }
+      .results-filters .filter-select {
+        flex: 1;
+      }
     }
   </style>
 </head>
@@ -593,7 +596,6 @@
   <div class="site-header-inner">
     <div class="logo"><img src="./Logo-mono-white.svg" alt="GymComp" height="20" /></div>
     <span class="view-badge">Coach View</span>
-    <span class="header-club-name" id="headerClubName" style="display:none"></span>
     <div style="flex:1"></div>
     <div class="live-pill" id="livePill" style="display:none">
       <span class="live-dot"></span> LIVE
@@ -616,6 +618,8 @@
   let activeRound = null;
   let activeView = "myclub"; // "myclub" | "overall"
   let clubFilter = "all";
+  let levelFilter = "all";
+  let ageFilter = "all";
   let pollTimer = null;
   let compData = null;
   let gymnasts = [];
@@ -692,12 +696,72 @@
 
   function clearFilters() {
     clubFilter = "all";
+    levelFilter = "all";
+    ageFilter = "all";
+    renderPage();
+  }
+
+  function getUniqueLevels(rid) {
+    const roundG = gymnasts.filter(g => g.round === rid);
+    const present = new Set(roundG.map(g => {
+      const lo = (compData.levels || []).find(l => l.id === g.level);
+      return lo ? lo.name : "Unknown";
+    }));
+    const ordered = (compData.levels || []).map(l => l.name).filter(n => present.has(n));
+    if (present.has("Unknown")) ordered.push("Unknown");
+    return ordered;
+  }
+
+  function getUniqueAges(rid) {
+    const roundG = gymnasts.filter(g => g.round === rid);
+    const selectedLevelObj = (compData.levels || []).find(l => l.name === levelFilter);
+    if (!selectedLevelObj || selectedLevelObj.rankBy !== "level+age") return [];
+    return [...new Set(roundG.filter(g => {
+      const lo = (compData.levels || []).find(l => l.id === g.level);
+      return (lo ? lo.name : "Unknown") === levelFilter;
+    }).map(g => g.age || "Unknown"))].sort();
+  }
+
+  function isAgeFilterEnabled() {
+    if (levelFilter === "all") return false;
+    const lo = (compData.levels || []).find(l => l.name === levelFilter);
+    return lo && lo.rankBy === "level+age";
+  }
+
+  function setLevelFilterVal(val) {
+    levelFilter = val;
+    ageFilter = "all";
+    renderPage();
+  }
+
+  function setAgeFilterVal(val) {
+    ageFilter = val;
     renderPage();
   }
 
   function buildFilterHtml() {
-    // No filter dropdown in myclub (already scoped) or overall (show everyone)
-    if (activeView === "myclub" || activeView === "overall") return "";
+    if (activeView === "myclub") return "";
+    if (activeView === "overall") {
+      const rid = activeRound;
+      const levels = getUniqueLevels(rid);
+      if (levels.length < 2) return "";
+      const ages = getUniqueAges(rid);
+      const showAge = isAgeFilterEnabled();
+      const hasActive = levelFilter !== "all" || ageFilter !== "all";
+      return `
+        <div class="results-filters" style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <select class="filter-select" onchange="setLevelFilterVal(this.value)">
+            <option value="all"${levelFilter === "all" ? " selected" : ""}>All Levels</option>
+            ${levels.map(l => `<option value="${escHtml(l)}"${l === levelFilter ? " selected" : ""}>${escHtml(l)}</option>`).join("")}
+          </select>
+          <select class="filter-select" onchange="setAgeFilterVal(this.value)" ${showAge ? "" : "disabled"}>
+            <option value="all"${ageFilter === "all" ? " selected" : ""}>All Ages</option>
+            ${ages.map(a => `<option value="${escHtml(a)}"${a === ageFilter ? " selected" : ""}>${escHtml(a)}</option>`).join("")}
+          </select>
+          ${hasActive ? `<button class="filter-clear" onclick="clearFilters()">Clear</button>` : ""}
+        </div>
+      `;
+    }
     const clubs = getUniqueClubs();
     if (clubs.length < 2) return "";
     return `
@@ -768,9 +832,6 @@
     // Persist in sessionStorage
     try { sessionStorage.setItem("coach_club_" + compId, code); } catch {}
 
-    // Update header
-    showClubHeader();
-
     // Render the coach view
     renderPage();
     updateTimestamp();
@@ -781,35 +842,10 @@
     pollTimer = setInterval(() => poll(), POLL_MS);
   }
 
-  function showClubHeader() {
-    const nameEl = document.getElementById("headerClubName");
-    if (nameEl && authedClubName) {
-      nameEl.textContent = authedClubName;
-      nameEl.style.display = "";
-    }
-  }
-
-  function hideClubHeader() {
-    const nameEl = document.getElementById("headerClubName");
-    if (nameEl) { nameEl.style.display = "none"; nameEl.textContent = ""; }
-  }
-
-  function switchClub() {
-    authedClubCode = null;
-    authedClubName = null;
-    try { sessionStorage.removeItem("coach_club_" + compId); } catch {}
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    hideClubHeader();
-    document.getElementById("livePill").style.display = "none";
-    renderLockScreen();
-  }
-
   function resolveClubName() {
     if (!authedClubCode || !compData) return;
     const club = (compData.clubs || []).find(c => c.clubCode === authedClubCode);
     if (club) authedClubName = club.name;
-    const nameEl = document.getElementById("headerClubName");
-    if (nameEl && authedClubName) nameEl.textContent = authedClubName;
   }
 
   // ── Standard competition ranking (1,2,2,4,5,6) ──
@@ -827,14 +863,18 @@
     if (rank === 1) return `<span class="badge badge-gold">🥇 1st</span>`;
     if (rank === 2) return `<span class="badge badge-silver">🥈 2nd</span>`;
     if (rank === 3) return `<span class="badge badge-bronze">🥉 3rd</span>`;
-    if (rank <= 6) return `<span class="badge badge-medal">${rank}th</span>`;
+    if (rank <= 6) return `<span class="badge badge-medal">🎖️ ${rank}th</span>`;
     return `<span class="badge badge-rank">${rank}th</span>`;
   }
 
   function renderOverallView(round) {
     const rid = round.id;
     const allGroups = buildRankGroups(rid);
-    const groups = allGroups.filter(rg => rg.gymnasts.length > 0);
+    const groups = allGroups.filter(rg => {
+      if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
+      if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
+      return rg.gymnasts.length > 0;
+    });
 
     const apparatus = getScoringApparatus();
     if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
@@ -948,9 +988,9 @@
       }
 
       return `
-        <div class="level-section">
-          <div class="level-heading">${escHtml(levelName)}${agePill}</div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:16px 20px">
+        <div class="level-card">
+          <div class="level-card-header">${escHtml(levelName)}${agePill ? ` <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px">${escHtml(ageLabel)}</span>` : ""}</div>
+          <div style="padding:16px 20px">
             <div class="table-wrap">
               <table>
                 <thead>
@@ -1251,9 +1291,11 @@
       const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
       const sortedGymnasts = [...glist].sort((a, b) => (a.number || 0) - (b.number || 0));
       return `
-        <div class="level-section">
-          <div class="level-heading">${escHtml(levelName)}${agePill}</div>
-          ${sortedGymnasts.map(g => renderGymnastCard(rid, g)).join("")}
+        <div class="level-card">
+          <div class="level-card-header">${escHtml(levelName)}${ageLabel ? ` <span style="font-size:14px;font-weight:600;color:var(--text);background:rgba(0,13,255,0.06);padding:4px 12px;border-radius:99px">${escHtml(ageLabel)}</span>` : ""}</div>
+          <div style="padding:16px 20px">
+            ${sortedGymnasts.map(g => renderGymnastCard(rid, g)).join("")}
+          </div>
         </div>
       `;
     }).join("");
@@ -1291,9 +1333,9 @@
         <div class="comp-meta">
           ${dateStr ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 7h12M5 1v4M11 1v4"/></svg>${dateStr}</span>` : ""}
           ${venue ? `<span style="display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 014.5 4.5c0 3.5-4.5 8.5-4.5 8.5S3.5 9.5 3.5 6A4.5 4.5 0 018 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>${escHtml(venue)}</span>` : ""}
-          ${fig ? `<span style="color:var(--accent2);font-weight:700">D/E Scoring</span>` : ""}
+
+
         </div>
-        ${roundBtns ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:12px">${roundBtns}</div>` : ""}
       </div>
 
       ${queryCount > 0 ? `
@@ -1302,11 +1344,12 @@
         </div>
       ` : ""}
 
-      <div class="view-toggle">
-        <button class="toggle-btn ${activeView === "myclub" ? "active" : ""}" onclick="switchView('myclub')">My Club</button>
-        <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
-        <div style="flex:1"></div>
-        <button class="switch-club-btn" onclick="switchClub()">Switch Club</button>
+      <div class="results-controls">
+        <div class="results-toggle">
+          <button class="toggle-btn ${activeView === "myclub" ? "active" : ""}" onclick="switchView('myclub')">My Club</button>
+          <button class="toggle-btn ${activeView === "overall" ? "active" : ""}" onclick="switchView('overall')">Overall</button>
+        </div>
+        ${roundBtns ? `<div class="results-rounds">${roundBtns}</div>` : ""}
       </div>
 
       ${roundContent}
@@ -1393,7 +1436,6 @@
         authedClubCode = savedCode;
         authedClubName = club.name;
         activeView = "myclub";
-        showClubHeader();
         renderPage();
         updateTimestamp();
         document.getElementById("livePill").style.display = "flex";
