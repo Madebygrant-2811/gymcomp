@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── lib imports ──
-import { supabase } from "./lib/supabase.js";
+import { supabase, touchLastActive } from "./lib/supabase.js";
 import { generateId, generateClubCode, hashPin, isHashed } from "./lib/utils.js";
 import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
 import { events, syncQueue } from "./lib/storage.js";
@@ -22,6 +22,7 @@ import AuthScreen from "./components/auth/AuthScreen.jsx";
 import ProfileOnboardingScreen from "./components/auth/ProfileOnboarding.jsx";
 import OrganizerDashboard from "./components/dashboard/OrganizerDashboard.jsx";
 import CompDashboard from "./components/dashboard/CompDashboard.jsx";
+import AdminDashboard from "./components/admin/AdminDashboard.jsx";
 import AppSidebar from "./components/layout/AppSidebar.jsx";
 import MobileLogoHeader from "./components/layout/MobileLogoHeader.jsx";
 import MobileTabBar from "./components/layout/MobileTabBar.jsx";
@@ -158,6 +159,11 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Touch last_active_at once per session ────────────────────────────
+  useEffect(() => {
+    if (currentProfile?.id && currentUser?.id) touchLastActive(currentUser.id);
+  }, [currentProfile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── localStorage size warning ─────────────────────────────────────────
   const [storageWarning, setStorageWarning] = useState(null);
@@ -975,7 +981,8 @@ export default function App() {
             filterCounts={filterCounts} activeSection=""
             onNew={handleNew} onMyEvents={null} onEditSetup={null} onManageGymnasts={null}
             onStartComp={null} onDashboard={null}
-            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout} />
+            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
+            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")} />
           <div className="app-main">
             {storageWarning && (
               <div style={{
@@ -1009,6 +1016,40 @@ export default function App() {
           onNew={handleNew} onMyEvents={null} onEditSetup={null} onManageGymnasts={null}
           onStartComp={null} onDashboard={null}
           onSettings={() => setShowAccountSettings(true)} />
+        {showAccountSettings && (
+          <AccountSettingsModal
+            account={currentAccount}
+            profile={currentProfile}
+            onSave={handleAccountSave}
+            onLogout={handleLogout}
+            onClose={() => setShowAccountSettings(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ---- ADMIN DASHBOARD ----
+  if (screen === "admin") {
+    return (
+      <>
+        <style>{css}</style>
+        <div className="app-shell">
+          <AppSidebar screen="admin" phase={null} step={null} setStep={null}
+            collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)}
+            account={currentAccount} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+            filterCounts={filterCounts} activeSection=""
+            onNew={handleNew} onMyEvents={() => setScreen("org-dashboard")} onEditSetup={null} onManageGymnasts={null}
+            onStartComp={null} onDashboard={null}
+            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
+            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")} />
+          <div className="app-main">
+            <ErrorBoundary label="admin dashboard">
+            <AdminDashboard onBack={() => setScreen("org-dashboard")} />
+            </ErrorBoundary>
+          </div>
+        </div>
+        <MobileLogoHeader onGoHome={() => setScreen("org-dashboard")} />
         {showAccountSettings && (
           <AccountSettingsModal
             account={currentAccount}

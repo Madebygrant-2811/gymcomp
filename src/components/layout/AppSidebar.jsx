@@ -4,7 +4,7 @@ import GymCompLogomark from "../../assets/Logomark.svg";
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // SVG icon helpers (16x16)
@@ -112,6 +112,18 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
                 count={filterCounts[f.value]}
                 onClick={() => setStatusFilter(prev => prev === f.value ? "all" : f.value)} />
             ))}
+            {isAdmin && (<>
+              <div className="as-divider" />
+              <NavItem icon={icons.gauge} label="Admin" active={false} onClick={onAdmin} />
+            </>)}
+          </>)}
+
+          {/* ── admin context ── */}
+          {screen === "admin" && (<>
+            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <div className="as-divider" />
+            <div className="as-section-title">Admin</div>
+            <NavItem icon={icons.gauge} label="Dashboard" active />
           </>)}
 
           {/* ── active / phase 1 (edit setup) ── */}

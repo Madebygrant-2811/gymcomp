@@ -230,12 +230,6 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
           style={{ borderLeftColor: isSelected ? "var(--brand-01)" : sc.border, position: "relative", cursor: isSelectable ? "pointer" : undefined }}
           onClick={isSelectable ? toggleSelect : undefined}
         >
-          {/* Selection checkbox */}
-          {isSelectable && (
-            <div className="od-select-check" style={{ background: isSelected ? "var(--brand-01)" : "transparent", borderColor: isSelected ? "var(--brand-01)" : "var(--text-tertiary)" }}>
-              {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            </div>
-          )}
           {/* Delete button — top right (hidden for archived since CTA handles it) */}
           {!isArchived && (
             <button onClick={() => handleDelete(ev)}
@@ -244,6 +238,12 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
             </button>
           )}
           <div className="od-card-top">
+            {/* Selection checkbox — sits above the status pill */}
+            {isSelectable && (
+              <div className="od-select-check" style={{ background: isSelected ? "var(--brand-01)" : "transparent", borderColor: isSelected ? "var(--brand-01)" : "var(--text-tertiary)" }}>
+                {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 6l2.5 2.5 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+            )}
             <div className="od-card-status-pill">
               <span className="od-card-status-dot" style={{ background: sc.dot }} />
               <span style={{ fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font-display)" }}>
@@ -372,7 +372,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         .od-card-draft-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);font-size:12px;color:#92600a;font-family:var(--font-display);line-height:1.4;}
         .od-card-btn-icon.danger{border:1px solid red;background:none;}
         .od-card-btn-icon.danger:hover{background:#fee;}
-        .od-select-check{position:absolute;top:12px;left:-3px;width:20px;height:20px;border-radius:50%;border:2px solid var(--text-tertiary);display:flex;align-items:center;justify-content:center;z-index:1;transition:background 0.15s,border-color 0.15s;}
+        .od-select-check{width:20px;height:20px;border-radius:50%;border:2px solid var(--text-tertiary);display:flex;align-items:center;justify-content:center;transition:background 0.15s,border-color 0.15s;align-self:flex-start;}
         .od-card-selected{background:rgba(0,13,255,0.03)!important;}
         .od-bulk-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:48px;border:1.5px solid var(--border);background:var(--background-light);font-family:var(--font-display);font-size:12px;font-weight:600;color:var(--text-primary);cursor:pointer;white-space:nowrap;}
         .od-bulk-btn:hover{background:#f0f0f0;}
