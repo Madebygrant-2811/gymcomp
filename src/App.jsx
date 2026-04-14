@@ -50,6 +50,10 @@ export default function App() {
   const [filterCounts, setFilterCounts] = useState({ draft: 0, active: 0, completed: 0, archived: 0 });
   // Current event record (from events store) — links comp to account
   const [currentEventId, setCurrentEventId] = useState(null);
+  // PIN role state (judge / scorekeeper — PIN-only sessions)
+  const [pinRole, setPinRole] = useState(null);           // "judge" | "scorekeeper" | null
+  const [lockedApparatus, setLockedApparatus] = useState(null); // string | null
+  const [activeRound, setActiveRound] = useState(null);  // lifted for PIN sidebar
 
   // Derived account shape — keeps all downstream component code unchanged
   const currentAccount = currentUser ? {
@@ -89,6 +93,7 @@ export default function App() {
   const [gymnasts, setGymnasts] = useState([]);
   const [scores, setScores] = useState({});
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
+  const effectiveActiveRound = activeRound ?? compData?.rounds?.[0]?.id ?? "";
 
   // ── Draft buffer for Setup — isolates edits until explicit save ──
   const [draftCompData, setDraftCompData] = useState(null);
@@ -152,6 +157,8 @@ export default function App() {
         hasAuthed.current = false;
         setCurrentUser(null);
         setCurrentProfile(null);
+        setPinRole(null);
+        setLockedApparatus(null);
         setAuthLoading(false);
         setScreen("auth-login");
       }
@@ -825,12 +832,15 @@ export default function App() {
   }, [isDirty]);
 
   // ---- Resume competition (PIN-only path for judges / no-account users) ----
-  const handleResume = async (id, savedData) => {
+  const handleResume = async (id, savedData, role, apparatus) => {
     setCompId(id);
     const rawPin = savedData.pin || null;
     setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
     setCompDataRaw(savedData.compData || {});
     setGymnasts(savedData.gymnasts || []);
+    // Set PIN role state
+    setPinRole(role || null);
+    setLockedApparatus(apparatus || null);
     // Scores exclusively from table
     const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", id);
     if (tableRows && tableRows.length > 0) {
@@ -1116,11 +1126,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Nav bar — hidden during setup (phase 1), dashboard, gymnast management, and phase 2 for organisers */}
-      {!(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts" || phase === 2)) && (
+      {/* Nav bar — hidden during setup, dashboard, gymnast management, and phase 2 for ALL users */}
+      {phase !== 2 && !(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts")) && (
         <nav className="nav">
           {!currentAccount && (
-            <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => setScreen("auth-login")}>GYMCOMP<span>.</span></div>
+            <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }}>GYMCOMP<span>.</span></div>
           )}
           {currentAccount && <div style={{ width: 8 }} />}
 
@@ -1141,7 +1151,7 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {phase === 2 && (
+            {phase === 2 && pinRole !== "judge" && (
               <>
                 <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
                   Export XLSX
@@ -1247,7 +1257,11 @@ export default function App() {
           <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} setStep={setStep}
             onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
             isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue}
-            onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys} />
+            onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys}
+            pinRole={pinRole} lockedApparatus={lockedApparatus}
+            activeRound={!currentAccount ? effectiveActiveRound : undefined}
+            setActiveRound={!currentAccount ? setActiveRound : undefined}
+            onExit={!currentAccount ? () => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); } : undefined} />
         </div>
         </ErrorBoundary>
       ) : step === 2 ? (
@@ -1289,8 +1303,26 @@ export default function App() {
             {activeContent}
           </div>
         </div>
+      ) : phase === 2 ? (
+        /* Judge/scorekeeper PIN mode — sidebar with rounds + apparatus identity */
+        <div className="app-shell">
+          <AppSidebar
+            screen="pin-judge"
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(c => !c)}
+            pinRole={pinRole}
+            lockedApparatus={lockedApparatus}
+            rounds={compData.rounds || []}
+            activeRound={effectiveActiveRound}
+            setActiveRound={setActiveRound}
+            onExit={() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }}
+          />
+          <div className="app-main" ref={appMainRef}>
+            {activeContent}
+          </div>
+        </div>
       ) : (
-        /* Judge mode — no sidebar, current layout */
+        /* Other non-account screens */
         <div className="app">
           {activeContent}
         </div>

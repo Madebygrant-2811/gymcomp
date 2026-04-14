@@ -4,7 +4,7 @@ import GymCompLogomark from "../../assets/Logomark.svg";
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // SVG icon helpers (16x16)
@@ -181,18 +181,39 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
                 onClick={() => setStep(s.step)} />
             ))}
           </>)}
+
+          {/* ── PIN judge/scorekeeper context ── */}
+          {screen === "pin-judge" && (<>
+            <div className="as-section-title">Rounds</div>
+            {(rounds || []).map(r => (
+              <NavItem key={r.id} icon={icons.clock} label={r.name}
+                active={activeRound === r.id}
+                onClick={() => setActiveRound(r.id)} />
+            ))}
+          </>)}
         </div>
       </div>
 
       <div className="as-bottom">
-        <button className="as-account" onClick={onSettings} title={collapsed ? "Account" : undefined}>
-          <div className="as-account-avatar">{initial}</div>
-          <span className="as-account-label">{account?.name || account?.email || "Account"}</span>
-        </button>
-        <button className="as-signout" onClick={onLogout}>
-          {icons.logout}
-          <span className="as-label">Sign Out</span>
-        </button>
+        {screen === "pin-judge" ? (<>
+          <div className="as-account" style={{ cursor: "default" }}>
+            <div className="as-account-avatar" style={{ background: "var(--brand-01)" }}>{icons.judge}</div>
+            <span className="as-account-label">{lockedApparatus || "Scorekeeper"}</span>
+          </div>
+          <button className="as-signout" onClick={onExit}>
+            {icons.logout}
+            <span className="as-label">Exit</span>
+          </button>
+        </>) : (<>
+          <button className="as-account" onClick={onSettings} title={collapsed ? "Account" : undefined}>
+            <div className="as-account-avatar">{initial}</div>
+            <span className="as-account-label">{account?.name || account?.email || "Account"}</span>
+          </button>
+          <button className="as-signout" onClick={onLogout}>
+            {icons.logout}
+            <span className="as-label">Sign Out</span>
+          </button>
+        </>)}
       </div>
     </div>
   );

@@ -5,8 +5,10 @@ import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import GymCompLogomark from "../../assets/Logomark.svg";
 
-function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys }) {
-  const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
+function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
+  const [localRound, setLocalRound] = useState(compData.rounds[0]?.id || "");
+  const activeRound = activeRoundProp !== undefined ? activeRoundProp : localRound;
+  const setActiveRound = setActiveRoundProp || setLocalRound;
   const [queryModal, setQueryModal] = useState(null); // { gid, app }
   const [queryNote, setQueryNote] = useState("");
   const [sheetReceived, setSheetReceived] = useState({});
@@ -18,7 +20,9 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const [modalPristine, setModalPristine] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
   const fig = true;
-  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const isLockedJudge = pinRole === "judge" && lockedApparatus;
+  const scoringApparatus = isLockedJudge ? allScoringApparatus.filter(a => a === lockedApparatus) : allScoringApparatus;
 
   // Topbar hide-on-scroll
   const [topbarHidden, setTopbarHidden] = useState(false);
@@ -497,24 +501,32 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
           {isOnline !== false && syncStatus === "saving" && (
             <span className="setup-topbar-sync" style={{ color: "rgba(255,255,255,0.5)" }}>Saving…</span>
           )}
-          {onSharePublic && (
+          {!isLockedJudge && onSharePublic && (
             <button className="btn btn-sm" onClick={onSharePublic}
               style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
               Share Live Scores — Public
             </button>
           )}
-          {onShareCoach && (
+          {!isLockedJudge && onShareCoach && (
             <button className="btn btn-sm" onClick={onShareCoach}
               style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.25)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.5)" }}>
               Share Live Scores — Coaches
             </button>
           )}
+          {onExit && (
+            <span className="pin-mobile-only">
+              <button className="btn btn-sm" onClick={onExit}
+                style={{ fontSize: 12, padding: "6px 14px", background: "rgba(255,255,255,0.15)", color: "var(--text-alternate)", border: "1px solid rgba(255,255,255,0.3)" }}>
+                Exit
+              </button>
+            </span>
+          )}
         </div>
       </div>
 
       <div className="si-body" style={{ marginTop: 24 }}>
-        {/* ── Sheet Received Tracker ─────────────────────────── */}
-        {allGroups.length > 0 && appCount > 0 && (
+        {/* ── Sheet Received Tracker (hidden for PIN judges) ── */}
+        {!onExit && allGroups.length > 0 && appCount > 0 && (
           <div style={{ marginBottom: 32 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -574,19 +586,40 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
           </div>
         )}
 
-        <div className="page-title" style={{ fontSize: 22, marginBottom: 16 }}>Scores</div>
+        {onExit && (
+          <div className="pin-mobile-only" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 16 }}>
+            {isLockedJudge && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "5px 14px", borderRadius: 56,
+                background: "var(--brand-01)", color: "var(--text-alternate)",
+                fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600, letterSpacing: 0.3,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14V3a1 1 0 00-1-1H5a1 1 0 00-1 1v11M6 5h4M6 8h4M6 11h2"/></svg>
+                {lockedApparatus}
+              </span>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={onExit}
+              style={{ fontSize: 12, padding: "5px 14px" }}>
+              Exit
+            </button>
+          </div>
+        )}
 
         {/* ── Search + Round Tabs ── */}
         <div className="si-toolbar">
-          <input
-            className="input si-search"
-            type="text"
-            placeholder="Search by name, number, or club..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{ marginBottom: 0 }}
-          />
-          <div className="tabs">
+          <div className="si-search" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <label className="label" style={{ marginBottom: 0, whiteSpace: "nowrap", flexShrink: 0 }}>Search by name, number, or club</label>
+            <input
+              className="input"
+              type="text"
+              placeholder="Start typing..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ marginBottom: 0 }}
+            />
+          </div>
+          <div className={`tabs${onExit ? " pin-mobile-only" : ""}`}>
             {compData.rounds.map(r => (
               <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
                 onClick={() => setActiveRound(r.id)}>{r.name}</button>

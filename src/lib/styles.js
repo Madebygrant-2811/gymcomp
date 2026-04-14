@@ -194,7 +194,7 @@ export const css = `
   .si-score-val { font-weight: 700; font-size: 13px; color: var(--text); }
   .si-score-clickable { cursor: pointer; padding: 4px 10px; border-radius: 6px; transition: all 0.15s; }
   .si-score-clickable:hover { background: rgba(0,13,255,0.06); color: var(--accent); }
-  .si-search { max-width: 320px; margin-bottom: 16px; }
+  .si-search { max-width: 600px; margin-bottom: 16px; }
   .si-modal-total { display: flex; align-items: center; justify-content: center; margin: 32px auto 32px; width: fit-content; min-width: 140px; padding: 14px 28px 20px; font-size: 36px; font-weight: 800; font-family: var(--font-display); letter-spacing: 1px; color: var(--text); background: #fff; border: 2px solid var(--text); border-radius: 6px; box-shadow: 0 4px 0 var(--text), 0 6px 12px rgba(0,0,0,0.12); position: relative; }
   .si-modal-total::before { content: "SCORE"; position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 700; letter-spacing: 2px; color: var(--muted); background: var(--surface); padding: 0 8px; }
   .si-modal-fields { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
@@ -209,6 +209,9 @@ export const css = `
     .si-table th, .si-table td { padding: 6px 6px; font-size: 12px; }
     .si-add-btn { padding: 3px 6px; font-size: 10px; }
   }
+
+  .pin-mobile-only { display: none !important; }
+  @media (max-width: 768px) { .pin-mobile-only { display: flex !important; } }
 
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
   .toggle-switch input { opacity: 0; width: 0; height: 0; }

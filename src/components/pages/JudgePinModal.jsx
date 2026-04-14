@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { hashPin, isHashed } from "../../lib/utils.js";
+import { getApparatusIcon } from "../../lib/pdf.js";
 
 // ============================================================
-// JUDGE PIN MODAL — competition ID + PIN entry overlay
+// JUDGE PIN MODAL — competition ID + PIN + role + apparatus
 // ============================================================
 function JudgePinModal({ onResume, onClose }) {
   const [resumeId, setResumeId] = useState("");
@@ -14,10 +15,21 @@ function JudgePinModal({ onResume, onClose }) {
   const [compHasPin, setCompHasPin] = useState(false);
   const [fetchedData, setFetchedData] = useState(null);
 
+  // Post-PIN steps
+  const [modalStep, setModalStep] = useState("pin"); // "pin" | "role" | "apparatus"
+  const [validatedId, setValidatedId] = useState("");
+
   // Reset to step 1 if ID changes after check
   const handleIdChange = (e) => {
     setResumeId(e.target.value);
     if (compChecked) { setCompChecked(false); setCompHasPin(false); setFetchedData(null); setResumePin(""); setResumeError(""); }
+  };
+
+  // After PIN validated (or no PIN), go to role selection
+  const proceedToRole = (id, data) => {
+    setFetchedData(data);
+    setValidatedId(id);
+    setModalStep("role");
   };
 
   // Step 1: check competition ID
@@ -35,8 +47,7 @@ function JudgePinModal({ onResume, onClose }) {
       setCompHasPin(true);
       setCompChecked(true);
     } else {
-      // No PIN — proceed directly
-      onResume(id, data.data);
+      proceedToRole(id, data.data);
     }
   };
 
@@ -48,109 +59,159 @@ function JudgePinModal({ onResume, onClose }) {
       ? storedPin === await hashPin(resumePin)
       : storedPin === resumePin;
     if (!match) { setResumeError("Incorrect PIN."); return; }
-    onResume(resumeId.trim(), fetchedData);
+    proceedToRole(resumeId.trim(), fetchedData);
   };
 
-  const inputStyle = {
-    width: "100%", boxSizing: "border-box", border: "1px solid var(--border)",
-    borderRadius: 72, padding: "16px 24px", fontFamily: "inherit",
-    fontSize: 16, color: "var(--text-primary)", outline: "none", background: "transparent",
+  // Role selection
+  const handleRoleSelect = (role) => {
+    if (role === "scorekeeper") {
+      onResume(validatedId, fetchedData, "scorekeeper", null);
+    } else {
+      const apparatus = (fetchedData.compData?.apparatus || []).filter(a => a !== "Rest");
+      if (apparatus.length === 1) {
+        onResume(validatedId, fetchedData, "judge", apparatus[0]);
+      } else {
+        setModalStep("apparatus");
+      }
+    }
   };
 
-  const btnStyle = (disabled) => ({
-    width: "100%", background: "var(--brand-01)", border: "none", borderRadius: 72,
-    padding: 16, fontFamily: "inherit", fontWeight: 400,
-    fontSize: 16, color: "var(--text-alternate)", textAlign: "center",
-    letterSpacing: "0.3px", cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.7 : 1,
-  });
+  // Apparatus selection
+  const handleApparatusSelect = (app) => {
+    onResume(validatedId, fetchedData, "judge", app);
+  };
+
+  const apparatus = (fetchedData?.compData?.apparatus || []).filter(a => a !== "Rest");
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: "var(--background-light)", borderRadius: 24, padding: 32,
-          width: 347, maxWidth: "calc(100vw - 32px)", position: "relative",
-          display: "flex", flexDirection: "column", gap: 16, boxSizing: "border-box",
-          fontFamily: "var(--font-display)",
-        }}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: "absolute", top: 13, right: 13, width: 25, height: 25,
-            background: "none", border: "none", cursor: "pointer", padding: 0,
-            fontFamily: "inherit", fontSize: 16, color: "var(--text-tertiary)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-          aria-label="Close"
-        >
-          &#x2715;
-        </button>
+    <>
+      <style>{`
+        .jpm-header { font-weight: 700; font-size: 16px; color: var(--text); margin-bottom: 4px; }
+        .jpm-sub { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+        .jpm-error { font-size: 12px; color: var(--danger); margin-top: -4px; }
+        .jpm-roles { display: flex; gap: 10px; margin-top: 4px; }
+        .jpm-role-card { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }
+        .jpm-role-card:hover { border-color: var(--accent); background: rgba(0,13,255,0.03); box-shadow: 0 2px 8px rgba(0,13,255,0.08); }
+        .jpm-role-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(0,13,255,0.06); display: flex; align-items: center; justify-content: center; }
+        .jpm-role-label { font-weight: 700; font-size: 14px; color: var(--text); }
+        .jpm-role-desc { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.4; }
+        .jpm-app-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .jpm-app-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 20px; border-radius: 56px; border: 1.5px solid var(--border); background: var(--surface); font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }
+        .jpm-app-btn:hover { border-color: var(--accent); background: rgba(0,13,255,0.03); box-shadow: 0 2px 8px rgba(0,13,255,0.08); }
+        .jpm-back { background: none; border: none; cursor: pointer; font-family: var(--font-body); font-size: 12px; color: var(--muted); padding: 6px 0; align-self: center; margin-top: 4px; }
+        .jpm-back:hover { color: var(--text); }
+      `}</style>
 
-        {/* Header */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ fontFamily: "inherit", fontWeight: 600, fontSize: 18, color: "var(--text-primary)", lineHeight: 1.2 }}>
-            Enter Competition
-          </div>
-          <div style={{ fontFamily: "inherit", fontSize: 10, color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-            {compChecked && compHasPin
-              ? "This competition requires a PIN. Please enter the PIN provided by the organiser."
-              : "If you are a Judge or someone entering the Scores please enter the Competition ID — if you are unsure please contact your Competition Organiser."}
-          </div>
-        </div>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
 
-        {/* Form */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <input
-            placeholder="Competition ID"
-            value={resumeId}
-            onChange={handleIdChange}
-            onKeyDown={e => e.key === "Enter" && (!compChecked ? handleCheck() : handlePinSubmit())}
-            autoFocus={!compChecked}
-            style={inputStyle}
-          />
-          {compChecked && compHasPin && (
-            <input
-              placeholder="Enter PIN"
-              type="password"
-              maxLength={4}
-              value={resumePin}
-              onChange={e => { setResumePin(e.target.value); setResumeError(""); }}
-              onKeyDown={e => e.key === "Enter" && handlePinSubmit()}
-              autoFocus
-              style={inputStyle}
-            />
-          )}
-          {resumeError && <div style={{ fontSize: 13, color: "#e53e3e", paddingLeft: 24 }}>{resumeError}</div>}
-          {!compChecked ? (
-            <button
-              onClick={handleCheck}
-              disabled={checking || !resumeId.trim()}
-              style={btnStyle(checking || !resumeId.trim())}
-            >
-              {checking ? "Checking…" : "Continue →"}
+          {/* ── PIN entry step ── */}
+          {modalStep === "pin" && (<>
+            <div className="jpm-header">Enter Competition</div>
+            <div className="jpm-sub">
+              {compChecked && compHasPin
+                ? "This competition requires a PIN. Please enter the PIN provided by the organiser."
+                : "Enter the Competition ID to join as a Judge or Scorekeeper."}
+            </div>
+
+            <div className="field">
+              <label className="label">Competition ID</label>
+              <input
+                className="input"
+                placeholder="e.g. abc123"
+                value={resumeId}
+                onChange={handleIdChange}
+                onKeyDown={e => e.key === "Enter" && (!compChecked ? handleCheck() : handlePinSubmit())}
+                autoFocus={!compChecked}
+              />
+            </div>
+
+            {compChecked && compHasPin && (
+              <div className="field">
+                <label className="label">PIN</label>
+                <input
+                  className="input"
+                  placeholder="Enter PIN"
+                  type="password"
+                  maxLength={4}
+                  value={resumePin}
+                  onChange={e => { setResumePin(e.target.value); setResumeError(""); }}
+                  onKeyDown={e => e.key === "Enter" && handlePinSubmit()}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {resumeError && <div className="jpm-error">{resumeError}</div>}
+
+            {!compChecked ? (
+              <button
+                className="btn btn-primary"
+                onClick={handleCheck}
+                disabled={checking || !resumeId.trim()}
+                style={{ width: "100%", justifyContent: "center" }}
+              >
+                {checking ? "Checking…" : "Continue"}
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={handlePinSubmit}
+                disabled={!resumePin.trim()}
+                style={{ width: "100%", justifyContent: "center" }}
+              >
+                Enter Competition
+              </button>
+            )}
+          </>)}
+
+          {/* ── Role selection step ── */}
+          {modalStep === "role" && (<>
+            <div className="jpm-header">What is your role?</div>
+            <div className="jpm-sub">Select how you'll be using the competition.</div>
+
+            <div className="jpm-roles">
+              <button className="jpm-role-card" onClick={() => handleRoleSelect("judge")}>
+                <div className="jpm-role-icon">
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14V3a1 1 0 00-1-1H5a1 1 0 00-1 1v11M6 5h4M6 8h4M6 11h2"/></svg>
+                </div>
+                <div className="jpm-role-label">Judge</div>
+                <div className="jpm-role-desc">Locked to one apparatus</div>
+              </button>
+              <button className="jpm-role-card" onClick={() => handleRoleSelect("scorekeeper")}>
+                <div className="jpm-role-icon">
+                  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 2v12"/></svg>
+                </div>
+                <div className="jpm-role-label">Scorekeeper</div>
+                <div className="jpm-role-desc">Full access to all apparatus</div>
+              </button>
+            </div>
+
+            <button className="jpm-back" onClick={() => { setModalStep("pin"); setCompChecked(false); setCompHasPin(false); setResumePin(""); }}>
+              ← Back
             </button>
-          ) : (
-            <button
-              onClick={handlePinSubmit}
-              disabled={!resumePin.trim()}
-              style={btnStyle(!resumePin.trim())}
-            >
-              Enter Competition →
+          </>)}
+
+          {/* ── Apparatus selection step (Judge only) ── */}
+          {modalStep === "apparatus" && (<>
+            <div className="jpm-header">Which apparatus?</div>
+            <div className="jpm-sub">You'll be locked to this apparatus for the session.</div>
+
+            <div className="jpm-app-list">
+              {apparatus.map(app => (
+                <button key={app} className="jpm-app-btn" onClick={() => handleApparatusSelect(app)}>
+                  {getApparatusIcon(app)} {app}
+                </button>
+              ))}
+            </div>
+
+            <button className="jpm-back" onClick={() => setModalStep("role")}>
+              ← Back
             </button>
-          )}
+          </>)}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
