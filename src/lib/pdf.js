@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { gymnast_key, denseRank } from "./scoring.js";
+import { NGA_FALL_PENALTY } from "./constants.js";
 
 const escHtml = (s) => {
   if (s == null) return "";
@@ -1114,7 +1115,8 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     return result;
   };
 
-  const fig = true;
+  const isNGA = compData.scoringMode === "nga";
+  const fig = !isNGA;
   const judgeCount = (app) => (compData.judges || []).filter(j => j.apparatus === app).length;
 
   // ── Sheet 1: Results ──
@@ -1173,9 +1175,13 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
 
   // ── Sheet 2: Raw Scores ──
   const rawRows = [];
-  const maxJudges = fig ? Math.max(1, ...apparatus.map(a => judgeCount(a))) : 0;
+  const maxJudges = (fig || isNGA) ? Math.max(1, ...apparatus.map(a => judgeCount(a))) : 0;
   const rawHeader = ["#", "Gymnast", "Round", "Apparatus"];
-  if (fig) {
+  if (isNGA) {
+    rawHeader.push("SV");
+    for (let i = 1; i <= maxJudges; i++) rawHeader.push(`Exec Judge ${i}`);
+    rawHeader.push("Avg Exec", "Neutral", "Falls");
+  } else if (fig) {
     rawHeader.push("D Score");
     for (let i = 1; i <= maxJudges; i++) rawHeader.push(`E Judge ${i}`);
     rawHeader.push("Avg E", "Bonus", "Penalty");
@@ -1189,21 +1195,39 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     roundGymnasts.forEach(g => {
       apparatus.forEach(app => {
         const finalScore = getScore(round.id, g.id, app);
-        if (finalScore === 0 && !fig) return;
+        if (finalScore === 0 && !fig && !isNGA) return;
         const bk = `${round.id}__${g.id}__${app}`;
         const isDual = scores[`${bk}__dualVault`] === "1";
         const row = [g.number || "", g.name, round.name, app];
-        if (fig) {
+        if (isNGA) {
+          const sv = parseFloat(scores[`${bk}__dv`]) || 0;
+          row.push(sv || "");
+          const n = judgeCount(app);
+          let eSum = 0, eCount = 0;
+          for (let i = 1; i <= maxJudges; i++) {
+            if (i <= Math.max(n, 1)) {
+              const v = parseFloat(scores[`${bk}__e${i}`]);
+              if (!isNaN(v)) { eSum += v; eCount++; row.push(v); }
+              else row.push("");
+            } else {
+              row.push("");
+            }
+          }
+          const eAvg = eCount > 0 ? parseFloat((eSum / eCount).toFixed(3)) : "";
+          const neutral = parseFloat(scores[`${bk}__bon`]) || "";
+          const pen = parseFloat(scores[`${bk}__pen`]) || 0;
+          const fallsCount = NGA_FALL_PENALTY > 0 ? Math.round(pen / NGA_FALL_PENALTY) : 0;
+          row.push(eAvg, neutral, fallsCount || "");
+        } else if (fig) {
           if (isDual) {
-            // Dual vault: output V1 Final, V2 Final, then pad remaining columns, then Average
             const v1fin = parseFloat(scores[`${bk}__v1fin`]) || 0;
             const v2fin = parseFloat(scores[`${bk}__v2fin`]) || 0;
-            row.push(v1fin > 0 ? v1fin : ""); // D Score column → V1 Final
+            row.push(v1fin > 0 ? v1fin : "");
             for (let i = 1; i <= maxJudges; i++) {
-              if (i === 1) row.push(v2fin > 0 ? v2fin : ""); // First E Judge column → V2 Final
+              if (i === 1) row.push(v2fin > 0 ? v2fin : "");
               else row.push("");
             }
-            row.push("", "", ""); // Avg E, Bonus, Penalty blank for dual vault
+            row.push("", "", "");
           } else {
             const dv = parseFloat(scores[`${bk}__dv`]) || 0;
             row.push(dv || "");

@@ -258,7 +258,12 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
             )}
             <div style={isDraft ? { opacity: 0.45 } : undefined}>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className="od-card-title">{cd.name || "Untitled Competition"}</div>
+                <div className="od-card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {cd.name || "Untitled Competition"}
+                  {cd.scoringMode === "nga" && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "var(--brand-03)", color: "var(--brand-01)", whiteSpace: "nowrap" }}>NGA</span>
+                  )}
+                </div>
                 <div className="od-card-meta">
                   {cd.date && (
                     <div className="od-card-meta-row">

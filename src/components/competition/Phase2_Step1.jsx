@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { gymnast_key, isDualVault } from "../../lib/scoring.js";
+import { gymnast_key, isDualVault, calculateNGAScore } from "../../lib/scoring.js";
+import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import GymCompLogomark from "../../assets/Logomark.svg";
@@ -19,7 +20,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const [modalBufs, setModalBufs] = useState({});
   const [modalPristine, setModalPristine] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
-  const fig = true;
+  const isNGA = compData.scoringMode === "nga";
+  const fig = !isNGA;
   const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const isLockedJudge = pinRole === "judge" && lockedApparatus;
   const scoringApparatus = isLockedJudge ? allScoringApparatus.filter(a => a === lockedApparatus) : allScoringApparatus;
@@ -68,12 +70,33 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     next[baseKey(gid, app)] = hasAny ? String(parseFloat(total.toFixed(3))) : "";
   };
 
+  // ── NGA total recalculation ────────────────────────────────
+  const recalcNGATotal = (next, gid, app) => {
+    const sv = parseFloat(next[subKey(gid, app, "dv")]) || 0;
+    const neutral = parseFloat(next[subKey(gid, app, "bon")]) || 0; // NGA: bon field = neutral deductions
+    const fallsPen = parseFloat(next[subKey(gid, app, "pen")]) || 0; // NGA: pen field = falls × 0.5
+    const falls = fallsPen / NGA_FALL_PENALTY;
+    const n = judgeCount(app);
+    const judgeDeductions = [];
+    for (let i = 1; i <= Math.max(n, 1); i++) {
+      const v = parseFloat(next[subKey(gid, app, `e${i}`)]);
+      if (!isNaN(v)) judgeDeductions.push(v);
+    }
+    const hasAny = sv > 0;
+    if (hasAny) {
+      const total = calculateNGAScore(sv, judgeDeductions, neutral, falls);
+      next[baseKey(gid, app)] = String(parseFloat(total.toFixed(3)));
+    } else {
+      next[baseKey(gid, app)] = "";
+    }
+  };
+
   const commitField = (gid, app, sub, raw) => {
     const rounded = round2dp(raw);
     const val = rounded === "" ? "" : rounded;
     setScores(s => {
       const n = { ...s, [sub ? subKey(gid, app, sub) : baseKey(gid, app)]: val };
-      recalcTotal(n, gid, app);
+      (isNGA ? recalcNGATotal : recalcTotal)(n, gid, app);
       return n;
     });
   };
@@ -259,6 +282,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         fields[`e${i}`] = v;
         bufs[`e${i}`] = toBuf(v);
       }
+      // NGA: derive falls count from stored penalty value for display
+      if (isNGA) {
+        const penVal = parseFloat(readVal(gid, app, "pen")) || 0;
+        const fallsCount = NGA_FALL_PENALTY > 0 ? Math.round(penVal / NGA_FALL_PENALTY) : 0;
+        fields._falls = fallsCount;
+      }
     }
     setModalFields(fields);
     setModalBufs(bufs);
@@ -282,6 +311,21 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
     const penalty = parseFloat(modalFields.pen) || 0;
     const hasAny = dv > 0 || bonus > 0 || eAvg > 0;
     return hasAny ? Math.max(0, dv + bonus + eAvg - penalty) : 0;
+  };
+
+  const calcNGAModalTotal = () => {
+    const sv = parseFloat(modalFields.dv) || 0;
+    if (sv <= 0) return 0;
+    const neutral = parseFloat(modalFields.bon) || 0;
+    const falls = modalFields._falls || 0;
+    const app = scoreModal?.app || "";
+    const n = judgeCount(app);
+    const deductions = [];
+    for (let i = 1; i <= Math.max(n, 1); i++) {
+      const v = parseFloat(modalFields[`e${i}`]);
+      if (!isNaN(v)) deductions.push(v);
+    }
+    return calculateNGAScore(sv, deductions, neutral, falls);
   };
 
   const submitScoreModal = () => {
@@ -330,8 +374,50 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         flatSubset[bk] = avg > 0 ? String(parseFloat(avg.toFixed(3))) : "";
         onScoreCommit(activeRound, gid, app, flatSubset);
       }
+    } else if (isNGA) {
+      // NGA mode submit
+      // NGA field reuse:
+      //   dv      → SV (Start Value)
+      //   e1..eN  → array of per-judge execution deductions (raw values, NOT subtracted from 10)
+      //   bon     → neutral deductions total
+      //   pen     → falls × NGA_FALL_PENALTY (stored as the deduction amount, not fall count)
+      const falls = modalFields._falls || 0;
+      const penVal = round2dp(String(falls * NGA_FALL_PENALTY));
+
+      setScores(s => {
+        const next = { ...s };
+        next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
+        next[subKey(gid, app, "bon")] = round2dp(modalFields.bon);
+        next[subKey(gid, app, "pen")] = penVal;
+        const n = judgeCount(app);
+        for (let i = 1; i <= Math.max(n, 1); i++) next[subKey(gid, app, `e${i}`)] = round2dp(modalFields[`e${i}`]);
+        recalcNGATotal(next, gid, app);
+        return next;
+      });
+      if (onScoreCommit) {
+        const bk = baseKey(gid, app);
+        const flatSubset = {};
+        flatSubset[`${bk}__dv`] = round2dp(modalFields.dv);
+        flatSubset[`${bk}__bon`] = round2dp(modalFields.bon);
+        flatSubset[`${bk}__pen`] = penVal;
+        const n = judgeCount(app);
+        const deductions = [];
+        for (let i = 1; i <= Math.max(n, 1); i++) {
+          flatSubset[`${bk}__e${i}`] = round2dp(modalFields[`e${i}`]);
+          const v = parseFloat(round2dp(modalFields[`e${i}`]));
+          if (!isNaN(v)) deductions.push(v);
+        }
+        const sv = parseFloat(round2dp(modalFields.dv)) || 0;
+        const neutral = parseFloat(round2dp(modalFields.bon)) || 0;
+        if (sv > 0) {
+          flatSubset[bk] = String(parseFloat(calculateNGAScore(sv, deductions, neutral, falls).toFixed(3)));
+        } else {
+          flatSubset[bk] = "";
+        }
+        onScoreCommit(activeRound, gid, app, flatSubset);
+      }
     } else {
-      // Normal submit
+      // FIG normal submit
       setScores(s => {
         const next = { ...s };
         next[subKey(gid, app, "dv")] = round2dp(modalFields.dv);
@@ -740,7 +826,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         const g = gymnasts.find(x => x.id === scoreModal.gid);
         if (!g) return null;
         const dual = modalFields._dual;
-        const modalTotal = dual ? calcDualVaultModalTotal() : calcModalTotal();
+        const modalTotal = dual ? calcDualVaultModalTotal() : (isNGA ? calcNGAModalTotal() : calcModalTotal());
+        const ngaCourtesyApplied = isNGA && modalTotal === NGA_COURTESY_SCORE && (parseFloat(modalFields.dv) || 0) > 0;
         const n = judgeCount(scoreModal.app);
 
         const vaultSection = (prefix, label, autoFocusFirst) => (
@@ -797,6 +884,50 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                     Enter deductions — subtracted from 10. Final = average of both vaults.
                   </div>
                 </>
+              ) : isNGA ? (
+                <>
+                  <div className="si-modal-fields">
+                    <div className="si-modal-field">
+                      <label>Start Value (SV)</label>
+                      {scoreInput("dv", NGA_MAX_SV, true)}
+                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Max 10.0</span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6, marginTop: 8 }}>
+                    Execution Deductions {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
+                    Total execution deductions for this routine (0.05 increments)
+                  </div>
+                  <div className="si-modal-fields">
+                    {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                      <div className="si-modal-field" key={i}>
+                        <label>Judge {i + 1} deductions</label>
+                        {scoreInput(`e${i + 1}`, 10)}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="si-modal-fields" style={{ marginTop: 8 }}>
+                    <div className="si-modal-field">
+                      <label>Neutral deductions</label>
+                      {scoreInput("bon", 10)}
+                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Missing requirements, restricted skills, no-dismount, etc.</span>
+                    </div>
+                    <div className="si-modal-field">
+                      <label>Falls</label>
+                      <input className="score-input" type="number" inputMode="numeric" min="0" step="1"
+                        value={modalFields._falls || 0}
+                        onChange={e => {
+                          const v = Math.max(0, parseInt(e.target.value) || 0);
+                          mf("_falls", v);
+                        }}
+                        style={{ width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 }} />
+                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Each fall = 0.5 penalty</span>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="si-modal-fields">
@@ -834,6 +965,11 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
               <div className="si-modal-total">
                 {modalTotal > 0 ? modalTotal.toFixed(3) : "\u2014"}
               </div>
+              {ngaCourtesyApplied && (
+                <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: -24, marginBottom: 12 }}>
+                  (courtesy score applied)
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
                 {scoreModal.isEdit && (

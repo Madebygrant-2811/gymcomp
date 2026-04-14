@@ -86,7 +86,7 @@ export default function App() {
 
   const [compData, setCompDataRaw] = useState({
     name: "", location: "", date: "", holder: "",
-    organiserName: "", venue: "",
+    organiserName: "", venue: "", scoringMode: "fig",
     allowSubmissions: true, dataConsentConfirmed: false,
     clubs: [], rounds: [], apparatus: [], levels: [], judges: [], ageRanges: []
   });
@@ -1196,7 +1196,7 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")}
+          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus}
             onSaveExit={async () => {
               // Partial save — commit draft, persist and go back
               const { compData: cd, gymnasts: g } = commitDraft();

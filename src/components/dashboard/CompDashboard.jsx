@@ -192,8 +192,11 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           <div className="card-title">Comp Overview</div>
 
         <div style={{ marginBottom: 20 }}>
-          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 500, lineHeight: 1, marginBottom: 12 }}>
+          <div className="dash-hero-title" style={{ fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 500, lineHeight: 1, marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
             {compData.name}
+            {compData.scoringMode === "nga" && (
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 99, background: "var(--brand-03)", color: "var(--brand-01)", whiteSpace: "nowrap" }}>NGA</span>
+            )}
           </div>
           <div style={{ color: "var(--muted)", fontSize: 14, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
             {compData.date && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

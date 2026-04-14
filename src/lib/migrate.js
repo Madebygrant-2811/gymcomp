@@ -9,6 +9,7 @@ export function migrateApparatus(list) {
 export function migrateCompData(cd) {
   if (!cd) return cd;
   const migrated = { ...cd };
+  if (!migrated.scoringMode) migrated.scoringMode = 'fig';
   if (migrated.apparatus) migrated.apparatus = migrateApparatus(migrated.apparatus);
   if (migrated.judges) migrated.judges = migrated.judges.map(j => ({
     ...j,

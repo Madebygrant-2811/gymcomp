@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { generateId, isFutureOrToday, todayStr } from "../../lib/utils.js";
-import { UK_LEVELS, APPARATUS_GROUPS } from "../../lib/constants.js";
+import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, SCORING_MODES } from "../../lib/constants.js";
 
 import AddressLookup from "../shared/AddressLookup.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
-function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus }) {
   const [pendingRemove, setPendingRemove] = useState(null);
+  const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" — awaiting confirmation
   const [roundCount, setRoundCount] = useState(data.rounds.length || 1);
   const [newLevel, setNewLevel] = useState("");
   const [newAgeRange, setNewAgeRange] = useState("");
@@ -238,51 +239,149 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         </div>
       </div>
 
+      {/* Scoring Mode */}
+      <div className="card" id="setup-scoring">
+        <div className="card-title">Scoring Mode</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[
+            { value: "fig", label: "FIG Scoring" },
+            { value: "nga", label: "NGA Scoring" },
+          ].map(m => {
+            const active = (data.scoringMode || "fig") === m.value;
+            const isLocked = eventStatus === "active" || eventStatus === "live" || eventStatus === "completed";
+            return (
+              <button key={m.value} className="btn"
+                disabled={isLocked}
+                onClick={() => {
+                  if (active) return;
+                  // Switching to NGA and has custom levels? Confirm first
+                  if (m.value === "nga" && data.levels.length > 0) {
+                    setPendingScoringSwitch("nga");
+                    return;
+                  }
+                  // Switching to FIG from NGA and has NGA levels? Confirm first
+                  if (m.value === "fig" && (data.scoringMode === "nga") && data.levels.length > 0) {
+                    setPendingScoringSwitch("fig");
+                    return;
+                  }
+                  setData(d => ({ ...d, scoringMode: m.value }));
+                }}
+                style={{
+                  borderRadius: 72, padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                  fontFamily: "var(--font-display)",
+                  background: active ? "var(--brand-01)" : "var(--background-neutral)",
+                  color: active ? "#fff" : "var(--text-secondary)",
+                  border: "none", cursor: isLocked ? "not-allowed" : "pointer",
+                  opacity: isLocked && !active ? 0.4 : 1,
+                }}>
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+        {(eventStatus === "active" || eventStatus === "live" || eventStatus === "completed") && (
+          <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>
+            Scoring mode is locked once the competition is started.
+          </div>
+        )}
+        {(data.scoringMode || "fig") === "nga" && (
+          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8 }}>
+            NGA uses a Perfect 10 system. Start values are capped at 10.0, execution deductions are subtracted from the start value, and the lowest possible score is 5.0 (courtesy). Use this mode for NGA UK sanctioned events.
+          </div>
+        )}
+      </div>
+
       {/* Skill Levels */}
       <div className="card" id="setup-levels">
         <div className="card-title">Skill Levels</div>
-        <div style={{ marginBottom: 14 }}>
-          <label className="label">Add from UK Gymnastics list</label>
-          <select className="select" value={newLevel}
-            onChange={e => { setNewLevel(e.target.value); if (e.target.value && e.target.value !== "__custom__") addLevelFromDropdown(e.target.value); }}>
-            <option value="">— Select a level —</option>
-            {UK_LEVELS.map(g => (
-              <optgroup key={g.group} label={g.group}>
-                {g.options.filter(o => !data.levels.find(l => l.name === o)).map(o => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        {newLevel !== "__custom__"
-          ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start", marginBottom: 12 }} onClick={() => setNewLevel("__custom__")}>＋ Add custom level</button>
-          : <div className="inline-row" style={{ marginBottom: 12 }}>
-              <div className="field" style={{ flex: 1, margin: 0 }}>
-                <input className="input" placeholder="Custom level name" value={customLevel}
-                  onChange={e => setCustomLevel(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addLevel()}
-                  autoFocus />
-              </div>
-              <button className="btn btn-secondary" onClick={() => addLevel()}>Add</button>
-              <button className="btn btn-ghost" onClick={() => { setNewLevel(""); setCustomLevel(""); }}>Cancel</button>
-            </div>
-        }
-        {data.levels.map(l => (
-          <div className="list-item list-item-level" key={l.id}>
-            <div className="list-item-content" style={{ flex: "1 1 auto", minWidth: 0 }}><strong>{l.name}</strong></div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>Rank by:</span>
-              <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
-                value={l.rankBy} onChange={e => updateLevelRank(l.id, e.target.value)}>
-                <option value="level">Level only</option>
-                <option value="level+age">Level + Age</option>
-              </select>
-            </div>
-            <button className="btn-icon" onClick={() => setPendingRemove({ type: "level", id: l.id, msg: `Remove level "${l.name}"? Gymnasts assigned will lose their level.` })}>×</button>
+        {(data.scoringMode || "fig") === "nga" ? (<>
+          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 14 }}>
+            NGA mode uses the official NGA UK level hierarchy. Tick the levels your competition will include.
           </div>
-        ))}
-        {!data.levels.length && <div className="empty">No levels added yet</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {NGA_LEVELS.map(name => {
+              const isSelected = data.levels.some(l => l.name === name);
+              return (
+                <label key={name} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "8px 14px",
+                  background: isSelected ? "rgba(0,13,255,0.04)" : "var(--bg)",
+                  border: `1px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
+                  borderRadius: "var(--radius)", cursor: "pointer", fontSize: 13,
+                  color: isSelected ? "var(--accent)" : "var(--text)", transition: "all 0.2s", userSelect: "none"
+                }}>
+                  <input type="checkbox" checked={isSelected} onChange={() => {
+                    if (isSelected) {
+                      setData(d => ({ ...d, levels: d.levels.filter(l => l.name !== name) }));
+                    } else {
+                      // Insert in NGA_LEVELS order
+                      setData(d => {
+                        const next = [...d.levels, { id: generateId(), name, rankBy: "level" }];
+                        next.sort((a, b) => NGA_LEVELS.indexOf(a.name) - NGA_LEVELS.indexOf(b.name));
+                        return { ...d, levels: next };
+                      });
+                    }
+                  }} style={{ display: "none" }} />
+                  <span style={{ fontWeight: isSelected ? 600 : 400 }}>{name}</span>
+                  {isSelected && (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto", flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>Rank by:</span>
+                      <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
+                        value={data.levels.find(l => l.name === name)?.rankBy || "level"}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => { e.stopPropagation(); updateLevelRank(data.levels.find(l => l.name === name)?.id, e.target.value); }}>
+                        <option value="level">Level only</option>
+                        <option value="level+age">Level + Age</option>
+                      </select>
+                    </div>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </>) : (<>
+          <div style={{ marginBottom: 14 }}>
+            <label className="label">Add from UK Gymnastics list</label>
+            <select className="select" value={newLevel}
+              onChange={e => { setNewLevel(e.target.value); if (e.target.value && e.target.value !== "__custom__") addLevelFromDropdown(e.target.value); }}>
+              <option value="">— Select a level —</option>
+              {UK_LEVELS.map(g => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.options.filter(o => !data.levels.find(l => l.name === o)).map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          {newLevel !== "__custom__"
+            ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start", marginBottom: 12 }} onClick={() => setNewLevel("__custom__")}>＋ Add custom level</button>
+            : <div className="inline-row" style={{ marginBottom: 12 }}>
+                <div className="field" style={{ flex: 1, margin: 0 }}>
+                  <input className="input" placeholder="Custom level name" value={customLevel}
+                    onChange={e => setCustomLevel(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addLevel()}
+                    autoFocus />
+                </div>
+                <button className="btn btn-secondary" onClick={() => addLevel()}>Add</button>
+                <button className="btn btn-ghost" onClick={() => { setNewLevel(""); setCustomLevel(""); }}>Cancel</button>
+              </div>
+          }
+          {data.levels.map(l => (
+            <div className="list-item list-item-level" key={l.id}>
+              <div className="list-item-content" style={{ flex: "1 1 auto", minWidth: 0 }}><strong>{l.name}</strong></div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Rank by:</span>
+                <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
+                  value={l.rankBy} onChange={e => updateLevelRank(l.id, e.target.value)}>
+                  <option value="level">Level only</option>
+                  <option value="level+age">Level + Age</option>
+                </select>
+              </div>
+              <button className="btn-icon" onClick={() => setPendingRemove({ type: "level", id: l.id, msg: `Remove level "${l.name}"? Gymnasts assigned will lose their level.` })}>×</button>
+            </div>
+          ))}
+          {!data.levels.length && <div className="empty">No levels added yet</div>}
+        </>)}
       </div>
 
       {/* Apparatus */}
@@ -502,6 +601,18 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 
       {pendingRemove && (
         <ConfirmModal message={pendingRemove.msg} onConfirm={doRemove} onCancel={() => setPendingRemove(null)} />
+      )}
+      {pendingScoringSwitch && (
+        <ConfirmModal
+          message={pendingScoringSwitch === "nga"
+            ? "Switching to NGA mode will replace your custom levels with the NGA level hierarchy. Your current levels will be lost. Continue?"
+            : "Switching to FIG mode will clear your NGA levels. You will need to add levels manually. Continue?"}
+          onConfirm={() => {
+            setData(d => ({ ...d, scoringMode: pendingScoringSwitch, levels: [] }));
+            setPendingScoringSwitch(null);
+          }}
+          onCancel={() => setPendingScoringSwitch(null)}
+        />
       )}
       </div>
     </div>

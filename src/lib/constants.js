@@ -31,6 +31,33 @@ export const UK_LEVELS = [
 ];
 export const UK_LEVELS_FLAT = UK_LEVELS.flatMap(g => g.options);
 
+// ── NGA (National Gymnastics Association UK) ─────────────────
+export const NGA_LEVELS = [
+  'Level 10',
+  'Level 9',
+  'Diamond',
+  'Level 8',
+  'Level 7',
+  'Platinum',
+  'Level 6',
+  'Level 5',
+  'Gold',
+  'Level 4',
+  'Level 3',
+  'Silver',
+  'Level 2 / Bronze',
+  'Level 1',
+];
+
+export const SCORING_MODES = {
+  FIG: 'fig',
+  NGA: 'nga',
+};
+
+export const NGA_COURTESY_SCORE = 5.0;
+export const NGA_FALL_PENALTY = 0.5;
+export const NGA_MAX_SV = 10.0;
+
 // ============================================================
 // UK GYMNASTICS CLUBS — scraped from BG results PDFs 2024
 // Sources: British Championships, Adult Championships, English

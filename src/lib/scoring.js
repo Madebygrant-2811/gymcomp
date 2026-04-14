@@ -1,3 +1,29 @@
+import { NGA_COURTESY_SCORE, NGA_FALL_PENALTY } from './constants.js';
+
+// ── NGA scoring ──────────────────────────────────────────────
+/**
+ * Calculate NGA final score.
+ * Formula: max(5.0, SV − avg(judgeDeductions) − neutralDeductions − (falls × 0.5))
+ */
+export function calculateNGAScore(sv, judgeDeductions = [], neutralDeductions = 0, falls = 0) {
+  const svNum = Number(sv) || 0;
+  const neutralNum = Number(neutralDeductions) || 0;
+  const fallsNum = Number(falls) || 0;
+
+  const validDeductions = judgeDeductions
+    .map(d => Number(d))
+    .filter(d => !isNaN(d));
+
+  const avgDeduction = validDeductions.length > 0
+    ? validDeductions.reduce((sum, d) => sum + d, 0) / validDeductions.length
+    : 0;
+
+  const raw = svNum - avgDeduction - neutralNum - (fallsNum * NGA_FALL_PENALTY);
+  const rounded = Math.round(raw * 1000) / 1000;
+
+  return Math.max(NGA_COURTESY_SCORE, rounded);
+}
+
 // Standard competition ranking: equal scores share rank, next rank skips (1,2,2,4,5,6)
 export const denseRank = (items, scoreKey) => {
   const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
