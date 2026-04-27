@@ -4,7 +4,7 @@ import GymCompLogomark from "../../assets/Logomark.svg";
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit, subscriptionStatus, onManageSubscription }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // SVG icon helpers (16x16)
@@ -205,6 +205,29 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
             <span className="as-label">Exit</span>
           </button>
         </>) : (<>
+          {subscriptionStatus && (() => {
+            const s = subscriptionStatus;
+            const cls = s.isActive ? "sub-active" : s.isPastDue ? "sub-past-due" : "sub-none";
+            const tip = collapsed ? (s.isActive ? `Active — ${s.planLabel} plan` : s.isPastDue ? "Payment issue" : "Free setup") : undefined;
+            return (
+              <button className={`as-sub-pill ${cls}`} onClick={s.isActive ? undefined : onManageSubscription}
+                style={s.isActive ? { cursor: "default" } : undefined} title={tip}>
+                <span className="as-sub-pill-dot" />
+                <span className="as-sub-pill-body as-label">
+                  {s.isActive ? (<>
+                    <span className="as-sub-pill-title">Active</span>
+                    <span className="as-sub-pill-detail">{s.planLabel} plan</span>
+                  </>) : s.isPastDue ? (<>
+                    <span className="as-sub-pill-title">Payment issue</span>
+                    <span className="as-sub-pill-detail">Update card →</span>
+                  </>) : (<>
+                    <span className="as-sub-pill-title">Free setup</span>
+                    <span className="as-sub-pill-detail">View plans →</span>
+                  </>)}
+                </span>
+              </button>
+            );
+          })()}
           <button className="as-account" onClick={onSettings} title={collapsed ? "Account" : undefined}>
             <div className="as-account-avatar">{initial}</div>
             <span className="as-account-label">{account?.name || account?.email || "Account"}</span>

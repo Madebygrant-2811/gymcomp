@@ -8,6 +8,7 @@ import { events, syncQueue } from "./lib/storage.js";
 import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
 import { exportResultsPDF, exportResultsXLSX } from "./lib/pdf.js";
 import { css } from "./lib/styles.js";
+import { getSubscriptionStatus, getPlanLabel } from "./lib/subscription.js";
 
 // ── component imports ──
 import ErrorBoundary from "./components/shared/ErrorBoundary.jsx";
@@ -30,6 +31,7 @@ import PinSetupModal from "./components/pages/PinSetupModal.jsx";
 import AccountSettingsModal from "./components/pages/AccountSettingsModal.jsx";
 import PrivacyPolicyScreen from "./components/pages/PrivacyPolicyScreen.jsx";
 import TermsOfServiceScreen from "./components/pages/TermsOfServiceScreen.jsx";
+import PaymentSuccessScreen from "./components/pages/PaymentSuccessScreen.jsx";
 
 
 // ============================================================
@@ -62,6 +64,13 @@ export default function App() {
     name:     currentProfile?.full_name || currentUser.email?.split("@")[0] || "",
     clubName: currentProfile?.club_name || "",
   } : null;
+
+  // Derived subscription status for UI
+  const subscriptionStatus = useMemo(() => {
+    if (!currentProfile) return null;
+    const sub = getSubscriptionStatus(currentProfile);
+    return { ...sub, planLabel: getPlanLabel(sub.plan) };
+  }, [currentProfile]);
 
   const [phase, setPhase] = useState(1);
   const [step, setStep] = useState(1);
@@ -448,6 +457,36 @@ export default function App() {
 
   const handleAccountSave = (updatedProfile) => {
     setCurrentProfile(updatedProfile);
+  };
+
+  // ---- Subscription handlers ----
+  const handleSubscribe = async (plan) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch("/.netlify/functions/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser.id, plan: plan || "quarterly" }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else console.error("[handleSubscribe] No URL:", data.error);
+    } catch (e) { console.error("[handleSubscribe] error:", e.message); }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!currentUser) return;
+    if (subscriptionStatus?.isFree) { handleSubscribe(); return; }
+    try {
+      const res = await fetch("/.netlify/functions/create-portal-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser.id }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else console.error("[handleManageSubscription] No URL:", data.error);
+    } catch (e) { console.error("[handleManageSubscription] error:", e.message); }
   };
 
   // ---- New competition flow ----
@@ -943,6 +982,21 @@ export default function App() {
     );
   }
 
+  // ---- PAYMENT SUCCESS — Stripe redirect ----
+  if (window.location.pathname === "/payment-success") {
+    return (
+      <>
+        <style>{css}</style>
+        <PaymentSuccessScreen onContinue={() => {
+          window.history.replaceState({}, "", "/");
+          // Re-fetch profile to pick up new subscription status
+          if (currentUser) loadUserProfile(currentUser);
+          setScreen("org-dashboard");
+        }} />
+      </>
+    );
+  }
+
   // ---- LOADING — blank dark screen while session resolves ----
   if (authLoading) {
     return (
@@ -998,7 +1052,8 @@ export default function App() {
             onNew={handleNew} onMyEvents={null} onEditSetup={null} onManageGymnasts={null}
             onStartComp={null} onDashboard={null}
             onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
-            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")} />
+            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")}
+            subscriptionStatus={subscriptionStatus} onManageSubscription={handleManageSubscription} />
           <div className="app-main">
             {storageWarning && (
               <div style={{
@@ -1023,6 +1078,8 @@ export default function App() {
               statusFilter={statusFilter}
               setStatusFilter={setStatusFilter}
               onFilterCountsChange={setFilterCounts}
+              subscriptionStatus={subscriptionStatus}
+              onSubscribe={() => handleSubscribe()}
             />
             </ErrorBoundary>
           </div>
@@ -1058,7 +1115,8 @@ export default function App() {
             onNew={handleNew} onMyEvents={() => setScreen("org-dashboard")} onEditSetup={null} onManageGymnasts={null}
             onStartComp={null} onDashboard={null}
             onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
-            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")} />
+            isAdmin={currentProfile?.is_admin} onAdmin={() => setScreen("admin")}
+            subscriptionStatus={subscriptionStatus} onManageSubscription={handleManageSubscription} />
           <div className="app-main">
             <ErrorBoundary label="admin dashboard">
             <AdminDashboard onBack={() => setScreen("org-dashboard")} />
@@ -1304,7 +1362,8 @@ export default function App() {
             gymnastsCount={gymnasts.length}
             judgesCount={(compData.judges || []).length}
             eventStatus={eventStatus}
-            allGymnastsComplete={allGymnastsComplete}  />
+            allGymnastsComplete={allGymnastsComplete}
+            subscriptionStatus={subscriptionStatus} onManageSubscription={handleManageSubscription} />
           <div className="app-main" ref={appMainRef}>
             {activeContent}
           </div>

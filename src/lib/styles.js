@@ -213,6 +213,48 @@ export const css = `
   .pin-mobile-only { display: none !important; }
   @media (max-width: 768px) { .pin-mobile-only { display: flex !important; } }
 
+  /* ── Subscription pill (sidebar) ── */
+  .as-sub-pill { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; font-family: var(--font-display); cursor: pointer; border: none; width: 100%; text-align: left; transition: all 0.15s; }
+  .as-sub-pill:hover { opacity: 0.85; }
+  .as-sub-pill-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; align-self: flex-start; margin-top: 4px; }
+  .as-sub-pill-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .as-sub-pill-title { font-size: 12px; font-weight: 600; line-height: 1.3; }
+  .as-sub-pill-detail { font-size: 11px; font-weight: 500; line-height: 1.3; }
+  .as-sub-pill.sub-active { background: var(--background-neutral); color: var(--text-primary); }
+  .as-sub-pill.sub-active .as-sub-pill-dot { background: #56ca3a; }
+  .as-sub-pill.sub-active .as-sub-pill-detail { color: var(--text-tertiary); }
+  .as-sub-pill.sub-past-due { background: rgba(245,158,11,0.08); color: var(--text-primary); }
+  .as-sub-pill.sub-past-due .as-sub-pill-dot { background: var(--warn); }
+  .as-sub-pill.sub-past-due .as-sub-pill-detail { color: var(--brand-01); }
+  .as-sub-pill.sub-none { background: var(--background-neutral); color: var(--text-primary); }
+  .as-sub-pill.sub-none .as-sub-pill-dot { background: var(--text-tertiary); }
+  .as-sub-pill.sub-none .as-sub-pill-detail { color: var(--brand-01); }
+  .app-sidebar.collapsed .as-sub-pill .as-sub-pill-body { display: none; }
+  .app-sidebar.collapsed .as-sub-pill { justify-content: center; padding: 8px 0; }
+
+  /* ── Subscription banner (dashboard) ── */
+  .sub-banner { display: flex; align-items: center; gap: 16px; padding: 16px 20px; margin: 16px 24px 0; background: linear-gradient(135deg, rgba(0,13,255,0.06) 0%, rgba(113,120,244,0.06) 100%); border: 1px solid rgba(0,13,255,0.15); border-radius: 16px; font-family: var(--font-display); }
+  .sub-banner-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--brand-01); color: white; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sub-banner-body { flex: 1; min-width: 0; }
+  .sub-banner-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .sub-banner-text { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .sub-banner-cta { flex-shrink: 0; }
+  .sub-banner-dismiss { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; flex-shrink: 0; }
+  .sub-banner-dismiss:hover { color: var(--text); }
+  @media (max-width: 768px) {
+    .sub-banner { margin: 12px 16px 0; padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+    .sub-banner-cta { width: 100%; }
+    .sub-banner-cta .btn { width: 100%; justify-content: center; }
+  }
+
+  /* ── Payment success page ── */
+  .ps-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 32px; background: var(--bg); font-family: var(--font-display); }
+  .ps-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px 40px; max-width: 480px; width: 100%; text-align: center; }
+  .ps-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(34,197,94,0.1); color: #22c55e; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+  .ps-title { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .ps-subtitle { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 32px; }
+  @media (max-width: 480px) { .ps-card { padding: 32px 20px; } .ps-title { font-size: 20px; } }
+
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
   .toggle-switch input { opacity: 0; width: 0; height: 0; }
   .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e0e0e0; border-radius: 24px; transition: 0.2s; }

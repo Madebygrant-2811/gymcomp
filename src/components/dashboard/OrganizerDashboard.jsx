@@ -8,7 +8,7 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 // ============================================================
 // ORGANISER DASHBOARD — list of events for logged-in account
 // ============================================================
-function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange }) {
+function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange, subscriptionStatus, onSubscribe }) {
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
@@ -406,6 +406,20 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         }
       `}</style>
       <div className="od-main">
+        {subscriptionStatus?.status === "none" && onSubscribe && (
+          <div className="sub-banner" style={{ margin: "0 0 20px" }}>
+            <div className="sub-banner-icon">
+              <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L2 5.5 8 9l6-3.5L8 2zM2 10.5L8 14l6-3.5"/></svg>
+            </div>
+            <div className="sub-banner-body">
+              <div className="sub-banner-title">You're in free setup mode</div>
+              <div className="sub-banner-text">Subscribe before your first competition goes live to start scoring.</div>
+            </div>
+            <div className="sub-banner-cta">
+              <button className="btn btn-primary btn-sm" onClick={onSubscribe}>View Plans</button>
+            </div>
+          </div>
+        )}
         <div className="od-header">
           <div className="od-greeting">{`Hello ${firstName}  👋`}</div>
           <div className="od-subtitle">
