@@ -1,5 +1,1 @@
-# Netlify Functions — let the platform handle these natively
-/.netlify/functions/*   /.netlify/functions/:splat   200
-
-# SPA fallback — must come LAST
 /*    /index.html   200
