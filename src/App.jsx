@@ -183,20 +183,22 @@ export default function App() {
   }, []);
 
   // ---- Supabase sync (with offline queue) ----
-  const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, pin, status) => {
+  const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, pin, status, extraFields) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
     if (!currentUser) { return; } // Judge/scorer mode — no Supabase auth, skip silently
     setSyncStatus("saving");
     const resolvedPin = pin ?? compPin;
     const payload = { compData: { ...nextCompData, pin: resolvedPin }, gymnasts: nextGymnasts, pin: resolvedPin };
-    const record = { id: compId, data: payload, user_id: currentUser.id };
+    const record = { id: compId, data: payload, user_id: currentUser.id, ...extraFields };
     const localEv = events.getAll().find(e => e.compId === compId);
     record.status = status || localEv?.status || "draft";
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("no active session");
-      const { error } = await supabase.from("competitions").upsert(record);
+      console.log("[pushToSupabase] upsert payload keys:", Object.keys(record), "status:", record.status);
+      const { data: respData, error } = await supabase.from("competitions").upsert(record);
       if (error) throw new Error(error.message);
+      console.log("[pushToSupabase] upsert response:", { data: respData, error });
       // Success — clear any queued entry for this comp
       syncQueue.clear(compId);
       setPendingSyncCount(syncQueue.size());
@@ -756,11 +758,15 @@ export default function App() {
     setPhase(2); setStep(1);
     if (currentEventId) {
       events.update(currentEventId, { status: "live" });
-      const ev = events.getAll().find(e => e.id === currentEventId);
-      if (ev?.compId) {
-        supabase.from("competitions").update({ status: "live" }).eq("id", ev.compId);
-      }
     }
+    const now = new Date().toISOString();
+    const autoComplete = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const lifecycleFields = { started_at: now, auto_complete_at: autoComplete };
+    console.log("[start-comp] update payload:", { status: "live", ...lifecycleFields });
+    pushToSupabase(compData, gymnasts, undefined, "live", lifecycleFields).then(
+      () => console.log("[start-comp] pushToSupabase completed"),
+      (err) => console.error("[start-comp] pushToSupabase error:", err)
+    );
   };
   const handleCompleteComp = () => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
@@ -1231,7 +1237,7 @@ export default function App() {
       {phase === "gymnasts" && (
         <ErrorBoundary label="gymnast management">
         <div style={{ flex: 1 }}>
-          <Step2_Gymnasts compData={draftCompData || compData} setCompDataFn={draftCompData !== null ? setDraftCompDataLocal : setCompData} data={draftGymnasts || gymnasts} setData={draftGymnasts !== null ? setDraftGymnastsLocal : setGymnastsWithSync}
+          <Step2_Gymnasts compData={draftCompData || compData} setCompDataFn={draftCompData !== null ? setDraftCompDataLocal : setCompData} data={draftGymnasts || gymnasts} setData={draftGymnasts !== null ? setDraftGymnastsLocal : setGymnastsWithSync} scores={scores}
             onNext={() => {
               const { compData: cd, gymnasts: g } = commitDraft();
               if (syncTimer.current) clearTimeout(syncTimer.current);

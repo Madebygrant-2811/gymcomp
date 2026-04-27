@@ -92,8 +92,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  const rankBadge = (rank) => {
-    if (rank === null) return <span className="badge" style={{ background: "rgba(107,107,133,0.15)", color: "var(--muted)" }}>DNS</span>;
+  const rankBadge = (rank, label) => {
+    if (rank === null) return <span className="badge" style={{ background: label === "WD" ? "rgba(217,119,6,0.15)" : "rgba(107,107,133,0.15)", color: label === "WD" ? "#d97706" : "var(--muted)" }}>{label || "DNS"}</span>;
     if (rank === 1) return <span className="badge badge-gold">🥇 1st</span>;
     if (rank === 2) return <span className="badge badge-silver">🥈 2nd</span>;
     if (rank === 3) return <span className="badge badge-bronze">🥉 3rd</span>;
@@ -168,8 +168,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                 </div>
                 {scoringApparatus.map(apparatus => {
                   const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
-                  const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns), "score");
-                  const dns = withScores.filter(g => g.score === 0 || g.dns);
+                  const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score");
+                  const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
                   return (
                     <div key={apparatus} style={{ marginBottom: 24 }}>
                       <div className="sub-group-label">{apparatus}</div>
@@ -190,7 +190,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                             ))}
                             {dns.map(g => (
                               <tr key={g.id} style={{ opacity: 0.45 }}>
-                                <td>{rankBadge(null)}</td>
+                                <td>{rankBadge(null, g.withdrawn ? "WD" : "DNS")}</td>
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
@@ -216,8 +216,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
         <div>
           {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
             const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }));
-            const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
-            const dns = withTotals.filter(g => g.total === 0 || g.dns);
+            const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+            const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
             return (
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
@@ -269,7 +269,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                       ))}
                       {dns.map(g => (
                         <tr key={g.id} style={{ opacity: 0.45 }}>
-                          <td>{rankBadge(null)}</td>
+                          <td>{rankBadge(null, g.withdrawn ? "WD" : "DNS")}</td>
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>

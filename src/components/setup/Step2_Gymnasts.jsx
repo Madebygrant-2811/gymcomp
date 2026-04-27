@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { generateId, generateClubCode, parseCSV, downloadTemplate, normalizeStr, buildRotations } from "../../lib/utils.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
-function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack }) {
+function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, onNext, onBack }) {
   const [selectedClub, setSelectedClub] = useState(compData.clubs[0]?.name || "");
   const unassignedCount = data.filter(g => !g.round).length;
   const [activeRound, setActiveRound] = useState(unassignedCount ? "__unassigned__" : compData.rounds[0]?.id || "");
@@ -11,11 +11,25 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
   const [editModalErrors, setEditModalErrors] = useState({});
   const [editModalWarnings, setEditModalWarnings] = useState([]);
   const [pendingRemove, setPendingRemove] = useState(null);
+  const [pendingWithdraw, setPendingWithdraw] = useState(null); // { id, msg } or { ids, msg }
   const [formWarnings, setFormWarnings] = useState([]);
   const [csvWarnings, setCsvWarnings] = useState({ errors: [], warns: [] });
   const [fieldErrors, setFieldErrors] = useState({});
   const [selected, setSelected] = useState(new Set());
   const fileRef = useRef(null);
+
+  const gymnastsWithScores = useMemo(() => {
+    const set = new Set();
+    for (const k of Object.keys(scores)) {
+      const parts = k.split("__");
+      if (parts.length >= 3 && parseFloat(scores[k]) > 0) {
+        set.add(parts[1]);
+      }
+    }
+    console.log("[gymnasts-with-scores]", Array.from(set));
+    return set;
+  }, [scores]);
+  const gymnastHasScores = (gid) => gymnastsWithScores.has(gid);
 
   // Topbar hide-on-scroll
   const [topbarHidden, setTopbarHidden] = useState(false);
@@ -90,11 +104,8 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
   const commit = () => {
     const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), group: normalizeStr(newG.group), club: selectedClub, id: generateId() };
-    setData(d => {
-      const updated = [...d, gymnast];
-      setNewG(blankForm(updated));
-      return updated;
-    });
+    setData(d => [...d, gymnast]);
+    setNewG(blankForm([...data, gymnast]));
     setFormWarnings([]);
     setFieldErrors({});
   };
@@ -116,6 +127,19 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
     setEditModalWarnings([]);
   };
 
+  const tryRemove = (removeInfo) => {
+    // Check if any gymnast in the removal batch has scores
+    const ids = removeInfo.ids || [removeInfo.id];
+    const scored = ids.filter(id => gymnastHasScores(id));
+    if (scored.length > 0) {
+      const names = scored.map(id => data.find(g => g.id === id)?.name).filter(Boolean);
+      const label = scored.length === 1 ? `"${names[0]}" has` : `${scored.length} gymnasts have`;
+      setPendingWithdraw({ ids: scored, msg: `${label} recorded scores and cannot be deleted. Withdraw them instead — their scores will be preserved but they will be marked as withdrawn.` });
+    } else {
+      setPendingRemove(removeInfo);
+    }
+  };
+
   const doRemove = () => {
     if (pendingRemove.ids) {
       const removeSet = new Set(pendingRemove.ids);
@@ -125,6 +149,12 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
       setData(d => d.filter(g => g.id !== pendingRemove.id));
     }
     setPendingRemove(null);
+  };
+
+  const doWithdraw = () => {
+    const wdSet = new Set(pendingWithdraw.ids);
+    setData(d => d.map(g => wdSet.has(g.id) ? { ...g, withdrawn: true } : g));
+    setPendingWithdraw(null);
   };
 
   // CSV
@@ -417,7 +447,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
               </select>
               <div style={{ flex: 1 }} />
               <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 12px" }}
-                onClick={() => setPendingRemove({ ids: [...selected], msg: `Remove ${selectedVisible} selected gymnast${selectedVisible > 1 ? "s" : ""}?` })}>
+                onClick={() => tryRemove({ ids: [...selected], msg: `Remove ${selectedVisible} selected gymnast${selectedVisible > 1 ? "s" : ""}?` })}>
                 Delete Selected
               </button>
               <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }}
@@ -467,11 +497,17 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                         </tr>
                       </thead>
                       <tbody>
-                        {gymnasts.map(g => (
-                          <tr key={g.id} style={{ opacity: g.dns ? 0.45 : 1 }}>
+                        {gymnasts.map(g => {
+                          const dimmed = g.dns || g.withdrawn;
+                          return (
+                          <tr key={g.id} style={{ opacity: dimmed ? 0.45 : 1 }}>
                             <td><input type="checkbox" checked={selected.has(g.id)} onChange={() => toggleSelect(g.id)} /></td>
                             <td style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.number}</td>
-                            <td style={{ fontWeight: 600, textDecoration: g.dns ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</td>
+                            <td>
+                              <strong style={{ textDecoration: dimmed ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{g.name}</strong>
+                              {g.dns && <span style={{ display: "block", fontSize: 9, color: "var(--danger)", fontWeight: 700, letterSpacing: 0.5 }}>DNS</span>}
+                              {g.withdrawn && !g.dns && <span style={{ display: "block", fontSize: 9, color: "#d97706", fontWeight: 700, letterSpacing: 0.5 }}>WD</span>}
+                            </td>
                             <td style={{ color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.club}</td>
                             <td style={{ color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.age}</td>
                             <td style={{ textAlign: "center" }}>
@@ -492,12 +528,18 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
                             <td style={{ textAlign: "right" }}>
                               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                                 <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => startEdit(g)}>Edit</button>
-                                <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 10px" }}
-                                  onClick={() => setPendingRemove({ id: g.id, msg: `Remove gymnast "${g.name}"?` })}>Remove</button>
+                                {g.withdrawn ? (
+                                  <button className="btn btn-sm" style={{ fontSize: 11, padding: "4px 10px", background: "#d97706", color: "#fff", border: "none" }}
+                                    onClick={() => setData(d => d.map(x => x.id === g.id ? { ...x, withdrawn: false } : x))}>Reinstate</button>
+                                ) : (
+                                  <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 10px" }}
+                                    onClick={() => tryRemove({ id: g.id, msg: `Remove gymnast "${g.name}"?` })}>Remove</button>
+                                )}
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -629,6 +671,10 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, onNext, onBack
 
       {pendingRemove && (
         <ConfirmModal message={pendingRemove.msg} onConfirm={doRemove} onCancel={() => setPendingRemove(null)} />
+      )}
+      {pendingWithdraw && (
+        <ConfirmModal message={pendingWithdraw.msg} confirmLabel="Withdraw" onConfirm={doWithdraw} onCancel={() => setPendingWithdraw(null)}
+          confirmStyle={{ background: "#d97706", color: "#fff", borderColor: "#d97706" }} />
       )}
       </div>
     </div>

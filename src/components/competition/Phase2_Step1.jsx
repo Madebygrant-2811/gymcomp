@@ -751,13 +751,16 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                       {glist.map(g => {
                         const gymTotal = getGymnastTotal(g.id);
                         const isDns = !!g.dns;
+                        const isWd = !!g.withdrawn;
+                        const dimmed = isDns || isWd;
                         const hasQuery = scoringApparatus.some(a => isQueried(g.id, a));
                         return (
-                          <tr key={g.id} style={{ opacity: isDns ? 0.45 : 1 }}>
+                          <tr key={g.id} style={{ opacity: dimmed ? 0.45 : 1 }}>
                             <td style={{ color: "var(--muted)", fontWeight: 600 }}>{g.number}</td>
                             <td>
-                              <strong style={{ textDecoration: isDns ? "line-through" : "none" }}>{g.name}</strong>
+                              <strong style={{ textDecoration: dimmed ? "line-through" : "none" }}>{g.name}</strong>
                               {isDns && <span style={{ display: "block", fontSize: 9, color: "var(--danger)", fontWeight: 700, letterSpacing: 0.5 }}>DNS</span>}
+                              {isWd && !isDns && <span style={{ display: "block", fontSize: 9, color: "#d97706", fontWeight: 700, letterSpacing: 0.5 }}>WD</span>}
                             </td>
                             <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
                             <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "\u2014"}</td>
@@ -768,7 +771,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
                               const isFlashing = newScoreKeys && newScoreKeys.has(flashBk);
                               return (
                                 <td key={a} className={isFlashing ? "score-flash" : ""}>
-                                  {isDns ? (
+                                  {dimmed ? (
                                     <span style={{ color: "var(--muted)" }}>\u2014</span>
                                   ) : appScore > 0 ? (
                                     <div className="si-score-cell">
