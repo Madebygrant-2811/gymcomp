@@ -255,6 +255,57 @@ export const css = `
   .ps-subtitle { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 32px; }
   @media (max-width: 480px) { .ps-card { padding: 32px 20px; } .ps-title { font-size: 20px; } }
 
+  /* ── Plan Picker Modal ── */
+  .pp-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; }
+  .pp-modal { background: var(--surface); border-radius: 16px; max-width: 1100px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 40px; position: relative; font-family: var(--font-display); }
+  .pp-close { position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border: none; background: none; cursor: pointer; color: var(--muted); font-size: 20px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.15s; }
+  .pp-close:hover { background: var(--surface2); color: var(--text); }
+  .pp-header { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 32px; text-align: center; }
+  .pp-early-pill { display: inline-flex; align-items: center; padding: 6px 16px; background: var(--accent); color: #fff; border-radius: 72px; font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; font-family: monospace; }
+  .pp-headline { font-size: 32px; font-weight: 400; color: var(--text); line-height: 1.1; }
+  .pp-desc { font-size: 14px; color: var(--muted); line-height: 1.4; max-width: 700px; }
+  .pp-cards { display: flex; gap: 16px; justify-content: center; align-items: flex-end; }
+  .pp-card { flex: 1; min-width: 0; max-width: 340px; border-radius: 16px; padding: 32px 20px; display: flex; flex-direction: column; gap: 24px; box-shadow: 0 12px 28px rgba(0,0,0,0.05); }
+  .pp-card-quarterly { background: #f0f0f0; color: #1d1d1d; }
+  .pp-card-six_month { background: var(--accent); color: #fff; box-shadow: 0 14px 40px rgba(0,0,0,0.2); }
+  .pp-card-annual { background: #080808; color: #fff; }
+  .pp-commit-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 72px; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; font-family: monospace; width: fit-content; }
+  .pp-card-quarterly .pp-commit-pill { background: #3c3c3c; color: #fff; }
+  .pp-card-six_month .pp-commit-pill { background: #fff; color: #000; }
+  .pp-card-annual .pp-commit-pill { background: #0028f5; color: #fff; }
+  .pp-plan-name { font-size: 24px; font-weight: 400; line-height: 1.1; }
+  .pp-pricing { display: flex; gap: 16px; align-items: flex-end; }
+  .pp-price-col { display: flex; gap: 4px; align-items: flex-end; white-space: nowrap; }
+  .pp-price-nums { display: flex; flex-direction: column; gap: 4px; }
+  .pp-price-old { font-size: 12px; text-decoration: line-through; opacity: 0.5; line-height: 1.1; }
+  .pp-price-new { font-size: 18px; font-weight: 400; line-height: 1; }
+  .pp-price-unit { font-size: 8px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-family: monospace; align-self: flex-end; padding-bottom: 1px; }
+  .pp-price-sep { width: 10px; display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 14px; padding-bottom: 2px; }
+  .pp-feature-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pp-feature-pill { display: inline-flex; padding: 4px 10px; border-radius: 72px; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-family: monospace; }
+  .pp-card-quarterly .pp-feature-pill { border: 1px solid #1d1d1d; color: #1d1d1d; }
+  .pp-card-six_month .pp-feature-pill { border: 1px solid #fff; color: #fff; }
+  .pp-card-annual .pp-feature-pill { border: 1px solid #fff; color: #fff; }
+  .pp-renew { font-size: 11px; opacity: 0.4; line-height: 1.1; }
+  .pp-start-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 8px; font-family: var(--font-display); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .pp-start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pp-card-quarterly .pp-start-btn { background: none; border: 1px solid #1d1d1d; color: #1d1d1d; }
+  .pp-card-quarterly .pp-start-btn:hover:not(:disabled) { background: rgba(0,0,0,0.05); }
+  .pp-card-six_month .pp-start-btn { background: #fff; color: #000; }
+  .pp-card-six_month .pp-start-btn:hover:not(:disabled) { opacity: 0.9; }
+  .pp-card-annual .pp-start-btn { background: none; border: 1px solid #fff; color: #fff; }
+  .pp-card-annual .pp-start-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+  .pp-founding-count { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
+  .pp-error { text-align: center; margin-top: 12px; font-size: 13px; color: var(--danger); }
+  .pp-loading { opacity: 0.4; }
+  @media (max-width: 768px) {
+    .pp-modal { padding: 24px 16px; }
+    .pp-cards { flex-direction: column; align-items: stretch; }
+    .pp-card { max-width: none; }
+    .pp-headline { font-size: 24px; }
+    .pp-close { top: 12px; right: 12px; }
+  }
+
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
   .toggle-switch input { opacity: 0; width: 0; height: 0; }
   .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #e0e0e0; border-radius: 24px; transition: 0.2s; }

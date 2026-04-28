@@ -13,6 +13,7 @@ import { getSubscriptionStatus, getPlanLabel } from "./lib/subscription.js";
 // ── component imports ──
 import ErrorBoundary from "./components/shared/ErrorBoundary.jsx";
 import ConfirmModal from "./components/shared/ConfirmModal.jsx";
+import PlanPickerModal from "./components/shared/PlanPickerModal.jsx";
 import Step1_CompDetails from "./components/setup/Step1_CompDetails.jsx";
 import Step2_Gymnasts from "./components/setup/Step2_Gymnasts.jsx";
 import Phase2_Exports from "./components/competition/Phase2_Exports.jsx";
@@ -46,6 +47,7 @@ export default function App() {
   // "loading" | "auth-login" | "profile-onboarding" | "org-dashboard" | "new-pin" | "active"
   const [screen, setScreen] = useState("loading");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -460,23 +462,23 @@ export default function App() {
   };
 
   // ---- Subscription handlers ----
-  const handleSubscribe = async (plan) => {
-    if (!currentUser) return;
-    try {
-      const res = await fetch("/.netlify/functions/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUser.id, plan: plan || "quarterly" }),
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-      else console.error("[handleSubscribe] No URL:", data.error);
-    } catch (e) { console.error("[handleSubscribe] error:", e.message); }
+  const handleSubscribe = () => setShowPlanPicker(true);
+
+  const handlePlanSelected = async (planId) => {
+    if (!currentUser) throw new Error("Not signed in");
+    const res = await fetch("/.netlify/functions/create-checkout-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: currentUser.id, plan: planId }),
+    });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else throw new Error(data.error || "Failed to create checkout session");
   };
 
   const handleManageSubscription = async () => {
     if (!currentUser) return;
-    if (subscriptionStatus?.isFree) { handleSubscribe(); return; }
+    if (subscriptionStatus?.isFree) { setShowPlanPicker(true); return; }
     try {
       const res = await fetch("/.netlify/functions/create-portal-session", {
         method: "POST",
@@ -794,6 +796,11 @@ export default function App() {
   };
 
   const handleStartComp = () => {
+    // Paywall gate — only on fresh start (not resume of already-live comp)
+    if (eventStatus !== "live" && !subscriptionStatus?.isActive && !subscriptionStatus?.isPastDue) {
+      setShowPlanPicker(true);
+      return;
+    }
     setPhase(2); setStep(1);
     if (currentEventId) {
       events.update(currentEventId, { status: "live" });
@@ -1098,6 +1105,11 @@ export default function App() {
             onClose={() => setShowAccountSettings(false)}
           />
         )}
+        <PlanPickerModal
+          isOpen={showPlanPicker}
+          onClose={() => setShowPlanPicker(false)}
+          onPlanSelected={handlePlanSelected}
+        />
       </>
     );
   }
@@ -1133,6 +1145,11 @@ export default function App() {
             onClose={() => setShowAccountSettings(false)}
           />
         )}
+        <PlanPickerModal
+          isOpen={showPlanPicker}
+          onClose={() => setShowPlanPicker(false)}
+          onPlanSelected={handlePlanSelected}
+        />
       </>
     );
   }
@@ -1437,6 +1454,11 @@ export default function App() {
         <PinSetupModal onSet={handlePinSet} />
       )}
 
+      <PlanPickerModal
+        isOpen={showPlanPicker}
+        onClose={() => setShowPlanPicker(false)}
+        onPlanSelected={handlePlanSelected}
+      />
 
     </>
   );
