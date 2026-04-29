@@ -8,7 +8,7 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 // ============================================================
 // ORGANISER DASHBOARD — list of events for logged-in account
 // ============================================================
-function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange, subscriptionStatus, onSubscribe }) {
+function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicate, statusFilter, setStatusFilter, onFilterCountsChange, subscriptionStatus, onSubscribe, onManageSubscription }) {
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
@@ -406,6 +406,20 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
         }
       `}</style>
       <div className="od-main">
+        {subscriptionStatus?.status === "past_due" && onManageSubscription && (
+          <div className="sub-banner sub-banner-warn" style={{ margin: "0 0 20px" }}>
+            <div className="sub-banner-icon sub-banner-icon-warn">
+              <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1.5L1 14h14L8 1.5zM8 6v4M8 12h.01"/></svg>
+            </div>
+            <div className="sub-banner-body">
+              <div className="sub-banner-title">Payment issue with your subscription</div>
+              <div className="sub-banner-text">Your last payment didn't go through. Update your payment method to keep your subscription active.</div>
+            </div>
+            <div className="sub-banner-cta">
+              <button className="btn btn-primary btn-sm" onClick={onManageSubscription}>Update payment method</button>
+            </div>
+          </div>
+        )}
         {subscriptionStatus?.status === "none" && onSubscribe && (
           <div className="sub-banner" style={{ margin: "0 0 20px" }}>
             <div className="sub-banner-icon">

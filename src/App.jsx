@@ -1087,6 +1087,7 @@ export default function App() {
               onFilterCountsChange={setFilterCounts}
               subscriptionStatus={subscriptionStatus}
               onSubscribe={() => handleSubscribe()}
+              onManageSubscription={handleManageSubscription}
             />
             </ErrorBoundary>
           </div>

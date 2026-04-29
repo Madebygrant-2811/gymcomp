@@ -229,6 +229,7 @@ export const css = `
   .as-sub-pill.sub-none { background: var(--background-neutral); color: var(--text-primary); }
   .as-sub-pill.sub-none .as-sub-pill-dot { background: var(--text-tertiary); }
   .as-sub-pill.sub-none .as-sub-pill-detail { color: var(--brand-01); }
+  .as-sub-pill-link { font-size: 11px; font-weight: 500; line-height: 1.3; color: var(--brand-01); }
   .app-sidebar.collapsed .as-sub-pill .as-sub-pill-body { display: none; }
   .app-sidebar.collapsed .as-sub-pill { justify-content: center; padding: 8px 0; }
 
@@ -241,6 +242,8 @@ export const css = `
   .sub-banner-cta { flex-shrink: 0; }
   .sub-banner-dismiss { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px; line-height: 1; flex-shrink: 0; }
   .sub-banner-dismiss:hover { color: var(--text); }
+  .sub-banner.sub-banner-warn { background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.2); }
+  .sub-banner-icon-warn { background: var(--warn); }
   @media (max-width: 768px) {
     .sub-banner { margin: 12px 16px 0; padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
     .sub-banner-cta { width: 100%; }

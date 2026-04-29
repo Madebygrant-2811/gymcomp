@@ -210,19 +210,19 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
             const cls = s.isActive ? "sub-active" : s.isPastDue ? "sub-past-due" : "sub-none";
             const tip = collapsed ? (s.isActive ? `Active — ${s.planLabel} plan` : s.isPastDue ? "Payment issue" : "Free setup") : undefined;
             return (
-              <button className={`as-sub-pill ${cls}`} onClick={s.isActive ? undefined : onManageSubscription}
-                style={s.isActive ? { cursor: "default" } : undefined} title={tip}>
+              <button className={`as-sub-pill ${cls}`} onClick={onManageSubscription} title={tip}>
                 <span className="as-sub-pill-dot" />
                 <span className="as-sub-pill-body as-label">
                   {s.isActive ? (<>
                     <span className="as-sub-pill-title">Active</span>
                     <span className="as-sub-pill-detail">{s.planLabel} plan</span>
+                    <span className="as-sub-pill-link">Manage →</span>
                   </>) : s.isPastDue ? (<>
                     <span className="as-sub-pill-title">Payment issue</span>
-                    <span className="as-sub-pill-detail">Update card →</span>
+                    <span className="as-sub-pill-link">Update card →</span>
                   </>) : (<>
                     <span className="as-sub-pill-title">Free setup</span>
-                    <span className="as-sub-pill-detail">View plans →</span>
+                    <span className="as-sub-pill-link">View plans →</span>
                   </>)}
                 </span>
               </button>
