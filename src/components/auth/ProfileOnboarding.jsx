@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase.js";
+import GymCompLogotype from "../../assets/Logotype.svg";
+import GymCompLogomark from "../../assets/Logomark.svg";
 
 // ============================================================
 // PROFILE ONBOARDING — shown once on first login
@@ -46,8 +48,9 @@ function ProfileOnboardingScreen({ user, onComplete }) {
 
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 52, letterSpacing: 3, color: "var(--accent)", lineHeight: 1, marginBottom: 14 }}>
-            GYMCOMP
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 14 }}>
+            <img src={GymCompLogotype} alt="GymComp" style={{ height: 28 }} />
+            <img src={GymCompLogomark} alt="" style={{ height: 36 }} />
           </div>
           <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>
             Welcome — let's get you set up
