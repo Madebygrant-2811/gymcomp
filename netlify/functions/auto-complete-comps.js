@@ -10,7 +10,7 @@ async function runAutoComplete() {
   // Find live competitions past their auto_complete_at deadline
   const { data: expired, error: fetchErr } = await supabaseAdmin
     .from('competitions')
-    .select('id, name, auto_complete_at')
+    .select('id, auto_complete_at')
     .eq('status', 'live')
     .lt('auto_complete_at', now);
 
@@ -36,10 +36,10 @@ async function runAutoComplete() {
       .eq('id', comp.id);
 
     if (updateErr) {
-      console.error(`${PREFIX} Failed to complete "${comp.name}" (${comp.id}):`, updateErr.message);
+      console.error(`${PREFIX} Failed to complete ${comp.id}:`, updateErr.message);
       errors++;
     } else {
-      console.log(`${PREFIX} Completed "${comp.name}" (${comp.id}), was due ${comp.auto_complete_at}`);
+      console.log(`${PREFIX} Completed ${comp.id}, was due ${comp.auto_complete_at}`);
       processed++;
     }
   }
