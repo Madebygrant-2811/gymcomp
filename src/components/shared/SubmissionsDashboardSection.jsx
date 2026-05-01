@@ -6,7 +6,7 @@ function SubmissionsDashboardSection({ compId, compData, gymnasts, onAcceptGymna
   const [pendingCount, setPendingCount] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://app.gymcomp.co.uk";
   const submitUrl = `${origin}/submit.html?comp=${compId}`;
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));

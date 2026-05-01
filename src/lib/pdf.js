@@ -256,7 +256,7 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
 
   // Live view QR codes (only if compId exists)
   if (compId) {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://app.gymcomp.co.uk";
     const coachUrl = `${origin}/coach.html?comp=${compId}`;
     const parentUrl = `${origin}/results.html?comp=${compId}`;
     const qrSize = 100;
@@ -1276,7 +1276,7 @@ function buildQRPageHTML(compId, type) {
   const TEXT_SECONDARY = "#575757";
   const FONT = "'Saans', sans-serif";
 
-  const baseUrl = "https://gymcomp.co.uk";
+  const baseUrl = "https://app.gymcomp.co.uk";
   const url = type === "public"
     ? `${baseUrl}/results.html?comp=${compId}`
     : `${baseUrl}/coach.html?comp=${compId}`;

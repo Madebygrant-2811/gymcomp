@@ -109,7 +109,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const completed = eventStatus === "completed";
   const submissionsOpen = compData.allowSubmissions !== false;
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://gymcomp.app";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://app.gymcomp.co.uk";
   const coachUrl = `${origin}/coach.html?comp=${compId}`;
   const parentUrl = `${origin}/results.html?comp=${compId}`;
 
