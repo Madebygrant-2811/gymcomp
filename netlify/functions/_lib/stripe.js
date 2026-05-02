@@ -23,5 +23,5 @@ export const PRICE_PLAN_MAP = Object.fromEntries(
 
 export const VALID_PLANS = ['quarterly', 'six_month', 'annual'];
 
-export const FOUNDING_COUPON_ID = 'founding_25';
+export const FOUNDING_COUPON_ID = 'founding_50';
 export const FOUNDING_COUPON_MAX = 10;

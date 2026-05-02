@@ -3,13 +3,13 @@ import { useState, useEffect, useCallback } from "react";
 const PLANS = [
   { id: "quarterly", name: "Quarterly", commitment: "3-MONTH COMMITMENT", termLabel: "PER QUARTER",
     standard: { monthly: 69, total: 207 },
-    founding: { monthly: 52, total: 155.25 } },
+    founding: { monthly: 35, total: 103.50 } },
   { id: "six_month", name: "6 Months", commitment: "6-MONTH COMMITMENT", termLabel: "PER 6 MONTHS",
     standard: { monthly: 59, total: 354 },
-    founding: { monthly: 45, total: 265.50 } },
+    founding: { monthly: 30, total: 177.00 } },
   { id: "annual", name: "Annual", commitment: "12-MONTH COMMITMENT", termLabel: "ANNUALLY",
     standard: { monthly: 49, total: 588 },
-    founding: { monthly: 37, total: 441 } },
+    founding: { monthly: 25, total: 294.00 } },
 ];
 
 export default function PlanPickerModal({ isOpen, onClose, onPlanSelected }) {
@@ -63,7 +63,7 @@ export default function PlanPickerModal({ isOpen, onClose, onPlanSelected }) {
 
         <div className="pp-header">
           {hasFoundingSpots && (
-            <span className="pp-early-pill">EARLY BIRD PRICING — 25% OFF SUBSCRIPTIONS</span>
+            <span className="pp-early-pill">EARLY BIRD PRICING — 50% OFF SUBSCRIPTIONS</span>
           )}
           <div className="pp-headline">
             One plan. Every feature.<br />Pick your commitment.
