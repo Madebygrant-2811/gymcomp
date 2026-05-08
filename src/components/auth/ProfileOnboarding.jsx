@@ -14,6 +14,7 @@ function ProfileOnboardingScreen({ user, onComplete }) {
   const [location,  setLocation]  = useState("");
   const [role,      setRole]      = useState("");
   const [referral,  setReferral]  = useState("");
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
 
@@ -29,10 +30,25 @@ function ProfileOnboardingScreen({ user, onComplete }) {
       location:  location.trim(),
       role,
       referral,
+      marketing_consent: marketingConsent,
+      marketing_consent_at: marketingConsent ? new Date().toISOString() : null,
     };
     const { error: err } = await supabase.from("profiles").upsert(profile);
     setSaving(false);
     if (err) { setError("Couldn't save your profile — please try again."); return; }
+
+    // Fire-and-forget: create contact in Loops and send signup event
+    fetch("/.netlify/functions/loops-signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: user?.email,
+        firstName: fullName.trim().split(/\s+/)[0] || "",
+        clubName: clubName.trim(),
+        marketingConsent,
+      }),
+    }).catch(e => console.error("[loops-signup] Fire-and-forget failed:", e.message));
+
     onComplete(profile);
   };
 
@@ -107,6 +123,19 @@ function ProfileOnboardingScreen({ user, onComplete }) {
                 <option value="Other">Other</option>
               </select>
             </div>
+
+            {/* Marketing consent */}
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", userSelect: "none" }}>
+              <input
+                type="checkbox"
+                checked={marketingConsent}
+                onChange={e => setMarketingConsent(e.target.checked)}
+                style={{ width: 18, height: 18, marginTop: 2, accentColor: "var(--accent)", flexShrink: 0, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+                Send me product updates, tips and occasional offers from GymComp. You can unsubscribe anytime.
+              </span>
+            </label>
 
             {error && <div className="error-box">{error}</div>}
 

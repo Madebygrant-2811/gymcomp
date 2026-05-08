@@ -20,7 +20,7 @@ function PrivacyPolicyScreen() {
         <h1 style={{ fontSize: 32, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2, marginBottom: 8 }}>
           Privacy Policy
         </h1>
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: March 2026</p>
+        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: May 2026</p>
 
         <div style={sectionStyle}>
           <h2 style={headingStyle}>1. Who we are</h2>
@@ -131,14 +131,30 @@ function PrivacyPolicyScreen() {
         </div>
 
         <div style={sectionStyle}>
-          <h2 style={headingStyle}>10. Changes to this policy</h2>
+          <h2 style={headingStyle}>10. Marketing communications</h2>
+          <p style={paraStyle}>
+            During account creation, you may opt in to receive marketing emails from GymComp. These may include product updates, feature announcements, tips for getting more out of the platform, onboarding guidance and occasional promotional offers.
+          </p>
+          <p style={paraStyle}>
+            Marketing emails are strictly opt-in. You will only receive them if you explicitly ticked the consent checkbox when creating your account. The legal basis for processing your data for marketing purposes is your consent under UK GDPR (Article 6(1)(a)).
+          </p>
+          <p style={paraStyle}>
+            Transactional emails — such as account confirmations, magic link sign-in emails, payment receipts, subscription updates and competition notifications — are sent regardless of your marketing preference. These are necessary for the performance of our contract with you and are sent under the legal basis of contract (Article 6(1)(b)) and legitimate interests (Article 6(1)(f)).
+          </p>
+          <p style={paraStyle}>
+            Every marketing email includes a one-click unsubscribe link. You can withdraw your consent and stop receiving marketing emails at any time by clicking this link. Unsubscribing from marketing will not affect transactional emails.
+          </p>
+        </div>
+
+        <div style={sectionStyle}>
+          <h2 style={headingStyle}>11. Changes to this policy</h2>
           <p style={paraStyle}>
             Significant changes will be notified via email to registered account holders. The latest version will always be available at gymcomp.co.uk/privacy.
           </p>
         </div>
 
         <div style={sectionStyle}>
-          <h2 style={headingStyle}>11. Complaints</h2>
+          <h2 style={headingStyle}>12. Complaints</h2>
           <p style={paraStyle}>
             You have the right to lodge a complaint with the UK Information Commissioner's Office (ICO) at ico.org.uk.
           </p>
