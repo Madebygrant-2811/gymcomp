@@ -9,7 +9,6 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" — awaiting confirmation
-  const [roundCount, setRoundCount] = useState(data.rounds.length || 1);
   const [newLevel, setNewLevel] = useState("");
   const [newAgeRange, setNewAgeRange] = useState("");
   const [editingAgeIdx, setEditingAgeIdx] = useState(null);
@@ -33,12 +32,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     return () => target.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Seed Round 1 on first load if rounds array is empty
-  useEffect(() => {
-    if (data.rounds.length === 0) {
-      setData(d => ({ ...d, rounds: [{ id: generateId(), name: "Round 1", start: "", end: "" }] }));
-    }
-  }, []);
   const [customLevel, setCustomLevel] = useState("");
   const [dateError, setDateError] = useState("");
 
@@ -71,26 +64,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     setData(d => ({ ...d, ageRanges: (d.ageRanges || []).filter((_, i) => i !== idx) }));
   };
 
-  // Build/sync rounds when roundCount changes — preserve existing round times
-  const syncRounds = (count) => {
-    const n = Math.max(1, Math.min(10, parseInt(count) || 1));
-    setRoundCount(n);
-    setData(d => {
-      const existing = d.rounds;
-      const rounds = Array.from({ length: n }, (_, i) => {
-        const prev = existing[i];
-        return prev
-          ? { ...prev, name: `Round ${i + 1}` }
-          : { id: generateId(), name: `Round ${i + 1}`, start: "", end: "" };
-      });
-      return { ...d, rounds };
-    });
-  };
-
-  const updateRoundTime = (id, field, value) => {
-    setData(d => ({ ...d, rounds: d.rounds.map(r => r.id === id ? { ...r, [field]: value } : r) }));
-  };
-
   const toggleApparatus = (a, currentlyOn) => {
     if (currentlyOn) {
       setPendingRemove({ type: "apparatus", id: a, msg: `Remove apparatus "${a}"? All judges assigned to it will also be removed.` });
@@ -119,23 +92,14 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 
   const doRemove = () => {
     const { type, id } = pendingRemove;
-    if (type === "round") setData(d => ({ ...d, rounds: d.rounds.filter(r => r.id !== id) }));
     if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id) }));
     if (type === "level") setData(d => ({ ...d, levels: d.levels.filter(l => l.id !== id) }));
     setPendingRemove(null);
   };
 
-  const overallTime = () => {
-    if (!data.rounds.length) return null;
-    const starts = data.rounds.map(r => r.start).sort();
-    const ends = data.rounds.map(r => r.end).sort();
-    return `${starts[0]} – ${ends[ends.length - 1]}`;
-  };
-
   const realApparatus = data.apparatus.filter(a => a !== "Rest");
 
   const canProceed = data.name && data.date && !dateError &&
-    data.rounds.length > 0 &&
     realApparatus.length > 0 && data.levels.length > 0 &&
     data.dataConsentConfirmed;
 
@@ -143,7 +107,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     ...(!data.name ? ["Competition name"] : []),
     ...(!data.date ? ["Date"] : []),
     ...(dateError ? ["Valid date (must be today or future)"] : []),
-    ...(data.rounds.length === 0 ? ["At least one round"] : []),
     ...(realApparatus.length === 0 ? ["At least one apparatus"] : []),
     ...(data.levels.length === 0 ? ["At least one level"] : []),
   ];
@@ -531,42 +494,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             <span style={{ color: "var(--muted)", fontSize: 13 }}>No age ranges added yet</span>
           )}
         </div>
-      </div>
-
-      {/* Rounds */}
-      <div className="card" id="setup-rounds">
-        <div className="card-title">Rounds &amp; Times</div>
-        <div className="field" style={{ maxWidth: 200 }}>
-          <label className="label">Number of Rounds</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="btn-icon" style={{ fontSize: 18 }}
-              onClick={() => syncRounds(roundCount - 1)} disabled={roundCount <= 1}>−</button>
-            <span style={{ fontFamily: "var(--font-display)", fontSize: 32, minWidth: 32, textAlign: "center", color: "var(--accent)" }}>{roundCount}</span>
-            <button className="btn-icon" style={{ fontSize: 18 }}
-              onClick={() => syncRounds(roundCount + 1)} disabled={roundCount >= 10}>+</button>
-          </div>
-        </div>
-        {data.rounds.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>Set times for each round</div>
-            {data.rounds.map((r, i) => (
-              <div key={r.id} className="round-time-row" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-                <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
-                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                  <label className="label">Start</label>
-                  <input className="input" type="time" value={r.start}
-                    onChange={e => updateRoundTime(r.id, "start", e.target.value)} />
-                </div>
-                <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                  <label className="label">End</label>
-                  <input className="input" type="time" value={r.end}
-                    onChange={e => updateRoundTime(r.id, "end", e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {overallTime() && <div className="summary-box" style={{ marginTop: 10 }}>Overall: {overallTime()}</div>}
       </div>
 
       {showWarnings && missingFields.length > 0 && (

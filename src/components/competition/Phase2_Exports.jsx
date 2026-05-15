@@ -1,4 +1,4 @@
-import { printDocument, buildDiagnosticHTML, buildResultsHTML } from "../../lib/pdf.js";
+import { printDocument, buildDiagnosticHTML, buildResultsHTML, exportResultsXLSX } from "../../lib/pdf.js";
 
 function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
   const colour = "#000dff";
@@ -18,13 +18,13 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
     },
     {
       id: "results",
-      title: "Results Sheet",
+      title: "Results Export",
       icon: "🏆",
-      desc: "Ranked results per level showing gymnast name, club, score and placing. Medal positions highlighted. Ready to share with clubs post-competition.",
-      use: "Email to clubs after the event. Display at the awards ceremony.",
+      desc: "Ranked results per level showing gymnast name, club, scores, totals and placings. Available as a branded PDF or a full spreadsheet for Excel and Google Sheets.",
+      use: "Share with clubs after the event or keep as a digital record.",
       available: hasScores,
       unavailableMsg: "Enter scores in Score Input to generate results.",
-      action: () => printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf"),
+      isResults: true,
     },
     {
       id: "diagnostic",
@@ -90,6 +90,21 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
                   Share — Coaches
                 </button>
               </div>
+            ) : doc.available && !doc.coming && doc.isResults ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1, background: colour, color: "#fff" }}
+                  onClick={() => printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf")}>
+                  ⬇ Generate PDF
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
+                  ⬇ Spreadsheet
+                </button>
+              </div>
             ) : doc.available && !doc.coming ? (
               <button
                 className="btn btn-primary"
@@ -112,8 +127,8 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
 
       <div className="card" style={{ marginTop: 16, background: "rgba(0,13,255,0.03)", borderColor: "rgba(0,13,255,0.12)" }}>
         <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.7 }}>
-          <strong style={{ color: "var(--text)" }}>How it works:</strong> Click "Generate PDF" to download a .pdf file directly to your device.
-          All documents are automatically branded with your competition name and organiser details.
+          <strong style={{ color: "var(--text)" }}>How it works:</strong> Click "Generate PDF" or "Spreadsheet" to download directly to your device.
+          All exports are automatically branded with your competition name and organiser details.
         </div>
       </div>
     </div>

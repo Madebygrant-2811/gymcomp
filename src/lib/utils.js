@@ -70,10 +70,10 @@ export function parseCSV(text) {
 }
 
 export function downloadTemplate() {
-  const headers = ["Name", "Number", "Club", "Level", "Round", "Age", "Group"];
+  const headers = ["Name", "Number", "Club", "Level", "Age"];
   const rows = [
-    ["Jane Smith", "1", "Club Alpha", "Development 1", "Round 1", "9 years", "1"],
-    ["Emily Jones", "2", "Club Beta", "Development 2", "Round 1", "10 years", "2"],
+    ["Jane Smith", "1", "Club Alpha", "Development 1", "9 years"],
+    ["Emily Jones", "2", "Club Beta", "Development 2", "10 years"],
   ];
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });

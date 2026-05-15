@@ -16,6 +16,7 @@ import ConfirmModal from "./components/shared/ConfirmModal.jsx";
 import PlanPickerModal from "./components/shared/PlanPickerModal.jsx";
 import Step1_CompDetails from "./components/setup/Step1_CompDetails.jsx";
 import Step2_Gymnasts from "./components/setup/Step2_Gymnasts.jsx";
+import RoundsGroupsPage from "./components/setup/RoundsGroupsPage.jsx";
 import Phase2_Exports from "./components/competition/Phase2_Exports.jsx";
 import Phase2_Step1 from "./components/competition/Phase2_Step1.jsx";
 import Phase2_Step2 from "./components/competition/Phase2_Step2.jsx";
@@ -121,7 +122,7 @@ export default function App() {
     return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim()));
   }, [gymnasts]);
 
-  const inSetupMode = phase === 1 || phase === "gymnasts";
+  const inSetupMode = phase === 1 || phase === "gymnasts" || phase === "rounds-groups";
   const isDirty = inSetupMode && setupSnapshot !== null && (
     JSON.stringify(draftCompData) !== JSON.stringify(setupSnapshot.compData) ||
     JSON.stringify(draftGymnasts) !== JSON.stringify(setupSnapshot.gymnasts)
@@ -512,6 +513,19 @@ export default function App() {
     if (currentAccount) {
       const ev = events.create(currentAccount.id, newCompId);
       setCurrentEventId(ev.id);
+
+      // Fire-and-forget: notify Loops of new competition
+      if (currentUser?.email) {
+        fetch("/.netlify/functions/loops-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: currentUser.email,
+            eventName: "comp_created",
+            eventProperties: { compId: newCompId },
+          }),
+        }).catch(e => console.error("[loops-event] comp_created failed:", e.message));
+      }
     } else {
       setCurrentEventId(null);
     }
@@ -838,6 +852,9 @@ export default function App() {
     }
     setPhase("gymnasts");
   };
+  const handleManageRoundsGroups = () => {
+    setPhase("rounds-groups");
+  };
   const handleGoToDashboard = () => {
     if (inSetupMode && isDirty) {
       discardCallbackRef.current = () => {
@@ -861,7 +878,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
     if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
-    const ids = ["setup-basic","setup-levels","setup-apparatus","setup-ages","setup-rounds"];
+    const ids = ["setup-basic","setup-levels","setup-apparatus","setup-ages"];
     const root = appMainRef.current;
     if (!root) return;
     const observer = new IntersectionObserver((entries) => {
@@ -869,6 +886,22 @@ export default function App() {
       if (visible.length > 0) setActiveSection(visible[0].target.id);
     }, { root, rootMargin: "-10% 0px -60% 0px", threshold: 0 });
     // Small delay so DOM has rendered the cards
+    const t = setTimeout(() => {
+      ids.forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
+    }, 100);
+    return () => { clearTimeout(t); observer.disconnect(); };
+  }, [screen, phase]);
+
+  // Track which dashboard section is in view (dashboard scroll-spy)
+  useEffect(() => {
+    if (screen !== "active" || phase !== "dashboard") return;
+    const ids = ["card-overview","card-clubs","card-rounds-groups","card-gymnasts","card-judges","card-documents","card-readiness"];
+    const root = appMainRef.current;
+    if (!root) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible.length > 0) setActiveSection(visible[0].target.id);
+    }, { root, rootMargin: "-10% 0px -60% 0px", threshold: 0 });
     const t = setTimeout(() => {
       ids.forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
     }, 100);
@@ -1209,7 +1242,7 @@ export default function App() {
       )}
 
       {/* Nav bar — hidden during setup, dashboard, gymnast management, and phase 2 for ALL users */}
-      {phase !== 2 && !(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts")) && (
+      {phase !== 2 && !(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts" || phase === "rounds-groups")) && (
         <nav className="nav">
           {!currentAccount && (
             <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }}>GYMCOMP<span>.</span></div>
@@ -1261,6 +1294,7 @@ export default function App() {
           onStartComp={handleStartComp}
           onEditSetup={handleEditSetup}
           onManageGymnasts={handleManageGymnasts}
+          onManageRoundsGroups={handleManageRoundsGroups}
           onUpdateCompData={setCompData}
           onUpdateGymnasts={setGymnastsWithSync}
           onSetPin={() => {
@@ -1328,6 +1362,27 @@ export default function App() {
               if (currentEventId) snapshotWithPin(currentEventId, cd, g);
               setPhase("dashboard");
             }} />
+        </div>
+        </ErrorBoundary>
+      )}
+
+      {/* ROUNDS & GROUPS MANAGEMENT */}
+      {phase === "rounds-groups" && (
+        <ErrorBoundary label="rounds & groups">
+        <div style={{ flex: 1 }}>
+          <RoundsGroupsPage
+            compData={compData}
+            gymnasts={gymnasts}
+            setCompData={setCompData}
+            setGymnasts={setGymnastsWithSync}
+            eventStatus={eventStatus}
+            onBack={() => {
+              if (syncTimer.current) clearTimeout(syncTimer.current);
+              pushToSupabase(compData, gymnasts);
+              if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
+              setPhase("dashboard");
+            }}
+          />
         </div>
         </ErrorBoundary>
       )}

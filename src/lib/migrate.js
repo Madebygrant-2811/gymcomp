@@ -30,6 +30,8 @@ export function migrateCompData(cd) {
   }
   // Default allowSubmissions to true for existing comps
   if (migrated.allowSubmissions === undefined) migrated.allowSubmissions = true;
+  // Default groupsByRound for existing comps
+  if (!migrated.groupsByRound) migrated.groupsByRound = {};
   // Clean stray keys from duplicate
   delete migrated.gymnasts;
   return migrated;

@@ -121,7 +121,7 @@ export const css = `
   }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 20px; }
-  .card-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
   .field { margin-bottom: 18px; min-width: 0; }
   .label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
@@ -365,8 +365,9 @@ export const css = `
   .results-filters { display: flex; gap: 8px; align-items: center; }
 
   .si-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-  .si-toolbar .tabs { flex: 1; margin-bottom: 0; border-bottom: none; }
-  .si-toolbar .tab-btn { flex: 1; text-align: center; }
+  .si-toolbar .si-search { flex: 1; }
+  .si-toolbar .tabs { margin-left: auto; margin-bottom: 0; border-bottom: none; }
+  .si-toolbar .tab-btn { text-align: center; }
 
   /* ============================================================
      RESPONSIVE

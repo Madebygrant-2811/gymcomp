@@ -24,6 +24,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     palette: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="10" cy="6" r="1" fill="currentColor"/><circle cx="5" cy="9" r="1" fill="currentColor"/></svg>,
     club: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 14l2-8h8l2 8M5 2a3 3 0 016 0"/></svg>,
     clock: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>,
+    check: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5.5 8l2 2 3.5-3.5"/></svg>,
     bars: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>,
     layers: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L2 5.5 8 9l6-3.5L8 2zM2 10.5L8 14l6-3.5M2 8l6 3.5L14 8"/></svg>,
     gauge: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M8 14A6 6 0 118 2a6 6 0 010 12zM8 5v3l2 1"/></svg>,
@@ -64,16 +65,16 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     { id: "setup-levels", label: "Levels", icon: icons.layers },
     { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
     { id: "setup-ages", label: "Age Ranges", icon: icons.users },
-    { id: "setup-rounds", label: "Rounds", icon: icons.clock },
   ];
 
   const dashAnchors = [
     { id: "card-overview", label: "Comp Overview", icon: icons.info },
+    { id: "card-readiness", label: "Setup Checklist", icon: icons.check },
     { id: "card-clubs", label: "Manage Clubs", icon: icons.club },
     { id: "card-gymnasts", label: "Manage Gymnasts", icon: icons.users },
     { id: "card-judges", label: "Manage Judges", icon: icons.judge },
+    { id: "card-rounds-groups", label: "Rounds & Groups", icon: icons.clock },
     { id: "card-documents", label: "Comp Documents", icon: icons.doc },
-    { id: "card-live", label: "Live Results", icon: icons.send },
   ];
 
   const phase2Steps = [
@@ -155,7 +156,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
                 const label = eventStatus === "live" ? "Resume Competition" : "Start Competition";
                 return (
                   <div style={ready ? {} : { opacity: 0.4, pointerEvents: "none" }}
-                    title={!ready ? [gymnastsCount === 0 && "Add gymnasts", judgesCount === 0 && "Add judges", allGymnastsComplete === false && "Complete incomplete gymnast data"].filter(Boolean).join(", ") + " to start" : undefined}>
+                    title={!ready ? "Complete the readiness checklist to start" : undefined}>
                     <NavItem icon={icons.play} label={label} onClick={ready ? onStartComp : undefined} />
                   </div>
                 );
@@ -165,6 +166,11 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
           {/* ── active / gymnasts ── */}
           {screen === "active" && phase === "gymnasts" && (<>
+            <NavItem icon={icons.back} label="Back to Comp" onClick={onDashboard} />
+          </>)}
+
+          {/* ── active / rounds-groups ── */}
+          {screen === "active" && phase === "rounds-groups" && (<>
             <NavItem icon={icons.back} label="Back to Comp" onClick={onDashboard} />
           </>)}
 

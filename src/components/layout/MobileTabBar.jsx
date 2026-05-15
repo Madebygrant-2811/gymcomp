@@ -55,6 +55,10 @@ function MobileTabBar({ screen, phase, step, setStep, onNew, onMyEvents, onEditS
         <Tab icon={icons.back} label="Back to Comp" onClick={onDashboard} />
       </>)}
 
+      {screen === "active" && phase === "rounds-groups" && (<>
+        <Tab icon={icons.back} label="Back to Comp" onClick={onDashboard} />
+      </>)}
+
       {screen === "active" && phase === 2 && (<>
         <Tab icon={icons.score} label="Scores" active={step === 1} onClick={() => setStep(1)} />
         <D />

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { denseRank, gymnast_key } from "../../lib/scoring.js";
-import { exportResultsXLSX } from "../../lib/pdf.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 
@@ -110,7 +109,6 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
           {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
         </div>
         <div className="setup-topbar-right" style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>Export Spreadsheet</button>
           {onComplete && (
             <button className="btn btn-sm" style={{ background: "#15803d", color: "#fff", border: "none", fontWeight: 600 }}
               onClick={() => setShowCompleteConfirm(true)}>Complete Competition</button>

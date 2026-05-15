@@ -300,6 +300,31 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
                   </div>
                 </div>
               </div>
+              {(ev.status === "active" || ev.status === "live") && (() => {
+                const scoringApp = (cd.apparatus || []).filter(a => a !== "Rest");
+                const jdgs = cd.judges || [];
+                const steps = [
+                  (cd.clubs || []).length > 0,
+                  gymnasts.length > 0 && gymnasts.every(g => g.club && g.club.trim() !== ""),
+                  scoringApp.length > 0 && scoringApp.every(a => jdgs.some(j => j.apparatus === a)),
+                  (cd.rounds || []).length > 0,
+                  gymnasts.length > 0 && gymnasts.every(g => g.round && g.group),
+                ];
+                const doneCount = steps.filter(Boolean).length;
+                return (
+                  <>
+                    <div className="od-card-divider" style={{ marginTop: 16 }} />
+                    <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ flex: 1, height: 6, background: "var(--surface2)", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ width: `${(doneCount / 5) * 100}%`, height: "100%", background: doneCount === 5 ? "#22c55e" : "var(--brand-01)", borderRadius: 3, transition: "width 0.3s" }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: doneCount === 5 ? "#15803d" : "var(--text-tertiary)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+                        {doneCount} of 5 ready
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
           {!isSelectable && (

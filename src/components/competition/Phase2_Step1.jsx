@@ -4,7 +4,6 @@ import { gymnast_key, isDualVault, calculateNGAScore } from "../../lib/scoring.j
 import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
-import GymCompLogomark from "../../assets/Logomark.svg";
 
 function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExportPDF, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
   const [localRound, setLocalRound] = useState(compData.rounds[0]?.id || "");
@@ -12,8 +11,6 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   const setActiveRound = setActiveRoundProp || setLocalRound;
   const [queryModal, setQueryModal] = useState(null); // { gid, app }
   const [queryNote, setQueryNote] = useState("");
-  const [sheetReceived, setSheetReceived] = useState({});
-  const [showTracker, setShowTracker] = useState(false);
   const [scoreModal, setScoreModal] = useState(null); // { gid, app, isEdit }
   const [searchQuery, setSearchQuery] = useState("");
   const [modalFields, setModalFields] = useState({});
@@ -180,41 +177,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
   };
 
   // ── Sheet received tracker (per group × apparatus) ──────
-  const toggleSheet = (roundId, groupKey, apparatus) => {
-    const k = `${groupKey}__${apparatus}`;
-    setSheetReceived(prev => ({
-      ...prev,
-      [roundId]: { ...(prev[roundId] || {}), [k]: !(prev[roundId]?.[k]) }
-    }));
-  };
-
-  const isSheetIn = (roundId, groupKey, apparatus) =>
-    !!sheetReceived[roundId]?.[`${groupKey}__${apparatus}`];
-
   // ── Group gymnasts ───────────────────────────────────────
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
-
-  // Unfiltered groups for sheet tracker
-  const allGroups = useMemo(() => {
-    const groups = [];
-    const seen = {};
-    roundGymnasts.forEach(g => {
-      const levelName = compData.levels.find(l => l.id === g.level)?.name || g.level;
-      const grp = g.group || "\u2014";
-      const key = `${levelName}__${grp}`;
-      if (!seen[key]) {
-        seen[key] = true;
-        groups.push({ key, level: levelName, group: grp });
-      }
-    });
-    return groups;
-  }, [roundGymnasts, compData.levels]);
-  const appCount = scoringApparatus.length;
-  const totalSheets = allGroups.length * appCount;
-  const sheetsIn = (roundId) => {
-    const rd = sheetReceived[roundId] || {};
-    return Object.values(rd).filter(Boolean).length;
-  };
   const filteredGymnasts = useMemo(() => searchQuery.trim()
     ? roundGymnasts.filter(g => {
         const q = searchQuery.toLowerCase();
@@ -565,7 +529,6 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       {/* ── Topbar ── */}
       <div className={`setup-topbar${topbarHidden ? " topbar-hidden" : ""}`} style={{ margin: "0 24px" }}>
         <div className="setup-topbar-left">
-          <img src={GymCompLogomark} alt="GymComp" style={{ height: 22, flexShrink: 0, filter: "brightness(0) invert(1)", opacity: 0.9 }} />
           {compData.name && <span className="setup-topbar-name">{compData.name}</span>}
           {compData.date && <span className="setup-topbar-meta">{new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
           {compData.venue && <span className="setup-topbar-meta">{compData.venue}</span>}
@@ -611,66 +574,6 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
       </div>
 
       <div className="si-body" style={{ marginTop: 24 }}>
-        {/* ── Sheet Received Tracker (hidden for PIN judges) ── */}
-        {!onExit && allGroups.length > 0 && appCount > 0 && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div className="page-title" style={{ fontSize: 22 }}>Sheet Tracker</div>
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                  {sheetsIn(activeRound)} of {totalSheets} received
-                </span>
-              </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowTracker(v => !v)}>
-                {showTracker ? "Hide" : "Show"}
-              </button>
-            </div>
-            {showTracker && (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Group</th>
-                      {scoringApparatus.map(a => <th key={a} style={{ textAlign: "center" }}>{getApparatusIcon(a)} {a}</th>)}
-                      <th style={{ textAlign: "center" }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allGroups.map(({ key, level, group }) => {
-                      const groupDone = scoringApparatus.every(a => isSheetIn(activeRound, key, a));
-                      const groupCount = scoringApparatus.filter(a => isSheetIn(activeRound, key, a)).length;
-                      return (
-                        <tr key={key}>
-                          <td style={{ fontWeight: 600, fontSize: 12 }}>{level} · {group}</td>
-                          {scoringApparatus.map(app => {
-                            const received = isSheetIn(activeRound, key, app);
-                            return (
-                              <td key={app} style={{ textAlign: "center", padding: "6px 8px" }}>
-                                <button onClick={() => toggleSheet(activeRound, key, app)}
-                                  style={{
-                                    width: 28, height: 24, borderRadius: 4, border: "none", cursor: "pointer",
-                                    background: received ? "var(--success)" : "var(--surface2)",
-                                    color: received ? "#fff" : "var(--muted)",
-                                    fontSize: 12, fontWeight: 700, transition: "all 0.15s",
-                                    display: "inline-flex", alignItems: "center", justifyContent: "center"
-                                  }}>
-                                  {received ? "\u2713" : ""}
-                                </button>
-                              </td>
-                            );
-                          })}
-                          <td style={{ textAlign: "center", fontSize: 11, fontWeight: 600, padding: "6px 8px", color: groupDone ? "var(--success)" : "var(--muted)" }}>
-                            {groupDone ? "Complete" : `${groupCount}/${appCount}`}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
 
         {onExit && (
           <div className="pin-mobile-only" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 16 }}>
@@ -824,7 +727,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         ))}
       </div>
 
-      {/* ── Score Modal ── */}
+      {/* ── Score Modal — Two-column card ── */}
       {scoreModal && (() => {
         const g = gymnasts.find(x => x.id === scoreModal.gid);
         if (!g) return null;
@@ -833,156 +736,194 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onExport
         const ngaCourtesyApplied = isNGA && modalTotal === NGA_COURTESY_SCORE && (parseFloat(modalFields.dv) || 0) > 0;
         const n = judgeCount(scoreModal.app);
 
+        const _lbl = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#001af7", fontFamily: "var(--font-display)", marginBottom: 4 };
+        const _inp = { caretColor: "transparent", width: "100%", fontSize: 18, padding: "12px 16px", fontWeight: 700, textAlign: "center", borderRadius: 8, border: "1px solid rgba(0,0,0,0.15)", background: "#fff", boxSizing: "border-box" };
+        const cardInput = (field, max, autoFocus) => (
+          <input className="score-input" type="text" inputMode="decimal"
+            value={scoreDisplay(field)}
+            style={_inp}
+            onChange={() => {}}
+            onFocus={() => { if (modalBufs[field]) setModalPristine(p => ({ ...p, [field]: true })); }}
+            onKeyDown={handleScoreKey(field, max)}
+            onBeforeInput={handleBeforeInput(field, max)}
+            autoFocus={autoFocus} />
+        );
+
         const vaultSection = (prefix, label, autoFocusFirst) => (
-          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: 14, marginBottom: 10 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--accent)", marginBottom: 8 }}>
+          <div style={{ background: "rgba(0,13,255,0.04)", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ ..._lbl, fontSize: 11, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               {label}
-              {(() => { const f = calcVaultFinal(modalFields, prefix, scoreModal.app); return f > 0 ? <span style={{ float: "right", fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{f.toFixed(3)}</span> : null; })()}
+              {(() => { const f = calcVaultFinal(modalFields, prefix, scoreModal.app); return f > 0 ? <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{f.toFixed(3)}</span> : null; })()}
             </div>
-            <div className="si-modal-fields">
-              <div className="si-modal-field"><label>D Score</label>{scoreInput(`${prefix}dv`, 10, autoFocusFirst)}</div>
-              <div className="si-modal-field"><label>Bonus</label>{scoreInput(`${prefix}bon`, 2)}</div>
-              <div className="si-modal-field"><label>Penalty</label>{scoreInput(`${prefix}pen`, 10)}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>D Score</div>{cardInput(`${prefix}dv`, 10, autoFocusFirst)}</div>
+              <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>Bonus</div>{cardInput(`${prefix}bon`, 2)}</div>
+              <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>Penalty</div>{cardInput(`${prefix}pen`, 10)}</div>
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 4, marginTop: 6 }}>
+            <div style={{ ..._lbl, color: "var(--muted)", marginBottom: 6 }}>
               E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}
             </div>
-            <div className="si-modal-fields">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {Array.from({ length: Math.max(n, 1) }, (_, i) => (
-                <div className="si-modal-field" key={i}><label>J{i + 1}</label>{scoreInput(`${prefix}e${i + 1}`, 10)}</div>
+                <div key={i} style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>J{i + 1}</div>{cardInput(`${prefix}e${i + 1}`, 10)}</div>
               ))}
             </div>
           </div>
         );
 
+        const infoLbl = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#001af7", fontFamily: "var(--font-display)", marginBottom: 4 };
+        const infoVal = { background: "#fff", borderRadius: 8, padding: "8px 14px", fontSize: 14, fontWeight: 600, color: "var(--text)" };
+
         return createPortal(
           <div className="modal-backdrop" onClick={() => setScoreModal(null)}>
-            <div className="modal-box" style={{ maxWidth: dual ? 680 : 500 }} onClick={e => e.stopPropagation()}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{scoreModal.isEdit ? "Edit Score" : "Add Score"}</div>
-                <button className="btn-icon" onClick={() => setScoreModal(null)} aria-label="Close" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
-              </div>
-
-              <div className="si-modal-readonly">
-                <strong style={{ fontSize: 18 }}>#{g.number}</strong>
-                <span>{g.name}</span>
-                {g.club && <span style={{ marginLeft: "auto" }}>{g.club}</span>}
-              </div>
-
-              <div className="field">
-                <label className="label">Apparatus</label>
-                <div className="input" style={{ cursor: "default", background: "var(--surface2)", color: "var(--text)", fontWeight: 600 }}>
-                  {getApparatusIcon(scoreModal.app)} {scoreModal.app}
-                  {dual && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "rgba(0,13,255,0.08)", padding: "2px 8px", borderRadius: 4 }}>Dual Vault</span>}
+            <div onClick={e => e.stopPropagation()} style={{
+              display: "flex", flexWrap: "wrap",
+              maxWidth: dual ? 780 : 720, width: "94%", maxHeight: "94vh",
+              borderRadius: 16, overflow: "hidden",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
+            }}>
+              {/* ── Left panel — context ── */}
+              <div style={{
+                flex: "1 1 220px", background: "#f0f0ff", padding: "28px 24px",
+                display: "flex", flexDirection: "column", gap: 16,
+              }}>
+                <div style={{
+                  display: "inline-flex", alignSelf: "flex-start",
+                  background: isNGA ? "#222" : "#001af7", color: "#fff",
+                  fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase",
+                  padding: "5px 14px", borderRadius: 56, fontFamily: "var(--font-display)",
+                }}>
+                  {isNGA ? "NGA Scoring" : "FIG Scoring"}
                 </div>
-              </div>
-
-              {dual ? (
-                <>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <div style={{ flex: 1 }}>{vaultSection("v1", "Vault 1", true)}</div>
-                    <div style={{ flex: 1 }}>{vaultSection("v2", "Vault 2", false)}</div>
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5, fontStyle: "italic" }}>
-                    Enter deductions — subtracted from 10. Final = average of both vaults.
-                  </div>
-                </>
-              ) : isNGA ? (
-                <>
-                  <div className="si-modal-fields">
-                    <div className="si-modal-field">
-                      <label>Start Value (SV)</label>
-                      {scoreInput("dv", NGA_MAX_SV, true)}
-                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Max 10.0</span>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6, marginTop: 8 }}>
-                    Execution Deductions {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6, fontStyle: "italic" }}>
-                    Total execution deductions for this routine (0.05 increments)
-                  </div>
-                  <div className="si-modal-fields">
-                    {Array.from({ length: Math.max(n, 1) }, (_, i) => (
-                      <div className="si-modal-field" key={i}>
-                        <label>Judge {i + 1} deductions</label>
-                        {scoreInput(`e${i + 1}`, 10)}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="si-modal-fields" style={{ marginTop: 8 }}>
-                    <div className="si-modal-field">
-                      <label>Neutral deductions</label>
-                      {scoreInput("bon", 10)}
-                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Missing requirements, restricted skills, no-dismount, etc.</span>
-                    </div>
-                    <div className="si-modal-field">
-                      <label>Falls</label>
-                      <input className="score-input" type="number" inputMode="numeric" min="0" step="1"
-                        value={modalFields._falls || 0}
-                        onChange={e => {
-                          const v = Math.max(0, parseInt(e.target.value) || 0);
-                          mf("_falls", v);
-                        }}
-                        style={{ width: "100%", fontSize: 20, padding: "14px 20px", fontWeight: 700, textAlign: "center", borderRadius: 12 }} />
-                      <span style={{ fontSize: 10, color: "var(--muted)" }}>Each fall = 0.5 penalty</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="si-modal-fields">
-                    <div className="si-modal-field">
-                      <label>D Score</label>
-                      {scoreInput("dv", 10, true)}
-                    </div>
-                    <div className="si-modal-field">
-                      <label>Bonus</label>
-                      {scoreInput("bon", 2)}
-                    </div>
-                    <div className="si-modal-field">
-                      <label>Penalty</label>
-                      {scoreInput("pen", 10)}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--muted)", marginBottom: 6 }}>
-                    E Score {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
-                  </div>
-                  <div className="si-modal-fields">
-                    {Array.from({ length: Math.max(n, 1) }, (_, i) => (
-                      <div className="si-modal-field" key={i}>
-                        <label>Judge {i + 1}</label>
-                        {scoreInput(`e${i + 1}`, 10)}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
-                    Enter deductions — subtracted from 10 (e.g. 2.50 = E score of 7.50)
-                  </div>
-                </>
-              )}
-
-              <div className="si-modal-total">
-                {modalTotal > 0 ? modalTotal.toFixed(3) : "\u2014"}
-              </div>
-              {ngaCourtesyApplied && (
-                <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: -24, marginBottom: 12 }}>
-                  (courtesy score applied)
+                <div><div style={infoLbl}>Number</div><div style={infoVal}>#{g.number}</div></div>
+                <div><div style={infoLbl}>Name</div><div style={infoVal}>{g.name}</div></div>
+                {g.club && <div><div style={infoLbl}>Club</div><div style={infoVal}>{g.club}</div></div>}
+                <div>
+                  <div style={infoLbl}>Apparatus</div>
+                  <div style={infoVal}>{getApparatusIcon(scoreModal.app)} {scoreModal.app}</div>
                 </div>
-              )}
-
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+                {dual && (
+                  <div style={{
+                    display: "inline-flex", alignSelf: "flex-start",
+                    background: "rgba(0,13,255,0.08)", color: "#001af7",
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                    padding: "4px 12px", borderRadius: 4,
+                  }}>Dual Vault</div>
+                )}
+                <div style={{ flex: 1 }} />
                 {scoreModal.isEdit && (
-                  <button className="btn-icon" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger)" }}
-                    title="Delete Score"
-                    onClick={() => setDeleteConfirm({ gid: scoreModal.gid, app: scoreModal.app })}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M6.67 7.33v4M9.33 7.33v4"/><path d="M3.33 4l.67 9.33a1.33 1.33 0 001.33 1.34h5.34a1.33 1.33 0 001.33-1.34L12.67 4"/></svg>
+                  <button onClick={() => setDeleteConfirm({ gid: scoreModal.gid, app: scoreModal.app })}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      background: "none", border: "none", color: "var(--danger)",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "6px 0",
+                    }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M6.67 7.33v4M9.33 7.33v4"/><path d="M3.33 4l.67 9.33a1.33 1.33 0 001.33 1.34h5.34a1.33 1.33 0 001.33-1.34L12.67 4"/></svg>
+                    Delete score
                   </button>
                 )}
-                <button className="btn btn-primary" onClick={submitScoreModal}>
+              </div>
+
+              {/* ── Right panel — scoring ── */}
+              <div style={{
+                flex: "2 1 340px", background: "var(--surface)", padding: "28px 24px",
+                overflowY: "auto", maxHeight: "94vh",
+                display: "flex", flexDirection: "column",
+              }}>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                  <button className="btn-icon" onClick={() => setScoreModal(null)} aria-label="Close"
+                    style={{ borderColor: "var(--border)", color: "var(--muted)" }}>×</button>
+                </div>
+
+                {dual ? (
+                  <>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ flex: "1 1 240px" }}>{vaultSection("v1", "Vault 1", true)}</div>
+                      <div style={{ flex: "1 1 240px" }}>{vaultSection("v2", "Vault 2", false)}</div>
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
+                      Enter deductions — subtracted from 10. Final = average of both vaults.
+                    </div>
+                  </>
+                ) : isNGA ? (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                        <div style={_lbl}>Start Value (SV)</div>
+                        {cardInput("dv", NGA_MAX_SV, true)}
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>Max 10.0</div>
+                      </div>
+                    </div>
+                    <div style={{ ..._lbl, color: "var(--muted)", marginBottom: 4 }}>
+                      Execution Deductions {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 10, fontStyle: "italic" }}>
+                      Total execution deductions for this routine (0.05 increments)
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                      {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                        <div key={i} style={{ flex: "1 1 0", minWidth: 0 }}>
+                          <div style={_lbl}>Judge {i + 1}</div>
+                          {cardInput(`e${i + 1}`, 10)}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                        <div style={_lbl}>Neutral deductions</div>
+                        {cardInput("bon", 10)}
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>Missing requirements, restricted skills, etc.</div>
+                      </div>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                        <div style={_lbl}>Falls</div>
+                        <input className="score-input" type="number" inputMode="numeric" min="0" step="1"
+                          value={modalFields._falls || 0}
+                          onChange={e => { const v = Math.max(0, parseInt(e.target.value) || 0); mf("_falls", v); }}
+                          style={{ ..._inp, fontSize: 18 }} />
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>Each fall = 0.5 penalty</div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>D Score</div>{cardInput("dv", 10, true)}</div>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>Bonus</div>{cardInput("bon", 2)}</div>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}><div style={_lbl}>Penalty</div>{cardInput("pen", 10)}</div>
+                    </div>
+                    <div style={{ ..._lbl, color: "var(--muted)", marginBottom: 4 }}>
+                      Execution {n > 0 ? `(${n} Judge${n !== 1 ? "s" : ""})` : ""}{n === 0 && <span style={{ color: "#f0ad4e" }}> (none configured)</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 10, fontStyle: "italic" }}>
+                      Enter deductions — subtracted from 10 (e.g. 2.50 = E score of 7.50)
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                      {Array.from({ length: Math.max(n, 1) }, (_, i) => (
+                        <div key={i} style={{ flex: "1 1 0", minWidth: 0 }}>
+                          <div style={_lbl}>Judge {i + 1}</div>
+                          {cardInput(`e${i + 1}`, 10)}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div className="si-modal-total">
+                  {modalTotal > 0 ? modalTotal.toFixed(3) : "\u2014"}
+                </div>
+                {ngaCourtesyApplied && (
+                  <div style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", marginTop: -24, marginBottom: 12 }}>
+                    (courtesy score applied)
+                  </div>
+                )}
+
+                <button className="btn btn-primary" onClick={submitScoreModal}
+                  style={{
+                    width: "100%", background: "#000dff", color: "#fff",
+                    borderRadius: 56, padding: "14px 24px",
+                    fontSize: 14, fontWeight: 700, border: "none", cursor: "pointer",
+                    fontFamily: "var(--font-display)",
+                  }}>
                   {scoreModal.isEdit ? "Update Score" : "Submit Score"}
                 </button>
               </div>
