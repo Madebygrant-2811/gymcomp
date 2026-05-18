@@ -19,6 +19,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   const [assignSel, setAssignSel] = useState(new Set());
   const [assignSearch, setAssignSearch] = useState("");
   const [assignLevelFilter, setAssignLevelFilter] = useState("");
+  const [assignAgeFilter, setAssignAgeFilter] = useState("");
   const [activeRound, setActiveRound] = useState("");
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -131,6 +132,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
         return false;
     }
     if (assignLevelFilter && g.level !== assignLevelFilter) return false;
+    if (assignAgeFilter && (g.age || "") !== assignAgeFilter) return false;
     return true;
   });
 
@@ -185,6 +187,23 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     });
     return chips;
   }, [unassigned, levels]);
+
+  /* ── Age filter chips (shown when a level is selected) ──── */
+  const ageChips = useMemo(() => {
+    if (!assignLevelFilter) return [];
+    const levelGymnasts = unassigned.filter((g) => g.level === assignLevelFilter);
+    const ages = [];
+    levelGymnasts.forEach((g) => {
+      const a = g.age || "";
+      if (a && !ages.includes(a)) ages.push(a);
+    });
+    ages.sort();
+    const chips = [{ id: "", label: "All Ages", count: levelGymnasts.length }];
+    ages.forEach((a) => {
+      chips.push({ id: a, label: a, count: levelGymnasts.filter((g) => g.age === a).length });
+    });
+    return chips;
+  }, [unassigned, assignLevelFilter]);
 
   /* ── Selection helpers ──────────────────────────────────── */
   const visibleIds = filteredUnassigned.map((g) => g.id);
@@ -448,7 +467,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
               return (
                 <button
                   key={c.id}
-                  onClick={() => setAssignLevelFilter(c.id)}
+                  onClick={() => { setAssignLevelFilter(c.id); setAssignAgeFilter(""); }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -482,6 +501,36 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
             });
           })()}
         </div>
+
+        {/* Age filter chips */}
+        {ageChips.length > 2 && (
+          <div style={{ padding: "0 18px 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {ageChips.map((c) => {
+              const on = assignAgeFilter === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setAssignAgeFilter(c.id)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 4,
+                    padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 500,
+                    border: on ? "1px solid var(--brand-01)" : "1px solid var(--border)",
+                    background: on ? "var(--brand-01)" : "var(--surface2)",
+                    color: on ? "#fff" : "var(--text-primary)",
+                    cursor: "pointer", fontFamily: "var(--font-display)",
+                  }}
+                >
+                  {c.label}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: "0 4px", borderRadius: 8,
+                    background: on ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.06)",
+                    color: on ? "#fff" : "var(--text-tertiary)",
+                  }}>{c.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Selection bar */}
         {selectedInPanel.length > 0 && (
@@ -525,7 +574,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    background: bandColor + "33",
+                    background: bandColor,
                     borderBottom: "1px solid var(--border)",
                     borderLeft: `3px solid ${bandColor}`,
                   }}
