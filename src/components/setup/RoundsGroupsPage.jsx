@@ -143,7 +143,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       const lo = levels.find((l) => l.id === g.level);
       const ln = lo?.name || "Unknown";
       const rk = lo?.rankBy || "level";
-      const age = rk === "level+age" ? g.age || "Unknown" : "";
+      const age = rk === "level+age" ? g.age || "" : "";
       const key = age ? `${ln} (${age})` : ln;
       if (!map[key]) map[key] = { label: key, levelName: ln, ageLabel: age, gymnasts: [] };
       map[key].gymnasts.push(g);
@@ -167,7 +167,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       const lo = levels.find((l) => l.id === g.level);
       const ln = lo?.name || "Unknown";
       const rk = lo?.rankBy || "level";
-      const age = rk === "level+age" ? g.age || "Unknown" : "";
+      const age = rk === "level+age" ? g.age || "" : "";
       const key = age ? `${ln} (${age})` : ln;
       if (!out[key]) out[key] = { total: 0, assigned: 0 };
       out[key].total++;
@@ -561,6 +561,8 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
             const done = st.assigned >= st.total;
             const visible = filteredRankGroups.find((fg) => fg.label === rg.label)?.gymnasts || [];
             const bandColor = pastelColors[rgIdx % pastelColors.length];
+            const hasFilter = assignLevelFilter || assignAgeFilter;
+            if (hasFilter && visible.length === 0) return null;
 
             return (
               <div key={rg.label}>
