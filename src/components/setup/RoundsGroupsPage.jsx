@@ -304,7 +304,8 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     e.preventDefault();
     try {
       const d = JSON.parse(e.dataTransfer.getData("text/plain"));
-      if (d.gymnastId) handleUnassign([d.gymnastId]);
+      const ids = d.gymnastIds || (d.gymnastId ? [d.gymnastId] : []);
+      if (ids.length > 0) handleUnassign(ids);
     } catch (_) {}
     setDraggingId(null);
     setDropTarget(null);
@@ -718,7 +719,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
           return (
             <div
               key={appFull}
-              style={{ flex: "0 0 auto", width: 320, minWidth: 200, display: "flex", flexDirection: "column", maxHeight: "100%" }}
+              style={{ flex: "1 0 320px", display: "flex", flexDirection: "column", maxHeight: "100%" }}
               onDragOver={(e) => {
                 if (!gName) return;
                 e.preventDefault();
@@ -835,7 +836,11 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
                       key={g.id}
                       draggable={!readOnly}
                       onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", JSON.stringify({ gymnastId: g.id }));
+                        const ids = assignSel.has(g.id) && assignSel.size > 1 ? [...assignSel] : [g.id];
+                        e.dataTransfer.setData(
+                          "text/plain",
+                          JSON.stringify(ids.length === 1 ? { gymnastId: ids[0] } : { gymnastIds: ids })
+                        );
                         e.dataTransfer.effectAllowed = "move";
                         setDraggingId(g.id);
                         setDragSource("column");
@@ -861,21 +866,26 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
                         e.preventDefault();
                         e.stopPropagation();
                         if (!draggingId) return;
-                        const dragG = gymnasts.find((x) => x.id === draggingId);
-                        if (
-                          dragG &&
-                          dragG.round === activeRound &&
-                          (dragG.group || "") === gName &&
-                          dropTarget
-                        ) {
-                          handleReorder(draggingId, dropTarget.gymnastId, dropTarget.position);
-                        } else {
-                          assignToColumn([draggingId], gName);
-                        }
+                        try {
+                          const d = JSON.parse(e.dataTransfer.getData("text/plain"));
+                          const ids = d.gymnastIds || [d.gymnastId];
+                          const dragG = gymnasts.find((x) => x.id === draggingId);
+                          if (
+                            ids.length === 1 &&
+                            dragG &&
+                            dragG.round === activeRound &&
+                            (dragG.group || "") === gName &&
+                            dropTarget
+                          ) {
+                            handleReorder(draggingId, dropTarget.gymnastId, dropTarget.position);
+                          } else {
+                            assignToColumn(ids, gName);
+                          }
+                        } catch (_) {}
                         setDraggingId(null);
                         setDropTarget(null);
                         setDragSource(null);
-    setDropColumn(null);
+                        setDropColumn(null);
                       }}
                       onMouseEnter={() => setHoveredCard(g.id)}
                       onMouseLeave={() => setHoveredCard((h) => (h === g.id ? null : h))}
