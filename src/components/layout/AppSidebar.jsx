@@ -73,7 +73,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     { id: "card-clubs", label: "Manage Clubs", icon: icons.club },
     { id: "card-gymnasts", label: "Manage Gymnasts", icon: icons.users },
     { id: "card-judges", label: "Manage Judges", icon: icons.judge },
-    { id: "card-rounds-groups", label: "Rounds & Groups", icon: icons.clock },
+    { id: "card-rounds-groups", label: "Rounds & Rotations", icon: icons.clock },
     { id: "card-documents", label: "Comp Documents", icon: icons.doc },
   ];
 

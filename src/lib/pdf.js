@@ -3,6 +3,7 @@ import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { gymnast_key, denseRank } from "./scoring.js";
 import { NGA_FALL_PENALTY } from "./constants.js";
+import { getContrastTextColor } from "./utils.js";
 
 const escHtml = (s) => {
   if (s == null) return "";
@@ -75,7 +76,7 @@ export const PRINT_BASE_CSS = `
   .apparatus-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 3px; background: #e8e8e8; color: #333; margin-right: 4px; }
 `;
 
-export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
+export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf", footerOpts = null) {
   const container = document.createElement("div");
   container.style.cssText = "position:fixed;top:-20000px;left:0;width:794px;background:#fff;z-index:-1;";
   document.body.appendChild(container);
@@ -97,6 +98,13 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
   });
   const uniqueBreakPx = [...new Set(breakPx)].filter(b => b > 10).sort((a, b) => a - b);
 
+  // Collect row boundary positions for soft page-break snapping
+  const rowBoundaryPx = [];
+  container.querySelectorAll(".pdf-row-boundary").forEach(el => {
+    rowBoundaryPx.push(el.getBoundingClientRect().top - containerTop);
+  });
+  const uniqueRowPx = [...new Set(rowBoundaryPx)].filter(b => b > 10).sort((a, b) => a - b);
+
   try {
     const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, windowWidth: 794 });
     const imgData = canvas.toDataURL("image/jpeg", 0.92);
@@ -105,7 +113,7 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
     const pageH = pdf.internal.pageSize.getHeight();
     const marginX = 8;
     const marginTop = 8;
-    const marginBottom = 14; // ~40px bottom margin
+    const marginBottom = footerOpts ? 18 : 14;
     const contentW = pageW - marginX * 2;
     const sliceH = pageH - marginTop - marginBottom;
     const mmPerPx = contentW / 794;
@@ -113,12 +121,14 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
 
     // Convert break positions to mm
     const breaksMm = uniqueBreakPx.map(px => px * mmPerPx);
+    const rowBoundsMm = uniqueRowPx.map(px => px * mmPerPx);
 
     // Build page slices — each entry is the startMm for that page
     const slices = [];
     let cursor = 0;
     while (cursor < totalMmH - 0.5) {
       slices.push(cursor);
+      // 1. Check for hard break markers in range
       let hitBreak = false;
       for (const bp of breaksMm) {
         if (bp > cursor + 1 && bp <= cursor + sliceH) {
@@ -127,7 +137,16 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
           break;
         }
       }
-      if (!hitBreak) cursor += sliceH;
+      if (!hitBreak) {
+        // 2. Check for row boundary in bottom 30% of the slice to snap to
+        const snapMin = cursor + sliceH * 0.7;
+        const snapMax = cursor + sliceH;
+        let bestSnap = -1;
+        for (const rb of rowBoundsMm) {
+          if (rb > snapMin && rb <= snapMax) bestSnap = rb;
+        }
+        cursor = bestSnap > 0 ? bestSnap : cursor + sliceH;
+      }
     }
 
     // Render each page, clipping content at break boundaries
@@ -140,6 +159,24 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 0, pageW, marginTop, "F");
       pdf.rect(0, marginTop + contentH, pageW, pageH - marginTop - contentH, "F");
+
+      // Footer overlay (option b): draw brand-coloured band with jsPDF primitives
+      if (footerOpts) {
+        const fH = 7, fGap = 4;
+        const fY = pageH - fH - fGap;
+        const fr = parseInt(footerOpts.brandBg.slice(1, 3), 16);
+        const fg = parseInt(footerOpts.brandBg.slice(3, 5), 16);
+        const fb = parseInt(footerOpts.brandBg.slice(5, 7), 16);
+        pdf.setFillColor(fr, fg, fb);
+        pdf.roundedRect(marginX, fY, contentW, fH, 2, 2, "F");
+        const tr = parseInt(footerOpts.brandText.slice(1, 3), 16);
+        const tg = parseInt(footerOpts.brandText.slice(3, 5), 16);
+        const tb = parseInt(footerOpts.brandText.slice(5, 7), 16);
+        pdf.setTextColor(tr, tg, tb);
+        pdf.setFontSize(7);
+        pdf.text("Powered by GymComp", marginX + 4, fY + 4.5);
+        pdf.text(`Page ${i + 1}`, marginX + contentW - 4, fY + 4.5, { align: "right" });
+      }
     });
 
     pdf.save(filename);
@@ -148,9 +185,12 @@ export async function generatePDF(fullHTML, filename = "gymcomp-document.pdf") {
   }
 }
 
-export function printDocument(htmlContent, filename = "gymcomp-document.pdf") {
-  const fullHTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>${PRINT_BASE_CSS}</style></head><body>${htmlContent}</body></html>`;
-  generatePDF(fullHTML, filename);
+export function printDocument(htmlContent, filename = "gymcomp-document.pdf", opts = {}) {
+  const { skipBaseCss, footerOpts } = opts;
+  const fullHTML = skipBaseCss
+    ? htmlContent
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>${PRINT_BASE_CSS}</style></head><body>${htmlContent}</body></html>`;
+  generatePDF(fullHTML, filename, footerOpts);
 }
 
 // Build agenda content
@@ -827,17 +867,27 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
 }
 
 export function buildResultsHTML(compData, gymnasts, scores) {
-  const colour = "#000dff";
   const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
 
+  // ── Branding ──
+  const brandColor = compData.brandColor || "";
+  const brandBg = brandColor || "#000dff";
+  const brandText = brandColor ? getContrastTextColor(brandColor) : "#ffffff";
+  const isLightBrand = brandText === "#000000";
+  const brandLogo = compData.brandLogoUrl || "";
+  const defaultLogo = isLightBrand ? "./logo.svg" : "./Logo-mono-white.svg";
+
+  // ── Scoring helpers ──
   const getScore = (roundId, gid, app) => {
     const v = parseFloat(scores[gymnast_key(roundId, gid, app)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (roundId, gid) =>
-    apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
 
+  const shortApp = a => a.replace(/\s*\([A-Z]+\)\s*$/, "");
+
+  // ── Rank groups (mirrors Phase2_Step2.jsx exactly) ──
   const buildRankGroups = (roundId) => {
     const roundGymnasts = gymnasts.filter(g => g.round === roundId);
     const map = {};
@@ -850,6 +900,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
       if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
       map[key].gymnasts.push(g);
     });
+    Object.values(map).forEach(g => g.gymnasts.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
     const levelOrder = (compData.levels || []).map(l => l.name);
     return Object.entries(map)
       .sort(([a], [b]) => {
@@ -857,244 +908,183 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         const bLevel = b.split("|||")[0];
         const ai = levelOrder.indexOf(aLevel);
         const bi = levelOrder.indexOf(bLevel);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
       })
       .map(([key, val]) => ({ key, ...val }));
   };
 
-  const badgeCell = (rank) => {
-    if (rank === null) return `<td><span style="font-size:10px;color:#aaa;">DNS</span></td>`;
-    const medals = {
-      1: { text: "🥇 1st", bg: "#fff7d6", border: "#d4a800" },
-      2: { text: "🥈 2nd", bg: "#f2f2f2", border: "#999" },
-      3: { text: "🥉 3rd", bg: "#fdf0e8", border: "#c87028" },
-    };
-    const m = medals[rank] || { text: `${rank}th`, bg: "#f5f5f5", border: "#ccc" };
-    return `<td><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;background:${m.bg};border:1px solid ${m.border};">${m.text}</span></td>`;
+  // ── Medal styles (fixed design — never reference brand) ──
+  const medalStyle = (rank) => {
+    if (rank === 1) return { bg: "rgba(244,196,40,0.1)",  border: "#f4c428", badgeBg: "#ffc300", badgeText: "#000" };
+    if (rank === 2) return { bg: "rgba(171,171,171,0.1)", border: "#ababab", badgeBg: "#c4c4c4", badgeText: "#000" };
+    if (rank === 3) return { bg: "rgba(203,138,85,0.1)",  border: "#cb8a55", badgeBg: "#eba569", badgeText: "#000" };
+    if (rank <= 6)  return { bg: "#fff",                  border: "#dadada", badgeBg: "#f1eded", badgeText: "#000" };
+    return              { bg: "#fff",                  border: "#dadada", badgeBg: "#fff",    badgeText: "#000" };
   };
 
-  const totalWithScores = gymnasts.filter(g =>
-    apparatus.some(a => getScore(g.round, g.id, a) > 0)
-  ).length;
+  // ── Responsive score column width ──
+  const appCount = apparatus.length;
+  const scoreColW = Math.max(44, Math.min(64, Math.floor(320 / Math.max(appCount, 1))));
 
-  let html = getPrintHeader(compData, "Official Results");
+  // ── Date formatting ──
+  const dateFmt = compData.date
+    ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
 
-  // Summary panel
-  html += `<div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
-    ${[
-      [gymnasts.length, "Gymnasts"],
-      [(compData.levels || []).length, "Levels"],
-      [rounds.length, "Rounds"],
-      [apparatus.length, "Apparatus"],
-      [totalWithScores, "Scored"],
-    ].map(([n, label]) => `
-      <div style="background:#f5f5f5;border-radius:6px;padding:10px 16px;text-align:center;">
-        <div style="font-size:20px;font-weight:800;color:${colour};">${n}</div>
-        <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:#666;">${label}</div>
-      </div>`).join("")}
+  // ── Build HTML body ──
+  let body = "";
+
+  // Header band
+  body += `<div class="pdf-header">
+    <div class="header-text">
+      <div class="comp-title">${escHtml(compData.name) || "Competition Results"}</div>
+      ${compData.organiserName ? `<div class="comp-organiser">${escHtml(compData.organiserName)}</div>` : ""}
+      <div class="comp-meta">${[dateFmt, escHtml(compData.venue || compData.location)].filter(Boolean).join("  ·  ")}</div>
+    </div>
+    <div class="header-logo">
+      <img src="${brandLogo || defaultLogo}" alt=""${brandLogo ? ' crossorigin="anonymous"' : ""} />
+    </div>
   </div>`;
 
-  // Section 1: Overall results per round
-  rounds.forEach((round, ri) => {
-    if (ri > 0) html += `<div class="page-break"></div>`;
-    html += `<div class="round-header" style="border-left:4px solid ${colour};">
-      <span>${escHtml(round.name)} — Overall Results</span>
-      <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
-    </div>`;
+  // Per-round sections
+  rounds.forEach((round) => {
+    body += `<div class="round-page">`;
+    body += `<div class="round-heading">${escHtml(round.name)} — Overall</div>`;
 
     const rankGroups = buildRankGroups(round.id);
     if (!rankGroups.length) {
-      html += `<p style="color:#999;font-size:10px;padding:8px 0;">No gymnasts in this round.</p>`;
+      body += `<div class="empty-msg">No gymnasts in this round.</div>`;
     } else {
       rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
-        const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
         const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
-        const ranked = denseRank(withTotals.filter(g => g.total > 0), "total");
-        const dns = withTotals.filter(g => g.total === 0);
+        const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+        const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
 
-        html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${escHtml(groupLabel)}</h2>
-        <table style="margin-bottom:18px;">
-          <thead><tr>
-            <th style="width:60px;">Rank</th>
-            <th style="width:32px;">#</th>
-            <th>Gymnast</th><th>Club</th>
-            ${apparatus.map(a => `<th style="width:64px;text-align:right;">${escHtml(a)}</th>`).join("")}
-            <th style="width:70px;text-align:right;">Total</th>
-          </tr></thead>
-          <tbody>
-          ${ranked.map(g => `<tr>
-            ${badgeCell(g.rank)}
-            <td style="color:#888;">${g.number || ""}</td>
-            <td><strong>${escHtml(g.name)}</strong></td>
-            <td style="color:#666;">${escHtml(g.club) || ""}</td>
+        body += `<div class="level-card">`;
+        body += `<div class="level-title-row">`;
+        body += `<span class="level-name">${escHtml(levelName)}</span>`;
+        if (ageLabel) body += `<span class="age-pill">${escHtml(ageLabel)}</span>`;
+        body += `</div>`;
+        body += `<div class="level-divider"></div>`;
+
+        // Compute per-apparatus max score across this level group (for highlight)
+        const levelMax = {};
+        apparatus.forEach(a => {
+          const scores_for_app = ranked.map(g => getScore(round.id, g.id, a)).filter(s => s > 0);
+          if (scores_for_app.length) levelMax[a] = Math.max(...scores_for_app);
+        });
+
+        body += `<div class="col-header">
+          <div class="ch-badge"></div>
+          <div class="ch-name">Gymnast</div>
+          ${apparatus.map(a => `<div class="ch-score">${escHtml(shortApp(a))}</div>`).join("")}
+          <div class="ch-total">Total</div>
+        </div>`;
+
+        ranked.forEach(g => {
+          const m = medalStyle(g.rank);
+          const badgeBorder = g.rank > 6 ? `border:1.5px solid ${m.border};` : "";
+          body += `<div class="pill-row pdf-row-boundary" style="background:${m.bg};border-color:${m.border};">
+            <div class="col-badge"><div class="rank-badge" style="background:${m.badgeBg};color:${m.badgeText};${badgeBorder}">${g.rank}</div></div>
+            <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club) || ""}</span></div>
             ${apparatus.map(a => {
               const s = getScore(round.id, g.id, a);
-              return `<td style="text-align:right;color:#555;">${s > 0 ? s.toFixed(3) : "—"}</td>`;
+              const isGroupBest = s > 0 && levelMax[a] && s === levelMax[a];
+              const hlBg = isGroupBest ? "background:#e3e3e3;" : "";
+              const hlFw = isGroupBest ? "font-weight:600;" : "";
+              return `<div class="col-score"><span class="score-inner" style="${hlBg}${hlFw}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span></div>`;
             }).join("")}
-            <td style="text-align:right;font-weight:800;color:${colour};">${g.total.toFixed(3)}</td>
-          </tr>`).join("")}
-          ${dns.map(g => `<tr style="opacity:0.4;">
-            <td style="color:#aaa;font-size:10px;">DNS</td>
-            <td style="color:#aaa;">${g.number || ""}</td>
-            <td>${escHtml(g.name)}</td>
-            <td style="color:#aaa;">${escHtml(g.club) || ""}</td>
-            ${apparatus.map(() => `<td style="text-align:right;color:#aaa;">—</td>`).join("")}
-            <td style="text-align:right;color:#aaa;">—</td>
-          </tr>`).join("")}
-          </tbody>
-        </table>`;
+            <div class="col-total">${g.total.toFixed(3)}</div>
+          </div>`;
+        });
+
+        dns.forEach(g => {
+          const label = g.withdrawn ? "WD" : "DNS";
+          body += `<div class="pill-row dns-row pdf-row-boundary">
+            <div class="col-badge"><div class="rank-badge dns-badge">${label}</div></div>
+            <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club) || ""}</span></div>
+            ${apparatus.map(() => `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`).join("")}
+            <div class="col-total"><span class="no-score">—</span></div>
+          </div>`;
+        });
+
+        body += `</div>`;
       });
     }
+
+    body += `</div>`;
   });
 
-  // Section 2: Per-apparatus breakdown per round
-  rounds.forEach((round) => {
-    html += `<div class="page-break"></div>`;
-    html += getPrintHeader(compData, `${escHtml(round.name)} — By Apparatus`);
-
-    const rankGroups = buildRankGroups(round.id);
-    apparatus.forEach((app, ai) => {
-      if (ai > 0) html += `<div style="margin-top:18px;border-top:1px solid #eee;padding-top:14px;"></div>`;
-      html += `<h2 style="border-left:3px solid ${colour};padding-left:8px;">${getApparatusIcon(app)} ${escHtml(app)}</h2>`;
-
-      rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
-        const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
-        const withScores = glist.map(g => ({ ...g, score: getScore(round.id, g.id, app) }));
-        const ranked = denseRank(withScores.filter(g => g.score > 0), "score");
-        const dns = withScores.filter(g => g.score === 0);
-
-        html += `<h3 style="color:#444;margin-top:10px;">${escHtml(groupLabel)} <span style="font-weight:400;color:#888;">(${glist.length})</span></h3>
-        <table style="margin-bottom:14px;">
-          <thead><tr>
-            <th style="width:60px;">Rank</th>
-            <th style="width:32px;">#</th>
-            <th>Gymnast</th><th>Club</th>
-            <th style="width:80px;text-align:right;">Score</th>
-          </tr></thead>
-          <tbody>
-          ${ranked.map(g => `<tr>
-            ${badgeCell(g.rank)}
-            <td style="color:#888;">${g.number || ""}</td>
-            <td>${escHtml(g.name)}</td>
-            <td style="color:#666;">${escHtml(g.club) || ""}</td>
-            <td style="text-align:right;font-weight:700;color:${colour};">${g.score.toFixed(3)}</td>
-          </tr>`).join("")}
-          ${dns.map(g => `<tr style="opacity:0.4;">
-            <td style="color:#aaa;font-size:10px;">DNS</td>
-            <td style="color:#aaa;">${g.number || ""}</td>
-            <td>${escHtml(g.name)}</td>
-            <td style="color:#aaa;">${escHtml(g.club) || ""}</td>
-            <td style="text-align:right;color:#aaa;">—</td>
-          </tr>`).join("")}
-          </tbody>
-        </table>`;
-      });
-    });
-  });
-
-  html += `<div class="print-footer">
-    <span>GymComp · Official Results · Generated ${new Date().toLocaleDateString("en-GB")}</span>
-    <span>${escHtml(compData.organiserName) || ""}</span>
-  </div>`;
-
-  return html;
-}
-
-export function exportResultsPDF(compData, gymnasts, scores) {
-  const getPlainIcon = () => "";
-  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
-
-  const getScore = (roundId, gid, app) => {
-    const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
-    return isNaN(v) ? 0 : v;
-  };
-  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
-
-  const denseRankLocal = (items, key) => {
-    const sorted = [...items].sort((a, b) => b[key] - a[key]);
-    const result = [];
-    let rank = 1;
-    for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank = i + 1;
-      result.push({ ...sorted[i], rank });
-    }
-    return result;
-  };
-
-  const medalEmoji = (rank) => rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `${rank}th`;
-
-  let body = "";
-
-  compData.rounds.forEach(round => {
-    const roundGymnasts = gymnasts.filter(g => g.round === round.id);
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = compData.levels.find(l => l.id === g.level);
-      const levelName = levelObj?.name || "Unknown";
-      const rankBy = levelObj?.rankBy || "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
-    });
-
-    body += `<div class="round-header">${escHtml(round.name)} &nbsp;·&nbsp; ${round.start} – ${round.end}</div>`;
-
-    Object.values(map).sort((a,b)=>(a.levelName+a.ageLabel).localeCompare(b.levelName+b.ageLabel)).forEach(({ levelName, ageLabel, gymnasts: glist }) => {
-      const label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
-      body += `<div class="level-header">${escHtml(label)}</div>`;
-
-      // Overall ranking table
-      const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
-      const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
-      const dns = withTotals.filter(g => g.total === 0);
-
-      const appHeaders = apparatus.map(a => `<th>${getPlainIcon(a)} ${escHtml(a)}</th>`).join("");
-
-      body += `<table><thead><tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>${appHeaders}<th>Total</th></tr></thead><tbody>`;
-      [...ranked, ...dns.map(g=>({...g,rank:null}))].forEach(g => {
-        const cells = apparatus.map(a => `<td>${getScore(round.id, g.id, a) > 0 ? getScore(round.id, g.id, a).toFixed(3) : "—"}</td>`).join("");
-        const rankCell = g.rank === null ? `<td class="dns">DNS</td>` : `<td class="rank">${medalEmoji(g.rank)}</td>`;
-        body += `<tr class="${g.rank === null ? "dns-row" : ""}">${rankCell}<td>${g.number || ""}</td><td><strong>${escHtml(g.name)}</strong></td><td>${escHtml(g.club) || ""}</td>${cells}<td><strong>${g.total > 0 ? g.total.toFixed(3) : "—"}</strong></td></tr>`;
-      });
-      body += `</tbody></table>`;
-    });
-  });
-
-  const dateFmt = compData.date
-    ? new Date(compData.date + "T12:00:00").toLocaleDateString("en-GB", { weekday:"long", year:"numeric", month:"long", day:"numeric" })
-    : "";
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  // ── Full HTML document ──
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${escHtml(compData.name) || "Competition"} — Results</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Arial', sans-serif; font-size: 11px; color: #111; padding: 20px; }
-  .header { text-align: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #111; }
-  .header h1 { font-size: 26px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
-  .header .meta { font-size: 11px; color: #555; }
-  .round-header { font-size: 15px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 8px; padding: 6px 10px; background: #111; color: #fff; border-radius: 4px; }
-  .level-header { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #555; margin: 14px 0 6px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10.5px; }
-  th { background: #f0f0f0; padding: 6px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; border: 1px solid #ddd; }
-  td { padding: 6px 8px; border: 1px solid #ddd; }
-  .rank { font-weight: bold; }
-  .dns { color: #999; font-style: italic; }
-  .dns-row td { color: #999; }
-  tr:nth-child(even) td { background: #fafafa; }
-  .footer { margin-top: 20px; text-align: center; font-size: 9px; color: #aaa; border-top: 1px solid #ddd; padding-top: 10px; }
-  @media print { body { padding: 10px; } .round-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  body { font-family: 'Saans', 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 16px 20px; }
+
+  .pdf-header {
+    background: ${brandBg}; color: ${brandText};
+    padding: 18px 24px; border-radius: 10px;
+    display: flex; align-items: center; gap: 16px; margin-bottom: 20px;
+  }
+  .header-text { flex: 1; }
+  .comp-title { font-size: 20px; font-weight: 800; line-height: 1.2; }
+  .comp-organiser { font-size: 11px; font-weight: 600; margin-top: 3px; opacity: 0.85; }
+  .comp-meta { font-size: 10px; margin-top: 4px; opacity: 0.7; }
+  .header-logo { flex-shrink: 0; }
+  .header-logo img { max-height: 40px; max-width: 140px; width: auto; object-fit: contain; display: block; }
+
+  .round-page { padding-bottom: 16px; }
+  .round-page:first-child { page-break-before: auto; }
+  .round-heading { font-size: 15px; font-weight: 800; color: #222; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #eee; }
+
+  .level-card { margin-bottom: 18px; border: 0.5px solid #dadada; border-radius: 10px; padding: 14px; background: #fff; }
+  .level-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .level-name { font-size: 12px; font-weight: 500; color: #000; }
+  .age-pill { font-size: 8px; font-weight: 400; color: #000; padding: 3.5px 7px; border-radius: 88px; border: 0.5px solid #000; }
+  .level-divider { border-top: 1px solid #dadada; margin-bottom: 8px; }
+
+  .col-header {
+    display: flex; align-items: center; padding: 4px 8px;
+    font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.6px; color: #999; margin-bottom: 3px;
+  }
+  .ch-badge { width: 32px; flex-shrink: 0; }
+  .ch-name { flex: 1; min-width: 0; padding-right: 6px; }
+  .ch-score { width: ${scoreColW}px; text-align: center; flex-shrink: 0; padding: 0 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .ch-total { width: 58px; text-align: center; flex-shrink: 0; }
+
+  .pill-row {
+    display: flex; align-items: center;
+    border: 1.5px solid #dadada; border-radius: 24px;
+    padding: 5px 8px; margin-bottom: 3px; background: #fff;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .pill-row.dns-row { opacity: 0.45; border-color: #ddd; }
+
+  .col-badge { width: 32px; flex-shrink: 0; display: flex; justify-content: center; }
+  .col-name { flex: 1; min-width: 0; overflow: hidden; padding-right: 6px; }
+  .col-score { width: ${scoreColW}px; text-align: center; font-size: 9.5px; color: #555; flex-shrink: 0; padding: 0; }
+  .score-inner { display: inline-block; margin: 0 3px; padding: 1px 3px; border-radius: 2px; }
+  .col-total { width: 58px; text-align: center; font-size: 10.5px; font-weight: 800; color: #111; flex-shrink: 0; }
+
+  .rank-badge {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 800;
+  }
+  .dns-badge { border: 1.5px solid #aaa; color: #aaa; background: #fff; font-size: 7px; font-weight: 700; }
+
+  .g-name { font-size: 10.5px; font-weight: 600; color: #111; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g-club { font-size: 9px; color: #8a8a8a; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .no-score { color: #ccc; }
+  .empty-msg { font-size: 10px; color: #999; padding: 12px 0; }
+
+  @media print { body { padding: 10px; } }
 </style>
 </head><body>
-<div class="header">
-  <h1>${escHtml(compData.name) || "Competition Results"}</h1>
-  <div class="meta">${[dateFmt, escHtml(compData.location), compData.holder ? `Holder: ${escHtml(compData.holder)}` : ""].filter(Boolean).join("  ·  ")}</div>
-</div>
 ${body}
-<div class="footer">Generated by GYMCOMP · ${new Date().toLocaleDateString("en-GB")}</div>
 </body></html>`;
-
-  generatePDF(html, "gymcomp-results.pdf");
 }
 
 export function exportResultsXLSX(compData, gymnasts, scores) {

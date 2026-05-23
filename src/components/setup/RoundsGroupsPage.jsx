@@ -20,6 +20,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   const [assignSearch, setAssignSearch] = useState("");
   const [assignLevelFilter, setAssignLevelFilter] = useState("");
   const [assignAgeFilter, setAssignAgeFilter] = useState("");
+  const [assignClubFilter, setAssignClubFilter] = useState("");
   const [activeRound, setActiveRound] = useState("");
   const [draggingId, setDraggingId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -77,7 +78,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
         const count = rd.id === activeRound ? apparatus.length : (newGbr[rd.id] || []).length;
         newGbr[rd.id] = Array.from({ length: count }, (_, i) => {
           const ex = rd.id === activeRound ? cur[i] : (newGbr[rd.id] || [])[i];
-          return ex || `Group ${offset + i + 1}`;
+          return ex || `Rotation ${offset + i + 1}`;
         });
         offset += count;
       });
@@ -133,6 +134,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     }
     if (assignLevelFilter && g.level !== assignLevelFilter) return false;
     if (assignAgeFilter && (g.age || "") !== assignAgeFilter) return false;
+    if (assignClubFilter && (g.club || "") !== assignClubFilter) return false;
     return true;
   });
 
@@ -188,8 +190,10 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     return chips;
   }, [unassigned, levels]);
 
-  /* ── Age filter chips (shown when a level is selected) ──── */
-  const ageChips = useMemo(() => {
+  /* ── Age options (shown when a level is selected and has ages) ── */
+  const selectedLevelObj = assignLevelFilter ? levels.find((l) => l.id === assignLevelFilter) : null;
+  const showAgeFilter = !!selectedLevelObj;
+  const ageOptions = useMemo(() => {
     if (!assignLevelFilter) return [];
     const levelGymnasts = unassigned.filter((g) => g.level === assignLevelFilter);
     const ages = [];
@@ -197,13 +201,17 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       const a = g.age || "";
       if (a && !ages.includes(a)) ages.push(a);
     });
-    ages.sort();
-    const chips = [{ id: "", label: "All Ages", count: levelGymnasts.length }];
-    ages.forEach((a) => {
-      chips.push({ id: a, label: a, count: levelGymnasts.filter((g) => g.age === a).length });
-    });
-    return chips;
+    return ages.sort();
   }, [unassigned, assignLevelFilter]);
+
+  /* ── Club options ──────────────────────────────────────── */
+  const clubOptions = useMemo(() => {
+    const clubs = [];
+    unassigned.forEach((g) => {
+      if (g.club && !clubs.includes(g.club)) clubs.push(g.club);
+    });
+    return clubs.sort();
+  }, [unassigned]);
 
   /* ── Selection helpers ──────────────────────────────────── */
   const visibleIds = filteredUnassigned.map((g) => g.id);
@@ -459,79 +467,50 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
           </div>
         </div>
 
-        {/* Filter chips */}
-        <div style={{ padding: "12px 18px 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {(() => {
-            return levelChips.map((c, ci) => {
-              const on = assignLevelFilter === c.id;
-              const chipColor = c.id ? pastelColors[(ci - 1) % pastelColors.length] : null;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => { setAssignLevelFilter(c.id); setAssignAgeFilter(""); }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "4px 10px",
-                    borderRadius: 12,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    border: on ? "1px solid var(--brand-01)" : chipColor ? `2px solid ${chipColor}` : "1px solid var(--border)",
-                    background: on ? "var(--brand-01)" : chipColor || "transparent",
-                    color: on ? "#fff" : "var(--text-primary)",
-                    cursor: "pointer",
-                    fontFamily: "var(--font-display)",
-                  }}
-                >
-                  {c.label}
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: "0 4px",
-                      borderRadius: 8,
-                      background: on ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.6)",
-                      color: on ? "#fff" : "var(--text-tertiary)",
-                    }}
-                  >
-                    {c.count}
-                  </span>
-                </button>
-              );
-            });
-          })()}
+        {/* Filter dropdowns */}
+        <div style={{ padding: "8px 18px 10px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            className="select"
+            value={assignLevelFilter}
+            onChange={(e) => { setAssignLevelFilter(e.target.value); setAssignAgeFilter(""); }}
+            style={{ width: "auto", minWidth: 130, fontSize: 12, padding: "6px 32px 6px 10px" }}
+          >
+            <option value="">All Levels</option>
+            {levels.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          {showAgeFilter && ageOptions.length > 0 && (
+            <select
+              className="select"
+              value={assignAgeFilter}
+              onChange={(e) => setAssignAgeFilter(e.target.value)}
+              style={{ width: "auto", minWidth: 110, fontSize: 12, padding: "6px 32px 6px 10px" }}
+            >
+              <option value="">All Ages</option>
+              {ageOptions.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          )}
+          <select
+            className="select"
+            value={assignClubFilter}
+            onChange={(e) => setAssignClubFilter(e.target.value)}
+            style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 10px" }}
+          >
+            <option value="">All Clubs</option>
+            {clubOptions.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          {(assignLevelFilter || assignAgeFilter || assignClubFilter) && (
+            <button
+              onClick={() => { setAssignLevelFilter(""); setAssignAgeFilter(""); setAssignClubFilter(""); }}
+              style={{ fontSize: 11, color: "var(--brand-01)", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+            >Clear</button>
+          )}
         </div>
-
-        {/* Age filter chips */}
-        {ageChips.length > 2 && (
-          <div style={{ padding: "0 18px 10px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {ageChips.map((c) => {
-              const on = assignAgeFilter === c.id;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => setAssignAgeFilter(c.id)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 4,
-                    padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 500,
-                    border: on ? "1px solid var(--brand-01)" : "1px solid var(--border)",
-                    background: on ? "var(--brand-01)" : "var(--surface2)",
-                    color: on ? "#fff" : "var(--text-primary)",
-                    cursor: "pointer", fontFamily: "var(--font-display)",
-                  }}
-                >
-                  {c.label}
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: "0 4px", borderRadius: 8,
-                    background: on ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.06)",
-                    color: on ? "#fff" : "var(--text-tertiary)",
-                  }}>{c.count}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         {/* Selection bar */}
         {selectedInPanel.length > 0 && (
@@ -562,7 +541,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
             const done = st.assigned >= st.total;
             const visible = filteredRankGroups.find((fg) => fg.label === rg.label)?.gymnasts || [];
             const bandColor = pastelColors[rgIdx % pastelColors.length];
-            const hasFilter = assignLevelFilter || assignAgeFilter;
+            const hasFilter = assignLevelFilter || assignAgeFilter || assignClubFilter;
             if (hasFilter && visible.length === 0) return null;
 
             return (

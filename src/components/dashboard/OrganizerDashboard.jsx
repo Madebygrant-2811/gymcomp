@@ -12,6 +12,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
   const [myEvents, setMyEvents] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
+  const [duplicateModal, setDuplicateModal] = useState(null); // event object or null
   const [sortBy, setSortBy] = useState("recent");
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -314,12 +315,15 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
                 return (
                   <>
                     <div className="od-card-divider" style={{ marginTop: 16 }} />
-                    <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ marginTop: 14, fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                      Readiness Checklist
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ flex: 1, height: 6, background: "var(--surface2)", borderRadius: 3, overflow: "hidden" }}>
                         <div style={{ width: `${(doneCount / 5) * 100}%`, height: "100%", background: doneCount === 5 ? "#22c55e" : "var(--brand-01)", borderRadius: 3, transition: "width 0.3s" }} />
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 600, color: doneCount === 5 ? "#15803d" : "var(--text-tertiary)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
-                        {doneCount} of 5 ready
+                        {doneCount === 5 ? "Ready to start" : `${doneCount} of 5 complete`}
                       </span>
                     </div>
                   </>
@@ -356,7 +360,7 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
                   </button>
                 )}
-                <button className="od-card-btn-icon" onClick={() => onDuplicate(ev)} title="Duplicate">
+                <button className="od-card-btn-icon" onClick={() => setDuplicateModal(ev)} title="Duplicate">
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.2"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3.5A.5.5 0 013.5 3H11"/></svg>
                 </button>
               </div>
@@ -616,6 +620,51 @@ function OrganizerDashboard({ account, onNew, onOpen, onView, onEdit, onDuplicat
           onConfirm={confirmBulkDelete}
           onCancel={() => setBulkDeleteConfirm(false)}
         />
+      )}
+      {duplicateModal && (
+        <div className="modal-backdrop" onClick={() => setDuplicateModal(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Duplicate Competition</div>
+            <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+              How would you like to duplicate <strong style={{ color: "var(--text)" }}>{duplicateModal.snapshot?.compData?.name || "this competition"}</strong>?
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                role="button" tabIndex={0}
+                onClick={() => { const ev = duplicateModal; setDuplicateModal(null); onDuplicate(ev, "setup"); }}
+                onKeyDown={e => e.key === "Enter" && (() => { const ev = duplicateModal; setDuplicateModal(null); onDuplicate(ev, "setup"); })()}
+                style={{
+                  padding: "14px 18px", borderRadius: 12, cursor: "pointer",
+                  border: "1px solid var(--border)", background: "var(--surface)",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--brand-01)"; e.currentTarget.style.background = "rgba(0,13,255,0.03)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface)"; }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, color: "var(--text)" }}>Setup only</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>Copies levels, apparatus, age ranges, scoring settings, and branding. Clubs, gymnasts, judges, and scores are not included.</div>
+              </div>
+              <div
+                role="button" tabIndex={0}
+                onClick={() => { const ev = duplicateModal; setDuplicateModal(null); onDuplicate(ev, "full"); }}
+                onKeyDown={e => e.key === "Enter" && (() => { const ev = duplicateModal; setDuplicateModal(null); onDuplicate(ev, "full"); })()}
+                style={{
+                  padding: "14px 18px", borderRadius: 12, cursor: "pointer",
+                  border: "1px solid var(--border)", background: "var(--surface)",
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--brand-01)"; e.currentTarget.style.background = "rgba(0,13,255,0.03)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--surface)"; }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, color: "var(--text)" }}>Full duplicate</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>Copies everything including clubs, gymnasts, and round assignments. Scores and judges are not included.</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="btn btn-ghost" onClick={() => setDuplicateModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

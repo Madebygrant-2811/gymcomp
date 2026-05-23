@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { generateId, isFutureOrToday, todayStr } from "../../lib/utils.js";
+import { generateId, isFutureOrToday, todayStr, getContrastTextColor, svgToPng } from "../../lib/utils.js";
 import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, SCORING_MODES } from "../../lib/constants.js";
+import { supabase } from "../../lib/supabase.js";
 
 import AddressLookup from "../shared/AddressLookup.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
-function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" — awaiting confirmation
   const [newLevel, setNewLevel] = useState("");
@@ -18,6 +19,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const lastScrollY = useRef(0);
   const appDragFrom = useRef(null);
   const appTouchFrom = useRef(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const logoInputRef = useRef(null);
 
   useEffect(() => {
     const el = document.querySelector(".app-main");
@@ -95,6 +99,51 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id) }));
     if (type === "level") setData(d => ({ ...d, levels: d.levels.filter(l => l.id !== id) }));
     setPendingRemove(null);
+  };
+
+  // ── Logo upload ──
+  const handleLogoUpload = async (file) => {
+    if (!file || !currentUser) return;
+    const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
+    const ALLOWED = ["image/png", "image/jpeg", "image/svg+xml"];
+    if (!ALLOWED.includes(file.type)) { setLogoError("Only PNG, JPEG or SVG files are supported."); return; }
+    if (file.size > MAX_SIZE) { setLogoError("File must be under 2 MB."); return; }
+    setLogoError("");
+    setLogoUploading(true);
+    try {
+      const isSvg = file.type === "image/svg+xml";
+      const ts = Date.now();
+      const basePath = `${currentUser.id}/${compId}`;
+
+      // Upload the original file (PNG/JPEG or SVG)
+      const origExt = isSvg ? "svg" : file.name.split(".").pop().toLowerCase();
+      const origPath = `${basePath}/logo-${ts}.${origExt}`;
+      const { error: origErr } = await supabase.storage.from("competition-branding").upload(origPath, file, { upsert: true });
+      if (origErr) throw origErr;
+      const { data: origUrl } = supabase.storage.from("competition-branding").getPublicUrl(origPath);
+
+      if (isSvg) {
+        // Also create PNG fallback from SVG
+        const pngBlob = await svgToPng(file, 512);
+        const pngPath = `${basePath}/logo-${ts}.png`;
+        const { error: pngErr } = await supabase.storage.from("competition-branding").upload(pngPath, pngBlob, { upsert: true });
+        if (pngErr) throw pngErr;
+        const { data: pngUrl } = supabase.storage.from("competition-branding").getPublicUrl(pngPath);
+        setData(d => ({ ...d, brandLogoUrl: pngUrl.publicUrl, brandLogoSvgUrl: origUrl.publicUrl }));
+      } else {
+        setData(d => ({ ...d, brandLogoUrl: origUrl.publicUrl, brandLogoSvgUrl: "" }));
+      }
+    } catch (err) {
+      console.error("Logo upload failed:", err);
+      setLogoError("Upload failed — please try again.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setData(d => ({ ...d, brandLogoUrl: "", brandLogoSvgUrl: "" }));
+    setLogoError("");
   };
 
   const realApparatus = data.apparatus.filter(a => a !== "Rest");
@@ -494,6 +543,126 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
             <span style={{ color: "var(--muted)", fontSize: 13 }}>No age ranges added yet</span>
           )}
         </div>
+      </div>
+
+      {/* Branding */}
+      <div className="card" id="setup-branding">
+        <div className="card-title">Branding</div>
+        <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 16 }}>
+          Add your competition logo and brand colour. These will appear on results, exports, and live displays.
+        </p>
+
+        {/* Brand colour picker */}
+        <div className="field" style={{ marginBottom: 20 }}>
+          <label className="label">Brand Colour</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input type="color" value={data.brandColor || "#000dff"}
+              onChange={e => setData(d => ({ ...d, brandColor: e.target.value }))}
+              style={{ width: 44, height: 36, border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", padding: 2 }} />
+            <input className="input" placeholder="#000dff" value={data.brandColor || ""}
+              onChange={e => {
+                const v = e.target.value;
+                if (/^#[0-9a-fA-F]{0,6}$/.test(v) || v === "") setData(d => ({ ...d, brandColor: v }));
+              }}
+              style={{ width: 120, fontFamily: "monospace", fontSize: 13 }} />
+            {data.brandColor && (
+              <button className="btn btn-ghost" style={{ fontSize: 12, padding: "4px 10px" }}
+                onClick={() => setData(d => ({ ...d, brandColor: "" }))}>Clear</button>
+            )}
+          </div>
+        </div>
+
+        {/* Logo upload */}
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label className="label">Competition Logo</label>
+          <input ref={logoInputRef} type="file" accept=".png,.jpg,.jpeg,.svg" style={{ display: "none" }}
+            onChange={e => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0]); e.target.value = ""; }} />
+
+          {data.brandLogoUrl ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{
+                width: 80, height: 80, borderRadius: 12, border: "1px solid var(--border)",
+                display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+                background: "var(--bg)"
+              }}>
+                <img src={data.brandLogoSvgUrl || data.brandLogoUrl} alt="Logo"
+                  style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button className="btn btn-ghost" style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() => logoInputRef.current?.click()}>
+                  Replace
+                </button>
+                <button className="btn btn-ghost" style={{ fontSize: 12, padding: "4px 10px", color: "var(--danger, #e53e3e)" }}
+                  onClick={handleRemoveLogo}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => !logoUploading && logoInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--accent)"; }}
+              onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; }}
+              onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "var(--border)"; if (e.dataTransfer.files?.[0]) handleLogoUpload(e.dataTransfer.files[0]); }}
+              style={{
+                border: "2px dashed var(--border)", borderRadius: 12, padding: "24px 16px",
+                textAlign: "center", cursor: logoUploading ? "wait" : "pointer",
+                transition: "border-color 0.2s"
+              }}>
+              {logoUploading ? (
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>Uploading…</span>
+              ) : (
+                <>
+                  <div style={{ fontSize: 24, marginBottom: 4, color: "var(--muted)" }}>+</div>
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Click or drag to upload</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>PNG, JPEG or SVG — max 2 MB</div>
+                </>
+              )}
+            </div>
+          )}
+          {logoError && <div className="field-error" style={{ marginTop: 6 }}>{logoError}</div>}
+        </div>
+
+        {/* Live preview */}
+        {(data.brandColor || data.brandLogoUrl) && (
+          <>
+            <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
+            <label className="label" style={{ marginBottom: 8 }}>Preview</label>
+            <div style={{
+              background: data.brandColor || "var(--brand-01)", borderRadius: 12,
+              padding: "20px 24px", display: "flex", alignItems: "center", gap: 16,
+              transition: "background 0.2s"
+            }}>
+              {data.brandLogoUrl && (
+                <div style={{
+                  width: 48, height: 48, borderRadius: 8, overflow: "hidden",
+                  background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                }}>
+                  <img src={data.brandLogoSvgUrl || data.brandLogoUrl} alt=""
+                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                </div>
+              )}
+              <div>
+                <div style={{
+                  fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16,
+                  color: data.brandColor ? getContrastTextColor(data.brandColor) : "#fff"
+                }}>
+                  {data.name || "Competition Name"}
+                </div>
+                {data.date && (
+                  <div style={{
+                    fontSize: 12, marginTop: 2,
+                    color: data.brandColor ? getContrastTextColor(data.brandColor) : "#fff",
+                    opacity: 0.8
+                  }}>
+                    {new Date(data.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {showWarnings && missingFields.length > 0 && (

@@ -32,6 +32,10 @@ export function migrateCompData(cd) {
   if (migrated.allowSubmissions === undefined) migrated.allowSubmissions = true;
   // Default groupsByRound for existing comps
   if (!migrated.groupsByRound) migrated.groupsByRound = {};
+  // Default branding fields
+  if (migrated.brandColor === undefined) migrated.brandColor = "";
+  if (migrated.brandLogoUrl === undefined) migrated.brandLogoUrl = "";
+  if (migrated.brandLogoSvgUrl === undefined) migrated.brandLogoSvgUrl = "";
   // Clean stray keys from duplicate
   delete migrated.gymnasts;
   return migrated;

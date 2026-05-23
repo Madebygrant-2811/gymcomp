@@ -147,6 +147,9 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
       const newClubs = []; // clubs from CSV not yet in setup
       const allExistingCodes = compData.clubs.map(c => c.clubCode).filter(Boolean);
 
+      const newLevels = []; // levels from CSV not yet in setup
+      const newAges = [];   // age ranges from CSV not yet in setup
+
       rows.forEach((row, i) => {
         const rowNum = i + 2;
         if (!row.name) { errors.push(`Row ${rowNum}: missing Name — skipped`); return; }
@@ -154,9 +157,26 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
           errors.push(`Row ${rowNum}: number #${row.number} already taken — skipped`); return;
         }
 
-        const levelObj = compData.levels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase());
-        if (row.level && !levelObj) warns.push(`Row ${rowNum}: level "${row.level}" not found — imported without level`);
-        else if (!row.level && compData.levels.length) warns.push(`Row ${rowNum}: no level provided — imported without level`);
+        // Auto-add unknown levels
+        let levelObj = compData.levels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase())
+          || newLevels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase());
+        if (row.level && !levelObj) {
+          levelObj = { id: generateId(), name: row.level.trim(), rankBy: "level" };
+          newLevels.push(levelObj);
+          warns.push(`Level "${row.level}" added to competition levels`);
+        } else if (!row.level && compData.levels.length) {
+          warns.push(`Row ${rowNum}: no level provided — imported without level`);
+        }
+
+        // Auto-add unknown age ranges
+        const ageName = (row.age || "").trim();
+        if (ageName) {
+          const existingAges = [...(compData.ageRanges || []), ...newAges];
+          if (!existingAges.some(a => a.toLowerCase() === ageName.toLowerCase()) ) {
+            newAges.push(ageName);
+            warns.push(`Age range "${ageName}" added to competition age ranges`);
+          }
+        }
 
         // Auto-add unknown clubs
         const clubName = (row.club || selectedClub || "").trim();
@@ -170,15 +190,29 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
           }
         }
 
-        toAdd.push({ id: generateId(), name: row.name, number: row.number, club: clubName, level: levelObj ? levelObj.id : "", round: "", age: row.age || "", group: "" });
+        toAdd.push({ id: generateId(), name: row.name, number: row.number, club: clubName, level: levelObj ? levelObj.id : "", round: "", age: ageName, group: "" });
       });
 
       setCsvWarnings({ errors, warns });
-      if (newClubs.length) {
+      if (newClubs.length || newLevels.length || newAges.length) {
         setCompDataFn(d => {
-          const existing = new Set(d.clubs.map(c => c.name.toLowerCase()));
-          const deduped = newClubs.filter(c => !existing.has(c.name.toLowerCase()));
-          return deduped.length ? { ...d, clubs: [...d.clubs, ...deduped] } : d;
+          let updated = d;
+          if (newClubs.length) {
+            const existing = new Set(d.clubs.map(c => c.name.toLowerCase()));
+            const deduped = newClubs.filter(c => !existing.has(c.name.toLowerCase()));
+            if (deduped.length) updated = { ...updated, clubs: [...updated.clubs, ...deduped] };
+          }
+          if (newLevels.length) {
+            const existing = new Set((d.levels || []).map(l => l.name.toLowerCase()));
+            const deduped = newLevels.filter(l => !existing.has(l.name.toLowerCase()));
+            if (deduped.length) updated = { ...updated, levels: [...(updated.levels || []), ...deduped] };
+          }
+          if (newAges.length) {
+            const existing = new Set((d.ageRanges || []).map(a => a.toLowerCase()));
+            const deduped = newAges.filter(a => !existing.has(a.toLowerCase()));
+            if (deduped.length) updated = { ...updated, ageRanges: [...(updated.ageRanges || []), ...deduped] };
+          }
+          return updated;
         });
       }
       if (toAdd.length) setData(d => [...d, ...toAdd]);
@@ -187,18 +221,35 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     e.target.value = "";
   };
 
-  // Display — flat list grouped by Level > Gymnast Number
+  // Display — flat list grouped by Level > Age > Gymnast Number
+  const pastelColors = [
+    "#E8D5F5", "#D5E8F5", "#D5F5E0", "#F5EAD5", "#F5D5D5",
+    "#D5F5F0", "#F5D5EA", "#E0F5D5", "#D5D5F5", "#F5F0D5",
+  ];
+  const uniqueAges = useMemo(() => {
+    const seen = [];
+    data.forEach(g => { if (g.age && !seen.includes(g.age)) seen.push(g.age); });
+    return seen;
+  }, [data]);
   const allGymnasts = data;
 
   const grouped = {};
   allGymnasts.forEach(g => {
     const lvl = compData.levels.find(l => l.id === g.level)?.name || g.level || "No Level";
-    if (!grouped[lvl]) grouped[lvl] = [];
-    grouped[lvl].push(g);
+    const age = g.age || "";
+    const key = age ? `${lvl}|||${age}` : lvl;
+    if (!grouped[key]) grouped[key] = { levelName: lvl, age, gymnasts: [] };
+    grouped[key].gymnasts.push(g);
   });
-  // Sort gymnasts by number within each level
-  Object.values(grouped).forEach(arr => arr.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
-  const sortedLevelKeys = Object.keys(grouped).sort();
+  // Sort gymnasts by number within each group
+  Object.values(grouped).forEach(grp => grp.gymnasts.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
+  const levelOrder = (compData.levels || []).map(l => l.name);
+  const sortedGroupKeys = Object.keys(grouped).sort((a, b) => {
+    const ga = grouped[a], gb = grouped[b];
+    const ai = levelOrder.indexOf(ga.levelName), bi = levelOrder.indexOf(gb.levelName);
+    if (ai !== bi) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return (ga.age || "").localeCompare(gb.age || "");
+  });
 
   const toggleSelect = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = (ids) => setSelected(s => { const allSelected = ids.every(id => s.has(id)); const n = new Set(s); ids.forEach(id => allSelected ? n.delete(id) : n.add(id)); return n; });
@@ -361,13 +412,24 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
             </div>
           </div>
         )}
-        {sortedLevelKeys.length === 0 && <div className="empty">No gymnasts added yet</div>}
-        {sortedLevelKeys.map(lvl => {
-          const gymnasts = grouped[lvl];
+        {sortedGroupKeys.length === 0 && <div className="empty">No gymnasts added yet</div>}
+        {sortedGroupKeys.map(key => {
+          const { levelName, age, gymnasts } = grouped[key];
+          const label = age ? `${levelName} — ${age}` : levelName;
           return (
-            <div key={lvl} style={{ marginBottom: 16 }}>
+            <div key={key} style={{ marginBottom: 16 }}>
               <div className="group-header">
-                <span className="group-label">{lvl}</span>
+                <span className="group-label">{levelName}</span>
+                {age && (() => {
+                  const ageIdx = uniqueAges.indexOf(age);
+                  const color = ageIdx >= 0 ? pastelColors[ageIdx % pastelColors.length] : "var(--surface2)";
+                  return (
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 56,
+                      background: color, color: "var(--text)", marginLeft: 8,
+                    }}>{age}</span>
+                  );
+                })()}
                 <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 8 }}>({gymnasts.length})</span>
                 <div className="group-line" />
               </div>

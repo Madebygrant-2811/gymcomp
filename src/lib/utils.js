@@ -69,6 +69,42 @@ export function parseCSV(text) {
   });
 }
 
+// WCAG relative-luminance contrast → black or white text
+export function getContrastTextColor(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const toLinear = c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const L = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return L > 0.179 ? "#000000" : "#ffffff";
+}
+
+// Convert SVG file → PNG blob via Canvas (browser-native, no deps)
+export function svgToPng(svgFile, maxWidth = 512) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          if (blob) resolve(blob);
+          else reject(new Error("Canvas toBlob failed"));
+        }, "image/png");
+      };
+      img.onerror = () => reject(new Error("Failed to load SVG as image"));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("Failed to read SVG file"));
+    reader.readAsDataURL(svgFile);
+  });
+}
+
 export function downloadTemplate() {
   const headers = ["Name", "Number", "Club", "Level", "Age"];
   const rows = [

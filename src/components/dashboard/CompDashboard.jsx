@@ -121,7 +121,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     { label: "Add gymnasts and assign to clubs", sub: gymnasts.length === 0 ? "No gymnasts added yet" : gymnastsWithoutClub.length > 0 ? `${gymnastsWithoutClub.length} gymnast${gymnastsWithoutClub.length !== 1 ? "s" : ""} need a club` : "All gymnasts assigned to clubs", done: gymnasts.length > 0 && gymnastsWithoutClub.length === 0, scrollTo: "card-gymnasts" },
     { label: "Add judges to apparatus", sub: scoringApparatus.length === 0 ? "Add apparatus in setup first" : uncoveredApparatus.length > 0 ? `${uncoveredApparatus.length} apparatus need a judge` : "All apparatus have judges", done: scoringApparatus.length > 0 && uncoveredApparatus.length === 0, scrollTo: "card-judges" },
     { label: "Set up rounds", sub: "At least one round required", done: (compData.rounds || []).length > 0, scrollTo: "card-rounds-groups" },
-    { label: "Assign gymnasts to groups within rounds", sub: gymnasts.length === 0 ? "Add gymnasts first" : unassignedGymnasts.length > 0 ? `${unassignedGymnasts.length} gymnast${unassignedGymnasts.length !== 1 ? "s" : ""} not yet assigned` : "All gymnasts assigned", done: gymnasts.length > 0 && unassignedGymnasts.length === 0, scrollTo: "card-rounds-groups" },
+    { label: "Assign gymnasts to rotations within rounds", sub: gymnasts.length === 0 ? "Add gymnasts first" : unassignedGymnasts.length > 0 ? `${unassignedGymnasts.length} gymnast${unassignedGymnasts.length !== 1 ? "s" : ""} not yet assigned` : "All gymnasts assigned", done: gymnasts.length > 0 && unassignedGymnasts.length === 0, scrollTo: "card-rounds-groups" },
   ];
   const canStart = readinessSteps.every(s => s.done);
   const readyIcon = (done) => done
@@ -761,7 +761,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
             <div className="card" id="card-rounds-groups" style={{ marginBottom: 24 }}>
               <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: (readinessSteps[3].done && readinessSteps[4].done) ? "pointer" : "default", marginBottom: collapsed.has("rounds") ? 0 : undefined, paddingBottom: collapsed.has("rounds") ? 0 : undefined, borderBottom: collapsed.has("rounds") ? "none" : undefined }}
                 onClick={() => toggleCard("rounds", readinessSteps[3].done && readinessSteps[4].done)}>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>{!completed && readyIcon(readinessSteps[3].done && readinessSteps[4].done)}Rounds &amp; Groups</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>{!completed && readyIcon(readinessSteps[3].done && readinessSteps[4].done)}Rounds &amp; Rotations</span>
                 {chevron("rounds")}
               </div>
 
@@ -914,7 +914,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                   background: "var(--brand-01)", color: "var(--text-alternate)", border: "none", cursor: "pointer",
                   fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
                 }}>
-                  Manage Groups &amp; Assignments
+                  Manage Rotations &amp; Assignments
                 </button>
               </div>
               </>)}

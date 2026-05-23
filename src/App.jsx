@@ -2,11 +2,11 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 
 // ── lib imports ──
 import { supabase, touchLastActive } from "./lib/supabase.js";
-import { generateId, generateClubCode, hashPin, isHashed } from "./lib/utils.js";
+import { generateId, generateClubCode, hashPin, isHashed, getContrastTextColor } from "./lib/utils.js";
 import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
 import { events, syncQueue } from "./lib/storage.js";
 import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
-import { exportResultsPDF, exportResultsXLSX } from "./lib/pdf.js";
+import { printDocument, buildResultsHTML, exportResultsXLSX } from "./lib/pdf.js";
 import { css } from "./lib/styles.js";
 import { getSubscriptionStatus, getPlanLabel } from "./lib/subscription.js";
 
@@ -691,40 +691,78 @@ export default function App() {
   };
 
   // Duplicate an event as a new competition
-  const handleDuplicateEvent = (ev) => {
+  // mode: "setup" = config only, "full" = config + clubs + gymnasts
+  const handleDuplicateEvent = (ev, mode = "setup") => {
     const snapshot = ev.snapshot;
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
     // Deep copy and regenerate all IDs to fully detach from source
     let baseData;
+    let newGymnasts = [];
     if (snapshot?.compData) {
       const src = structuredClone(snapshot.compData);
-      const freshCodes = [];
-      src.clubs = (src.clubs || []).map(c => {
-        const code = generateClubCode(freshCodes);
-        freshCodes.push(code);
-        return { ...c, id: generateId(), clubCode: code };
+      // Build ID maps so gymnast references stay consistent
+      const levelMap = {};
+      src.levels = (src.levels || []).map(l => {
+        const newId = generateId();
+        levelMap[l.id] = newId;
+        return { ...l, id: newId };
       });
-      src.rounds = (src.rounds || []).map(r => ({ ...r, id: generateId() }));
-      src.levels = (src.levels || []).map(l => ({ ...l, id: generateId() }));
+      const roundMap = {};
+      src.rounds = (src.rounds || []).map(r => {
+        const newId = generateId();
+        roundMap[r.id] = newId;
+        return { ...r, id: newId };
+      });
+      // Remap groupsByRound keys
+      if (src.groupsByRound) {
+        const newGbr = {};
+        Object.entries(src.groupsByRound).forEach(([oldRid, groups]) => {
+          const newRid = roundMap[oldRid];
+          if (newRid) newGbr[newRid] = groups;
+        });
+        src.groupsByRound = newGbr;
+      }
+      const freshCodes = [];
+      if (mode === "full") {
+        src.clubs = (src.clubs || []).map(c => {
+          const code = generateClubCode(freshCodes);
+          freshCodes.push(code);
+          return { ...c, id: generateId(), clubCode: code };
+        });
+      } else {
+        src.clubs = [];
+      }
       src.name = `${src.name || "Competition"} (Copy)`;
       src.date = "";
       src.dataConsentConfirmed = false;
       src.judges = [];
       baseData = src;
+
+      // Full mode: duplicate gymnasts with new IDs + remapped level/round
+      if (mode === "full" && snapshot.gymnasts?.length) {
+        newGymnasts = snapshot.gymnasts.map(g => ({
+          ...structuredClone(g),
+          id: generateId(),
+          level: levelMap[g.level] || g.level,
+          round: roundMap[g.round] || "",
+          dns: false,
+          withdrawn: false,
+        }));
+      }
     } else {
       baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     }
     setCompDataRaw(migrateCompData(baseData));
-    setGymnasts([]);
+    setGymnasts(newGymnasts);
     setScores({});
     setPhase(1); setStep(1);
     setSyncStatus("idle");
 
     if (currentAccount) {
       const newEv = events.create(currentAccount.id, newCompId);
-      snapshotWithPin(newEv.id, baseData, []);
+      snapshotWithPin(newEv.id, baseData, newGymnasts);
       setCurrentEventId(newEv.id);
     } else {
       setCurrentEventId(null);
@@ -1271,7 +1309,11 @@ export default function App() {
                 <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
                   Export XLSX
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => exportResultsPDF(compData, gymnasts, scores)}>
+                <button className="btn btn-secondary btn-sm" onClick={() => {
+                  const brandBg = compData.brandColor || "#000dff";
+                  const brandText = getContrastTextColor(brandBg);
+                  printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf", { skipBaseCss: true, footerOpts: { brandBg, brandText } });
+                }}>
                   Export PDF
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={handleSharePublic}>
@@ -1312,7 +1354,7 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus}
+          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus} compId={compId} currentUser={currentUser}
             onSaveExit={async () => {
               // Partial save — commit draft, persist and go back
               const { compData: cd, gymnasts: g } = commitDraft();
@@ -1392,7 +1434,7 @@ export default function App() {
         <ErrorBoundary label="score input">
         <div style={{ flex: 1 }}>
           <Phase2_Step1 compData={compData} gymnasts={gymnasts} scores={scores} setScores={setScoresWithSync} setStep={setStep}
-            onExportPDF={() => exportResultsPDF(compData, gymnasts, scores)} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
+            onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
             isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue}
             onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys}
             pinRole={pinRole} lockedApparatus={lockedApparatus}

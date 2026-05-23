@@ -128,7 +128,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
         <div className="tabs" style={{ marginBottom: 0 }}>
           {compData.rounds.map(r => (
             <button key={r.id} className={`tab-btn ${activeRound === r.id ? "active" : ""}`}
-              onClick={() => setActiveRound(r.id)}>{r.name}</button>
+              onClick={() => { setActiveRound(r.id); setLevelFilter("all"); setAgeFilter("all"); }}>{r.name}</button>
           ))}
         </div>
       </div>
