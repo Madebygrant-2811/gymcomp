@@ -584,10 +584,12 @@
   // "dense": next rank does not skip (1, 1, 2)
   function standardRank(items, scoreKey) {
     const mode = (compData && compData.rankingMode) || "standard";
-    const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
+    // Quantise to 3dp for comparison only, so totals identical on screen tie.
+    const q = (item) => Math.round((Number(item[scoreKey]) || 0) * 1000) / 1000;
+    const sorted = [...items].sort((a, b) => q(b) - q(a));
     let rank = 1;
     return sorted.map((item, i) => {
-      if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) {
+      if (i > 0 && q(sorted[i]) < q(sorted[i - 1])) {
         rank = mode === "dense" ? rank + 1 : i + 1;
       }
       return { ...item, rank };

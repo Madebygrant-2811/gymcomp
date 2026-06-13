@@ -1097,11 +1097,13 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
   const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
   const rankingMode = compData.rankingMode || "standard";
   const denseRankLocal = (items, key) => {
-    const sorted = [...items].sort((a, b) => b[key] - a[key]);
+    // Quantise to 3dp for comparison only (see denseRank in scoring.js).
+    const q = (item) => Math.round((Number(item[key]) || 0) * 1000) / 1000;
+    const sorted = [...items].sort((a, b) => q(b) - q(a));
     const result = [];
     let rank = 1;
     for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) {
+      if (i > 0 && q(sorted[i]) < q(sorted[i - 1])) {
         rank = rankingMode === "dense" ? rank + 1 : i + 1;
       }
       result.push({ ...sorted[i], rank });
