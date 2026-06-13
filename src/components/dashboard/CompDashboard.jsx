@@ -123,7 +123,11 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
     { label: "Set up rounds", sub: "At least one round required", done: (compData.rounds || []).length > 0, scrollTo: "card-rounds-groups" },
     { label: "Assign gymnasts to rotations within rounds", sub: gymnasts.length === 0 ? "Add gymnasts first" : unassignedGymnasts.length > 0 ? `${unassignedGymnasts.length} gymnast${unassignedGymnasts.length !== 1 ? "s" : ""} not yet assigned` : "All gymnasts assigned", done: gymnasts.length > 0 && unassignedGymnasts.length === 0, scrollTo: "card-rounds-groups" },
   ];
-  const canStart = readinessSteps.every(s => s.done);
+  // Pre-start readiness gate. Once a competition is live, resume is always
+  // allowed — late-added gymnasts are now assigned inside live score-entry
+  // (the Unassigned section), not here, so the assignment step must not lock
+  // an already-running comp out of "Resume Competition".
+  const canStart = eventStatus === "live" || readinessSteps.every(s => s.done);
   const readyIcon = (done) => done
     ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="8" cy="8" r="7" fill="#22c55e"/><path d="M5 8.5l2 2 4-4.5" stroke="white" strokeWidth="1.8"/></svg>
     : <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="8" cy="8" r="5"/></svg>;

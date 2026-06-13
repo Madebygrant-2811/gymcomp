@@ -216,6 +216,17 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
       return na - nb;
     }), [grouped]);
 
+  // ── Unassigned gymnasts (organiser-only) ─────────────────
+  // Anyone not in a valid round+rotation — no round, or a round whose group
+  // is not a configured rotation. Membership uses isValidGroup so it stays in
+  // step with the assign/move modal. Judges never receive setGymnasts → empty.
+  const unassignedGymnasts = useMemo(() =>
+    canMoveGymnasts
+      ? gymnasts.filter(g => !isValidGroup(compData, g.round, g.group))
+                .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0))
+      : [],
+    [canMoveGymnasts, gymnasts, compData]);
+
   // ── Score Modal helpers ──────────────────────────────────
   const openScoreModal = (gid, app, isEdit) => {
     const fields = {};
@@ -672,6 +683,67 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
           </div>
         </div>
 
+        {/* ── Unassigned (organiser-only) ── */}
+        {unassignedGymnasts.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <div className="group-header">
+              <span className="group-label" style={{ fontFamily: "var(--font-display)" }}>Unassigned</span>
+              <div className="group-line" />
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10, fontFamily: "var(--font-display)" }}>
+              {unassignedGymnasts.length} gymnast{unassignedGymnasts.length !== 1 ? "s" : ""} not yet in a round and rotation. Assign each to a round to start scoring.
+            </div>
+            <div className="table-wrap">
+              <table className="si-table" style={{ minWidth: 528, fontFamily: "var(--font-display)" }}>
+                <colgroup>
+                  <col className="si-col-num" />
+                  <col className="si-col-name" />
+                  <col className="si-col-club" />
+                  <col className="si-col-age" />
+                  <col className="si-col-flag" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Gymnast</th>
+                    <th>Club</th>
+                    <th>Age</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unassignedGymnasts.map(g => {
+                    const isDns = !!g.dns;
+                    const isWd = !!g.withdrawn;
+                    const dimmed = isDns || isWd;
+                    return (
+                      <tr key={g.id} style={{ opacity: dimmed ? 0.45 : 1 }}>
+                        <td style={{ color: "var(--muted)", fontWeight: 600 }}>{g.number}</td>
+                        <td>
+                          <strong style={{ textDecoration: dimmed ? "line-through" : "none" }}>{g.name}</strong>
+                          {isDns && <span style={{ display: "block", fontSize: 9, color: "var(--danger)", fontWeight: 700, letterSpacing: 0.5 }}>DNS</span>}
+                          {isWd && !isDns && <span style={{ display: "block", fontSize: 9, color: "#d97706", fontWeight: 700, letterSpacing: 0.5 }}>WD</span>}
+                        </td>
+                        <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.club}</td>
+                        <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "—"}</td>
+                        <td>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            style={{ fontSize: 10, padding: "3px 10px", whiteSpace: "nowrap", fontFamily: "var(--font-display)" }}
+                            title="Assign this gymnast to a round and rotation"
+                            onClick={() => openMoveModal(g.id)}>
+                            Assign to round
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {Object.keys(grouped).length === 0 && <div className="empty">{searchQuery ? "No gymnasts match your search" : "No gymnasts in this round"}</div>}
 
         {/* ── Grouped Tables ── */}
@@ -1058,10 +1130,14 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         const g = gymnasts.find(x => x.id === moveModal.gid);
         if (!g) return null;
         const source = g.round;
+        // A gymnast not in a valid round+rotation is being assigned, not moved.
+        const isUnassigned = !isValidGroup(compData, g.round, g.group);
         const sourceName = compData.rounds.find(r => r.id === source)?.name || "their current round";
         const blocked = hasPositiveScoreInRound(source, g.id);
-        // Only rounds (other than the source) that actually have rotations configured.
-        const targetRounds = (compData.rounds || []).filter(r => r.id !== source && roundGroups(compData, r.id).length > 0);
+        // Rounds with rotations configured. For an unassigned gymnast every such
+        // round is a target (incl. their current invalid-rotation round); for a
+        // normal move the current round is excluded.
+        const targetRounds = (compData.rounds || []).filter(r => (isUnassigned || r.id !== source) && roundGroups(compData, r.id).length > 0);
         const rotations = roundGroups(compData, moveRound);
         const canConfirm = !blocked && !!moveRound && isValidGroup(compData, moveRound, moveGroup);
         const ds = { fontFamily: "var(--font-display)" };
@@ -1069,9 +1145,9 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         return createPortal(
           <div className="modal-backdrop" onClick={() => setMoveModal(null)}>
             <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, width: "94%", ...ds }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, ...ds }}>Move to another round</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, ...ds }}>{isUnassigned ? "Assign to round" : "Move to another round"}</div>
               <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16, ...ds }}>
-                {g.name} · #{g.number} · currently in {sourceName}
+                {g.name} · #{g.number}{isUnassigned ? "" : ` · currently in ${sourceName}`}
               </div>
 
               {blocked ? (
@@ -1083,7 +1159,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                 </div>
               ) : targetRounds.length === 0 ? (
                 <div style={{ fontSize: 13, color: "var(--muted)", ...ds }}>
-                  No other rounds with rotations are available to move to.
+                  No rounds with rotations are available to {isUnassigned ? "assign" : "move"} to.
                 </div>
               ) : (
                 <>
@@ -1128,7 +1204,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                 {!blocked && targetRounds.length > 0 && (
                   <button className="btn btn-primary" style={{ ...ds, opacity: canConfirm ? 1 : 0.5 }}
                     disabled={!canConfirm} onClick={confirmMove}>
-                    Move gymnast
+                    {isUnassigned ? "Assign gymnast" : "Move gymnast"}
                   </button>
                 )}
               </div>
