@@ -24,13 +24,17 @@ export function calculateNGAScore(sv, judgeDeductions = [], neutralDeductions = 
   return Math.max(NGA_COURTESY_SCORE, rounded);
 }
 
-// Standard competition ranking: equal scores share rank, next rank skips (1,2,2,4,5,6)
-export const denseRank = (items, scoreKey) => {
+// Competition ranking. Equal scores always share a rank.
+// mode "standard" (default): next rank skips tied places (1, 1, 3)
+// mode "dense": next rank does not skip (1, 1, 2)
+export const denseRank = (items, scoreKey, mode = "standard") => {
   const sorted = [...items].sort((a, b) => b[scoreKey] - a[scoreKey]);
   const result = [];
   let rank = 1;
   for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) rank = i + 1;
+    if (i > 0 && sorted[i][scoreKey] < sorted[i - 1][scoreKey]) {
+      rank = mode === "dense" ? rank + 1 : i + 1;
+    }
     result.push({ ...sorted[i], rank });
   }
   return result;

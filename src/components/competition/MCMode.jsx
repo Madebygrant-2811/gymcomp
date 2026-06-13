@@ -6,6 +6,7 @@ function MCMode({ compData, gymnasts, scores }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("overall"); // "overall" | "apparatus"
   const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const rankingMode = compData.rankingMode || "standard";
   const [activeApparatus, setActiveApparatus] = useState(scoringApparatus[0] || "");
   const [fullscreen, setFullscreen] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -42,7 +43,7 @@ function MCMode({ compData, gymnasts, scores }) {
       if (view === "overall") {
         const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }))
           .filter(g => g.total > 0);
-        const ranked = denseRank(withTotals, "total");
+        const ranked = denseRank(withTotals, "total", rankingMode);
         // Reverse: announce from last place to first
         const reversed = [...ranked].sort((a, b) => b.rank - a.rank);
         reversed.forEach(g => {
@@ -60,7 +61,7 @@ function MCMode({ compData, gymnasts, scores }) {
       } else {
         const withScores = glist.map(g => ({ ...g, score: getScore(g.id, activeApparatus) }))
           .filter(g => g.score > 0);
-        const ranked = denseRank(withScores, "score");
+        const ranked = denseRank(withScores, "score", rankingMode);
         const reversed = [...ranked].sort((a, b) => b.rank - a.rank);
         reversed.forEach(g => {
           const medal = g.rank === 1 ? "🥇" : g.rank === 2 ? "🥈" : g.rank === 3 ? "🥉" : "";
@@ -79,7 +80,7 @@ function MCMode({ compData, gymnasts, scores }) {
     return list;
   };
 
-  const announcements = useMemo(buildAnnouncementList, [rankGroups, scores, activeRound, scoringApparatus, view, activeApparatus]);
+  const announcements = useMemo(buildAnnouncementList, [rankGroups, scores, activeRound, scoringApparatus, view, activeApparatus, rankingMode]);
   const current = announcements[currentIdx];
 
   const prev = () => setCurrentIdx(i => Math.max(0, i - 1));

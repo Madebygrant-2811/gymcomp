@@ -1447,6 +1447,7 @@ export default function App() {
         <ErrorBoundary label="results">
         <div style={{ flex: 1 }}>
           <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores}
+            onUpdateCompData={setCompData}
             onComplete={currentEventId && eventStatus !== "completed" ? handleCompleteComp : undefined} />
         </div>
         </ErrorBoundary>

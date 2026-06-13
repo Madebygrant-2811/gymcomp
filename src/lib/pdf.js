@@ -869,6 +869,7 @@ export function buildDiagnosticHTML(compData, gymnasts, scores) {
 export function buildResultsHTML(compData, gymnasts, scores) {
   const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
+  const rankingMode = compData.rankingMode || "standard";
 
   // ── Branding ──
   const brandColor = compData.brandColor || "";
@@ -957,7 +958,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
     } else {
       rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
         const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
-        const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+        const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
         const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
 
         body += `<div class="level-card">`;
@@ -1094,12 +1095,15 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     return isNaN(v) ? 0 : v;
   };
   const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const rankingMode = compData.rankingMode || "standard";
   const denseRankLocal = (items, key) => {
     const sorted = [...items].sort((a, b) => b[key] - a[key]);
     const result = [];
     let rank = 1;
     for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) rank = i + 1;
+      if (i > 0 && sorted[i][key] < sorted[i - 1][key]) {
+        rank = rankingMode === "dense" ? rank + 1 : i + 1;
+      }
       result.push({ ...sorted[i], rank });
     }
     return result;

@@ -3,13 +3,15 @@ import { denseRank, gymnast_key } from "../../lib/scoring.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 
-function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
+function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("apparatus");
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [levelFilter, setLevelFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
   const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const rankingMode = compData.rankingMode || "standard";
+  const setRankingMode = (mode) => onUpdateCompData?.(prev => ({ ...prev, rankingMode: mode }));
 
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
@@ -131,6 +133,19 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
               onClick={() => { setActiveRound(r.id); setLevelFilter("all"); setAgeFilter("all"); }}>{r.name}</button>
           ))}
         </div>
+        {onUpdateCompData && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: "auto", fontFamily: "var(--font-display)" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)" }}>Tie ranking</span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className={`btn btn-sm ${rankingMode === "standard" ? "btn-tertiary" : "btn-secondary"}`}
+                style={{ fontFamily: "var(--font-display)" }}
+                onClick={() => setRankingMode("standard")}>Standard — ties skip places (1, 1, 3)</button>
+              <button className={`btn btn-sm ${rankingMode === "dense" ? "btn-tertiary" : "btn-secondary"}`}
+                style={{ fontFamily: "var(--font-display)" }}
+                onClick={() => setRankingMode("dense")}>Dense — ties keep places (1, 1, 2)</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PER APPARATUS VIEW
@@ -166,7 +181,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                 </div>
                 {scoringApparatus.map(apparatus => {
                   const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
-                  const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score");
+                  const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score", rankingMode);
                   const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
                   return (
                     <div key={apparatus} style={{ marginBottom: 24 }}>
@@ -214,7 +229,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
         <div>
           {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
             const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }));
-            const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+            const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
             const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
             return (
               <div key={key} className="results-level-card">
