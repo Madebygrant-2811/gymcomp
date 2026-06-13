@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { generateId } from "../../lib/utils.js";
+import { nextOrderIndex } from "../../lib/rotations.js";
 
 const getAppName = (full) => full.replace(/\s*\(.*?\)\s*$/, "");
 
@@ -109,13 +110,6 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       if (aNum !== bNum) return aNum - bNum;
       return (a.name || "").localeCompare(b.name || "");
     });
-  }
-
-  function nextOrderIndex(roundId, groupLabel) {
-    const bucket = gymnasts.filter((g) => g.round === roundId && (g.group || "") === (groupLabel || ""));
-    if (bucket.length === 0) return 0;
-    const indices = bucket.map((g) => (typeof g.orderIndex === "number" ? g.orderIndex : -1));
-    return Math.max(...indices) + 1;
   }
 
   const getColumnGymnasts = (groupName) =>
@@ -249,7 +243,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   /* ── Assign / unassign / reorder ────────────────────────── */
   const assignToColumn = (ids, groupName) => {
     if (readOnly || !activeRound || !groupName) return;
-    let idx = nextOrderIndex(activeRound, groupName);
+    let idx = nextOrderIndex(gymnasts, activeRound, groupName);
     setGymnasts((prev) =>
       prev.map((g) => {
         if (!ids.includes(g.id)) return g;

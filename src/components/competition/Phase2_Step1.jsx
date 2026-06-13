@@ -4,8 +4,9 @@ import { gymnast_key, isDualVault, calculateNGAScore } from "../../lib/scoring.j
 import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
+import { roundGroups, isValidGroup, nextOrderIndex } from "../../lib/rotations.js";
 
-function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
+function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, setGymnasts, onMoveScoreCleanup, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
   const [localRound, setLocalRound] = useState(compData.rounds[0]?.id || "");
   const activeRound = activeRoundProp !== undefined ? activeRoundProp : localRound;
   const setActiveRound = setActiveRoundProp || setLocalRound;
@@ -17,6 +18,10 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const [modalBufs, setModalBufs] = useState({});
   const [modalPristine, setModalPristine] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
+  const [moveModal, setMoveModal] = useState(null); // { gid } or null
+  const [moveRound, setMoveRound] = useState("");    // target round id
+  const [moveGroup, setMoveGroup] = useState("");    // target rotation label
+  const canMoveGymnasts = !!setGymnasts; // organiser-only; judges never receive setGymnasts
   const isNGA = compData.scoringMode === "nga";
   const fig = !isNGA;
   const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
@@ -438,6 +443,57 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     setDeleteConfirm(null);
   };
 
+  // ── Move-to-round helpers ────────────────────────────────
+  // True if the gymnast has any positive final score under `roundId` specifically.
+  // Checks only base score keys of the form `${roundId}__${gid}__${apparatus}`
+  // (exactly 3 segments) — NOT the round-blind has-scores check used elsewhere.
+  const hasPositiveScoreInRound = (roundId, gid) => {
+    if (!roundId) return false;
+    return Object.keys(scores).some(k => {
+      const parts = k.split("__");
+      return parts.length === 3 && parts[0] === roundId && parts[1] === gid && (parseFloat(scores[k]) || 0) > 0;
+    });
+  };
+
+  const openMoveModal = (gid) => {
+    setMoveRound("");
+    setMoveGroup("");
+    setMoveModal({ gid });
+  };
+
+  const confirmMove = () => {
+    if (!moveModal) return;
+    const g = gymnasts.find(x => x.id === moveModal.gid);
+    if (!g) { setMoveModal(null); return; }
+    const source = g.round;
+    // Hard block — no override — if already scored in the source round.
+    if (hasPositiveScoreInRound(source, g.id)) return;
+    // Target must be a real round/rotation so the gymnast can never land unassigned.
+    if (!moveRound || !isValidGroup(compData, moveRound, moveGroup)) return;
+
+    const idx = nextOrderIndex(gymnasts, moveRound, moveGroup);
+    // Only ever touch the one moved gymnast's round / group / orderIndex.
+    setGymnasts(prev => prev.map(x =>
+      x.id === g.id ? { ...x, round: moveRound, group: moveGroup, orderIndex: idx } : x
+    ));
+
+    // Defensively clear any leftover empty/zero score keys for this gymnast under
+    // the OLD round only — locally and in the scores table.
+    if (source) {
+      const prefix = `${source}__${g.id}__`;
+      setScores(s => {
+        const next = { ...s };
+        for (const k of Object.keys(next)) {
+          if (k.startsWith(prefix)) delete next[k];
+        }
+        return next;
+      });
+      if (onMoveScoreCleanup) onMoveScoreCleanup(source, g.id);
+    }
+
+    setMoveModal(null);
+  };
+
   const mf = (field, val) => setModalFields(f => ({ ...f, [field]: val }));
   const mb = (field, val) => setModalBufs(b => ({ ...b, [field]: val }));
 
@@ -696,24 +752,42 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                               </strong>
                             </td>
                             <td>
-                              {!isDns && (
-                                <button
-                                  className="btn btn-sm"
-                                  style={{
-                                    fontSize: 10, padding: "3px 8px",
-                                    background: hasQuery ? "rgba(240,173,78,0.15)" : "var(--surface2)",
-                                    color: hasQuery ? "#f0ad4e" : "var(--muted)",
-                                    border: `1px solid ${hasQuery ? "rgba(240,173,78,0.4)" : "var(--border)"}`,
-                                    borderRadius: 4, cursor: "pointer"
-                                  }}
-                                  onClick={() => {
-                                    const firstApp = scoringApparatus[0];
-                                    if (hasQuery) resolveQuery(g.id, firstApp);
-                                    else openQueryModal(g.id, firstApp);
-                                  }}>
-                                  {hasQuery ? "Clear" : "Flag"}
-                                </button>
-                              )}
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "stretch" }}>
+                                {!isDns && !canMoveGymnasts && (
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{
+                                      fontSize: 10, padding: "3px 8px",
+                                      background: hasQuery ? "rgba(240,173,78,0.15)" : "var(--surface2)",
+                                      color: hasQuery ? "#f0ad4e" : "var(--muted)",
+                                      border: `1px solid ${hasQuery ? "rgba(240,173,78,0.4)" : "var(--border)"}`,
+                                      borderRadius: 4, cursor: "pointer",
+                                      fontFamily: "var(--font-display)",
+                                    }}
+                                    onClick={() => {
+                                      const firstApp = scoringApparatus[0];
+                                      if (hasQuery) resolveQuery(g.id, firstApp);
+                                      else openQueryModal(g.id, firstApp);
+                                    }}>
+                                    {hasQuery ? "Clear" : "Flag"}
+                                  </button>
+                                )}
+                                {canMoveGymnasts && (
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{
+                                      fontSize: 10, padding: "3px 8px",
+                                      background: "var(--surface2)", color: "var(--muted)",
+                                      border: "1px solid var(--border)",
+                                      borderRadius: 4, cursor: "pointer",
+                                      fontFamily: "var(--font-display)",
+                                    }}
+                                    title="Move this gymnast to another round"
+                                    onClick={() => openMoveModal(g.id)}>
+                                    Move
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -978,6 +1052,91 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         </div>,
         document.body
       )}
+
+      {/* ── Move to Round Modal ── */}
+      {moveModal && (() => {
+        const g = gymnasts.find(x => x.id === moveModal.gid);
+        if (!g) return null;
+        const source = g.round;
+        const sourceName = compData.rounds.find(r => r.id === source)?.name || "their current round";
+        const blocked = hasPositiveScoreInRound(source, g.id);
+        // Only rounds (other than the source) that actually have rotations configured.
+        const targetRounds = (compData.rounds || []).filter(r => r.id !== source && roundGroups(compData, r.id).length > 0);
+        const rotations = roundGroups(compData, moveRound);
+        const canConfirm = !blocked && !!moveRound && isValidGroup(compData, moveRound, moveGroup);
+        const ds = { fontFamily: "var(--font-display)" };
+
+        return createPortal(
+          <div className="modal-backdrop" onClick={() => setMoveModal(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, width: "94%", ...ds }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, ...ds }}>Move to another round</div>
+              <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16, ...ds }}>
+                {g.name} · #{g.number} · currently in {sourceName}
+              </div>
+
+              {blocked ? (
+                <div style={{
+                  background: "var(--surface2)", border: "1px solid var(--border)",
+                  borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "var(--danger)", ...ds,
+                }}>
+                  {g.name} has already been scored in {sourceName} and cannot be moved.
+                </div>
+              ) : targetRounds.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)", ...ds }}>
+                  No other rounds with rotations are available to move to.
+                </div>
+              ) : (
+                <>
+                  <label className="label" style={ds}>Target round</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                    {targetRounds.map(r => (
+                      <button key={r.id} className={`btn btn-sm ${moveRound === r.id ? "btn-primary" : "btn-secondary"}`}
+                        style={ds}
+                        onClick={() => { setMoveRound(r.id); setMoveGroup(""); }}>
+                        {r.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {moveRound && (
+                    <>
+                      <label className="label" style={ds}>Rotation</label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                        {rotations.map(grp => {
+                          const count = gymnasts.filter(x => x.round === moveRound && (x.group || "") === grp && !x.dns && !x.withdrawn).length;
+                          return (
+                            <button key={grp} className={`btn btn-sm ${moveGroup === grp ? "btn-primary" : "btn-secondary"}`}
+                              style={ds}
+                              onClick={() => setMoveGroup(grp)}>
+                              {grp} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8, ...ds }}>
+                        Added to the end of the selected rotation's running order.
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button className="btn btn-ghost" style={ds} onClick={() => setMoveModal(null)}>
+                  {blocked || targetRounds.length === 0 ? "Close" : "Cancel"}
+                </button>
+                {!blocked && targetRounds.length > 0 && (
+                  <button className="btn btn-primary" style={{ ...ds, opacity: canConfirm ? 1 : 0.5 }}
+                    disabled={!canConfirm} onClick={confirmMove}>
+                    Move gymnast
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }

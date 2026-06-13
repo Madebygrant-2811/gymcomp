@@ -396,6 +396,19 @@ export default function App() {
     }
   }, [compId, inSandbox]);
 
+  // Remove all leftover (empty/zero) score rows for one gymnast under one round —
+  // used after a "move to round" so the old round leaves no orphaned rows behind.
+  // Scoped to comp_id + round_id + gymnast_id only; never touches other gymnasts.
+  const clearRoundScoresForGymnast = useCallback(async (roundId, gymnastId) => {
+    if (inSandbox) return;
+    try {
+      const { error } = await supabase.from("scores").delete().eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId);
+      if (error) console.error("[clearRoundScoresForGymnast]", error.message);
+    } catch (e) {
+      console.error("[clearRoundScoresForGymnast]", e.message);
+    }
+  }, [compId, inSandbox]);
+
   // ── Draft-only setters for Setup ──
   const setDraftCompDataLocal = useCallback((updater) => {
     setDraftCompData(prev => {
@@ -1437,6 +1450,8 @@ export default function App() {
             onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
             isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue}
             onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys}
+            setGymnasts={currentAccount ? setGymnastsWithSync : undefined}
+            onMoveScoreCleanup={currentAccount ? clearRoundScoresForGymnast : undefined}
             pinRole={pinRole} lockedApparatus={lockedApparatus}
             activeRound={!currentAccount ? effectiveActiveRound : undefined}
             setActiveRound={!currentAccount ? setActiveRound : undefined}
