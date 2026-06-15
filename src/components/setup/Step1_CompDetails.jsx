@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { generateId, isFutureOrToday, todayStr, getContrastTextColor, svgToPng } from "../../lib/utils.js";
 import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, SCORING_MODES } from "../../lib/constants.js";
 import { supabase } from "../../lib/supabase.js";
@@ -7,9 +7,16 @@ import AddressLookup from "../shared/AddressLookup.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
-function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser, scores = {} }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" — awaiting confirmation
+  const [vaultModeWarn, setVaultModeWarn] = useState(false); // shown after changing vaultMode on a comp with scored vaults
+
+  // Any vault with a positive final already entered? (base key = round__gid__apparatus)
+  const hasScoredVault = useMemo(() => Object.keys(scores || {}).some(k => {
+    const parts = k.split("__");
+    return parts.length === 3 && parts[2].toLowerCase().includes("vault") && (parseFloat(scores[k]) || 0) > 0;
+  }), [scores]);
   const [newLevel, setNewLevel] = useState("");
   const [newAgeRange, setNewAgeRange] = useState("");
   const [editingAgeIdx, setEditingAgeIdx] = useState(null);
@@ -299,6 +306,49 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         {(data.scoringMode || "fig") === "nga" && (
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8 }}>
             NGA uses a Perfect 10 system. Start values are capped at 10.0, execution deductions are subtracted from the start value, and the lowest possible score is 5.0 (courtesy). Use this mode for NGA UK sanctioned events.
+          </div>
+        )}
+
+        {/* Vault scoring — FIG only. Stays editable while live. */}
+        {(data.scoringMode || "fig") === "fig" && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text)", marginBottom: 10 }}>Vault Scoring</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { value: "single", label: "Single Vault" },
+                { value: "average", label: "Average" },
+                { value: "highest", label: "Highest (Best Counts)" },
+              ].map(m => {
+                const active = (data.vaultMode || "single") === m.value;
+                return (
+                  <button key={m.value} className="btn"
+                    onClick={() => {
+                      if (active) return;
+                      if (hasScoredVault) setVaultModeWarn(true);
+                      setData(d => ({ ...d, vaultMode: m.value }));
+                    }}
+                    style={{
+                      borderRadius: 72, padding: "10px 22px", fontSize: 14, fontWeight: 600,
+                      fontFamily: "var(--font-display)",
+                      background: active ? "var(--brand-01)" : "var(--background-neutral)",
+                      color: active ? "#fff" : "var(--text-secondary)",
+                      border: "none", cursor: "pointer",
+                    }}>
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8, fontFamily: "var(--font-display)" }}>
+              {(data.vaultMode || "single") === "single" && "One vault score per gymnast."}
+              {(data.vaultMode || "single") === "average" && "Gymnasts perform two vaults; the average of the two finals counts."}
+              {(data.vaultMode || "single") === "highest" && "Gymnasts perform two vaults; the higher final counts. Coaches and results show both vaults, the public view shows only the counting score."}
+            </div>
+            {vaultModeWarn && (
+              <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: "var(--radius)", background: "var(--background-neutral)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
+                ⚠️ This competition already has scored vaults. Changing the vault mode only applies to vaults scored from now on — already-entered vault finals are frozen and will not be recalculated, so results may contain a mix of averaged and highest scores.
+              </div>
+            )}
           </div>
         )}
       </div>

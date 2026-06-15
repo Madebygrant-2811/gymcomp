@@ -54,6 +54,25 @@ export function isDualVault(apparatus, levelId, compData) {
   return apparatus.toLowerCase().includes("vault") && levelName.toLowerCase().includes("excel");
 }
 
+// ── Vault combiner ───────────────────────────────────────────────────────
+// Combine two vault finals into the single counting score for a comp's vaultMode.
+//   "average" — mean of the two finals (the original Excel dual-vault behaviour)
+//   "highest" — the higher of the two finals
+// Partial entry is symmetric: if only one vault has a score (> 0), that one
+// counts regardless of which it is (fixes the old only-Vault-2-scores-0 quirk).
+// Result is rounded to 3dp, mirroring calculateNGAScore.
+export function combineVaults(v1, v2, mode = "average") {
+  const a = Number(v1) || 0;
+  const b = Number(v2) || 0;
+  let result;
+  if (a > 0 && b > 0) {
+    result = mode === "highest" ? Math.max(a, b) : (a + b) / 2;
+  } else {
+    result = a > 0 ? a : b; // one (or neither) entered — use whichever is present
+  }
+  return Math.round(result * 1000) / 1000;
+}
+
 // ── Scores table ↔ flat object conversion ────────────────────────────────
 // Convert scores table rows → flat scores object (used by app state)
 export function scoresToFlat(rows) {

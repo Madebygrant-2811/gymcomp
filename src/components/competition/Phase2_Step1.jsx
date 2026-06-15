@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { gymnast_key, isDualVault, calculateNGAScore } from "../../lib/scoring.js";
+import { gymnast_key, combineVaults, calculateNGAScore } from "../../lib/scoring.js";
 import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
@@ -121,11 +121,34 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const getGymnastTotal = (gid) =>
     scoringApparatus.reduce((s, a) => s + getAppTotal(gid, a), 0);
 
+  // ── Dual-vault per-vault finals (display only) ──
+  // Flag-driven: show both stored vault finals beneath the combined total for
+  // rows carrying the persisted dualVault flag. The total stays the value fed
+  // to all-around / ranking — nothing here recomputes it.
+  const renderVaultFinals = (gid, app, total) => {
+    if (scores[subKey(gid, app, "dualVault")] !== "1") return null;
+    const v1 = parseFloat(scores[subKey(gid, app, "v1fin")]) || 0;
+    const v2 = parseFloat(scores[subKey(gid, app, "v2fin")]) || 0;
+    if (v1 <= 0 && v2 <= 0) return null;
+    const counts = (v) => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+    const line = (label, v) => v > 0 ? (
+      <div style={{ fontWeight: counts(v) ? 700 : 500, color: counts(v) ? "var(--accent)" : "var(--muted)" }}>{label} {v.toFixed(3)}</div>
+    ) : null;
+    return (
+      <div style={{ fontSize: 9, marginTop: 2, lineHeight: 1.3, color: "var(--muted)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+        {line("V1", v1)}{line("V2", v2)}
+      </div>
+    );
+  };
+
   // ── Dual vault helpers ──────────────────────────────────
+  // Dual vault entry is now driven by the comp-level vault mode (FIG only),
+  // not by the gymnast's level. NGA keeps its own single-input handling.
+  const vaultMode = compData.vaultMode || "single";
+  const isVaultApparatus = (app) => (app || "").toLowerCase().includes("vault");
   const isDualVaultForGymnast = (gid, app) => {
-    const g = gymnasts.find(x => x.id === gid);
-    if (!g) return false;
-    return isDualVault(app, g.level, compData);
+    if (isNGA) return false;
+    return isVaultApparatus(app) && (vaultMode === "average" || vaultMode === "highest");
   };
 
   const calcVaultFinal = (fields, prefix, app) => {
@@ -147,9 +170,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     const app = scoreModal?.app || "";
     const v1 = calcVaultFinal(modalFields, "v1", app);
     const v2 = calcVaultFinal(modalFields, "v2", app);
-    if (v1 > 0 && v2 > 0) return (v1 + v2) / 2;
-    if (v1 > 0) return v1;
-    return 0;
+    return combineVaults(v1, v2, vaultMode);
   };
 
   // ── Query helpers ────────────────────────────────────────
@@ -316,7 +337,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
       // Dual vault submit
       const v1Final = calcVaultFinal(modalFields, "v1", app);
       const v2Final = calcVaultFinal(modalFields, "v2", app);
-      const avg = (v1Final > 0 && v2Final > 0) ? (v1Final + v2Final) / 2 : (v1Final > 0 ? v1Final : 0);
+      const combined = combineVaults(v1Final, v2Final, vaultMode);
 
       setScores(s => {
         const next = { ...s };
@@ -332,7 +353,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
           const fin = calcVaultFinal(modalFields, prefix, app);
           next[subKey(gid, app, `${prefix}fin`)] = fin > 0 ? String(parseFloat(fin.toFixed(3))) : "";
         }
-        next[baseKey(gid, app)] = avg > 0 ? String(parseFloat(avg.toFixed(3))) : "";
+        next[baseKey(gid, app)] = combined > 0 ? String(combined) : "";
         return next;
       });
 
@@ -351,7 +372,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
           const fin = calcVaultFinal(modalFields, prefix, app);
           flatSubset[`${bk}__${prefix}fin`] = fin > 0 ? String(parseFloat(fin.toFixed(3))) : "";
         }
-        flatSubset[bk] = avg > 0 ? String(parseFloat(avg.toFixed(3))) : "";
+        flatSubset[bk] = combined > 0 ? String(combined) : "";
         onScoreCommit(activeRound, gid, app, flatSubset);
       }
     } else if (isNGA) {
@@ -811,6 +832,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                                         onClick={() => openScoreModal(g.id, a, true)}>
                                         {appScore.toFixed(3)}
                                       </span>
+                                      {renderVaultFinals(g.id, a, appScore)}
                                     </div>
                                   ) : (
                                     <button className="si-add-btn" onClick={() => openScoreModal(g.id, a, false)}>+ Add</button>

@@ -1367,7 +1367,7 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus} compId={compId} currentUser={currentUser}
+          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus} compId={compId} currentUser={currentUser} scores={scores}
             onSaveExit={async () => {
               // Partial save — commit draft, persist and go back
               const { compData: cd, gymnasts: g } = commitDraft();

@@ -579,6 +579,31 @@
   const getScoringApparatus = () => (compData?.apparatus || []).filter(a => a !== "Rest");
   const getTotal = (rid, gid) => getScoringApparatus().reduce((s, a) => s + getScore(rid, gid, a), 0);
 
+  // Dual-vault per-vault finals (display only). Flag-driven — never reads vaultMode.
+  // The combined total stays the ranked value; this just shows both vault finals.
+  function vaultFinalsHtml(rid, gid, app, total) {
+    if (scores[`${sk(rid, gid, app)}__dualVault`] !== "1") return "";
+    const v1 = parseFloat(scores[`${sk(rid, gid, app)}__v1fin`]) || 0;
+    const v2 = parseFloat(scores[`${sk(rid, gid, app)}__v2fin`]) || 0;
+    if (v1 <= 0 && v2 <= 0) return "";
+    const counts = v => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+    const line = (label, v) => v > 0
+      ? `<div style="font-weight:${counts(v) ? 700 : 500};color:${counts(v) ? "var(--accent)" : "var(--muted)"}">${label} ${v.toFixed(3)}</div>`
+      : "";
+    return `<div style="font-size:9px;margin-top:2px;line-height:1.3;color:var(--muted);font-family:var(--font)">${line("V1", v1)}${line("V2", v2)}</div>`;
+  }
+
+  // A single Vault 1 / Vault 2 column cell for the per-apparatus Vault table.
+  // Flag-driven; the counting vault (final equal to the total) is emphasised.
+  function vaultColCellHtml(rid, gid, app, prefix, total) {
+    if (scores[`${sk(rid, gid, app)}__dualVault`] !== "1")
+      return `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`;
+    const v = parseFloat(scores[`${sk(rid, gid, app)}__${prefix}fin`]) || 0;
+    const hot = v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+    const style = hot ? "color:var(--accent);font-weight:700;" : "";
+    return `<div class="col-score"><span class="score-inner" style="${style}">${v > 0 ? v.toFixed(3) : '<span class="no-score">—</span>'}</span></div>`;
+  }
+
   // ── Competition ranking. Equal scores share a rank. ──
   // "standard" (default): next rank skips tied places (1, 1, 3)
   // "dense": next rank does not skip (1, 1, 2)
@@ -695,7 +720,7 @@
       const isGroupBest = isOverall && s > 0 && levelMax[a] && s === levelMax[a];
       const hlBg = isGroupBest ? "background:#e3e3e3;" : "";
       const hlFw = isGroupBest ? "font-weight:600;" : "";
-      return `<div class="col-score"><span class="score-inner" style="${hlBg}${hlFw}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span></div>`;
+      return `<div class="col-score"><span class="score-inner" style="${hlBg}${hlFw}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span>${s > 0 ? vaultFinalsHtml(rid, g.id, a, s) : ""}</div>`;
     }).join("");
 
     const totalVal = isOverall
@@ -756,35 +781,51 @@
         const withScores = glist.map(g => ({ ...g, score: getScore(rid, g.id, app) }));
         const ranked = standardRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score");
         const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
+        // Dual-vault section → break the two vault finals out into columns.
+        const showVaultCols = [...ranked, ...dns].some(g => scores[`${sk(rid, g.id, app)}__dualVault`] === "1");
+        const vaultCols = (g) => showVaultCols
+          ? `${vaultColCellHtml(rid, g.id, app, "v1", g.score)}${vaultColCellHtml(rid, g.id, app, "v2", g.score)}`
+          : "";
+        const dnsVaultCols = showVaultCols
+          ? `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div><div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`
+          : "";
 
-        // For per-apparatus view: single score column, no apparatus sub-columns
         const rows = ranked.map(g => {
           const m = medalStyle(g.rank);
           const badgeBorder = g.rank > 6 ? `border:1.5px solid ${m.border};` : "";
           return `<div class="pill-row" style="background:${m.bg};border-color:${m.border};">
             <div class="col-badge"><div class="rank-badge" style="background:${m.badgeBg};color:${m.badgeText};${badgeBorder}">${g.rank}</div></div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
+            ${vaultCols(g)}
             <div class="col-total">${g.score.toFixed(3)}</div>
           </div>`;
         }).join("");
 
         const dnsRows = dns.map(g => {
-          const label = g.dns ? "DNS" : (g.withdrawn ? "WD" : "—");
           return `<div class="pill-row dns-row">
             <div class="col-badge">${(g.dns || g.withdrawn) ? `<div class="rank-badge dns-badge">${g.dns ? "DNS" : "WD"}</div>` : ""}</div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
+            ${dnsVaultCols}
             <div class="col-total"><span class="no-score">—</span></div>
           </div>`;
         }).join("");
 
-        return `<div class="app-section">
-          <div class="app-label">${escHtml(shortApp(app))}</div>
-          <div class="col-header">
+        const header = `<div class="col-header">
             <span class="ch-badge"></span>
             <span class="ch-name">Gymnast</span>
+            ${showVaultCols ? `<span class="ch-score">Vault 1</span><span class="ch-score">Vault 2</span>` : ""}
             <span class="ch-total">Score</span>
-          </div>
-          ${rows}${dnsRows}
+          </div>`;
+
+        // Dual-vault sections add columns — wrap in a horizontal scroller so the
+        // wider table stays readable on narrow screens (matches the Overall view).
+        const body = showVaultCols
+          ? `<div class="pill-row-scroll-wrapper"><div class="pill-row-scroll-inner">${header}${rows}${dnsRows}</div></div>`
+          : `${header}${rows}${dnsRows}`;
+
+        return `<div class="app-section">
+          <div class="app-label">${escHtml(shortApp(app))}</div>
+          ${body}
         </div>`;
       }).join("");
 
@@ -991,8 +1032,14 @@
 
       const eScores = row.e_scores;
 
-      // Dual vault: e_scores is an object — just use final_score (already set above)
+      // Dual vault: e_scores is an object. final_score (set above) stays the
+      // ranked total; also surface the per-vault finals for display.
       if (eScores && typeof eScores === "object" && !Array.isArray(eScores) && eScores.dualVault) {
+        flat[`${bk}__dualVault`] = "1";
+        for (const prefix of ["v1", "v2"]) {
+          const v = eScores[prefix];
+          if (v && v.final != null) flat[`${bk}__${prefix}fin`] = String(v.final);
+        }
         continue;
       }
 

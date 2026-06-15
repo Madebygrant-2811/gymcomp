@@ -10,6 +10,13 @@ export function migrateCompData(cd) {
   if (!cd) return cd;
   const migrated = { ...cd };
   if (!migrated.scoringMode) migrated.scoringMode = 'fig';
+  // Vault mode replaces the old "Excel level => dual vault" auto-detection.
+  // Absent => single; an existing comp with any Excel level => average (its
+  // prior dual-vault behaviour). Reuses the same "excel" name heuristic.
+  if (!migrated.vaultMode) {
+    const hasExcelLevel = (migrated.levels || []).some(l => (l.name || "").toLowerCase().includes("excel"));
+    migrated.vaultMode = hasExcelLevel ? 'average' : 'single';
+  }
   if (migrated.apparatus) migrated.apparatus = migrateApparatus(migrated.apparatus);
   if (migrated.judges) migrated.judges = migrated.judges.map(j => ({
     ...j,

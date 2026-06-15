@@ -49,6 +49,38 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
   };
   const getTotal = (gid) => scoringApparatus.reduce((s, a) => s + getScore(gid, a), 0);
 
+  // ── Dual-vault per-vault finals (display only) ──
+  // Flag-driven, never mode-driven: when a row carries the persisted dualVault
+  // flag we show both stored vault finals beneath the combined total. The total
+  // (final_score) stays the ranked / all-around value, untouched.
+  const subScore = (gid, app, sub) => scores[`${gymnast_key(activeRound, gid, app)}__${sub}`];
+  const renderVaultFinals = (gid, app, total) => {
+    if (subScore(gid, app, "dualVault") !== "1") return null;
+    const v1 = parseFloat(subScore(gid, app, "v1fin")) || 0;
+    const v2 = parseFloat(subScore(gid, app, "v2fin")) || 0;
+    if (v1 <= 0 && v2 <= 0) return null;
+    const counts = (v) => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+    const line = (label, v) => v > 0 ? (
+      <div style={{ fontWeight: counts(v) ? 700 : 500, color: counts(v) ? "var(--accent)" : "var(--muted)" }}>{label} {v.toFixed(3)}</div>
+    ) : null;
+    return (
+      <div style={{ fontSize: 10, marginTop: 2, lineHeight: 1.3, color: "var(--muted)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+        {line("V1", v1)}{line("V2", v2)}
+      </div>
+    );
+  };
+
+  // Per-apparatus dual-vault columns (Vault 1 / Vault 2). Flag-driven.
+  const isDualVaultRow = (gid, app) => subScore(gid, app, "dualVault") === "1";
+  const vaultFinal = (gid, app, prefix) => parseFloat(subScore(gid, app, `${prefix}fin`)) || 0;
+  const vaultEqualsTotal = (v, total) => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+  const vaultColCell = (gid, app, prefix, total) => {
+    if (!isDualVaultRow(gid, app)) return <td style={{ color: "var(--muted)" }}>—</td>;
+    const v = vaultFinal(gid, app, prefix);
+    const hot = vaultEqualsTotal(v, total);
+    return <td style={{ fontWeight: hot ? 700 : 500, color: hot ? "var(--accent)" : "var(--muted)" }}>{v > 0 ? v.toFixed(3) : "—"}</td>;
+  };
+
   // Build ranking groups respecting level rankBy config
   const buildRankGroups = () => {
     const map = {};
@@ -183,13 +215,19 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                   const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
                   const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score", rankingMode);
                   const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
+                  // Dual-vault section → break the two vault finals out into columns.
+                  const showVaultCols = [...ranked, ...dns].some(g => isDualVaultRow(g.id, apparatus));
                   return (
                     <div key={apparatus} style={{ marginBottom: 24 }}>
                       <div className="sub-group-label">{apparatus}</div>
                       <div className="table-wrap">
                         <table>
                           <thead>
-                            <tr><th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th>Score</th></tr>
+                            <tr>
+                              <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th>
+                              {showVaultCols && <><th>Vault 1</th><th>Vault 2</th></>}
+                              <th>Score</th>
+                            </tr>
                           </thead>
                           <tbody>
                             {ranked.map(g => (
@@ -198,6 +236,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
+                                {showVaultCols && <>{vaultColCell(g.id, apparatus, "v1", g.score)}{vaultColCell(g.id, apparatus, "v2", g.score)}</>}
                                 <td><strong>{g.score.toFixed(3)}</strong></td>
                               </tr>
                             ))}
@@ -207,6 +246,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
+                                {showVaultCols && <><td style={{ color: "var(--muted)" }}>—</td><td style={{ color: "var(--muted)" }}>—</td></>}
                                 <td style={{ color: "var(--muted)" }}>—</td>
                               </tr>
                             ))}
@@ -275,6 +315,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                           {scoringApparatus.map(a => (
                             <td key={a} style={{ color: "var(--muted)" }}>
                               {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(3) : "—"}
+                              {getScore(g.id, a) > 0 && renderVaultFinals(g.id, a, getScore(g.id, a))}
                             </td>
                           ))}
                           <td><strong style={{ color: "var(--accent)" }}>{g.total.toFixed(3)}</strong></td>
