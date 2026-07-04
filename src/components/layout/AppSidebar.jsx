@@ -1,11 +1,13 @@
+import { useState } from "react";
 import GymCompLogotype from "../../assets/Logotype.svg";
 import GymCompLogomark from "../../assets/Logomark.svg";
 
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit, subscriptionStatus, onManageSubscription }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit, onExportXLSX, onExportPDF, subscriptionStatus, onManageSubscription }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const [exportOpen, setExportOpen] = useState(false);
 
   // SVG icon helpers (16x16)
   const icons = {
@@ -33,6 +35,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     collapse: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4L7 8l4 4"/><path d="M7 4L3 8l4 4"/></svg>,
     expand: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4-4-4-4"/><path d="M9 12l4-4-4-4"/></svg>,
     judge: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14V3a1 1 0 00-1-1H5a1 1 0 00-1 1v11M6 5h4M6 8h4M6 11h2"/></svg>,
+    download: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>,
     home: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
   };
 
@@ -206,6 +209,26 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
             <div className="as-account-avatar" style={{ background: "var(--brand-01)" }}>{icons.judge}</div>
             <span className="as-account-label">{lockedApparatus || "Scorekeeper"}</span>
           </div>
+          {/* Export — matches the phase-2 topbar exports (hidden for apparatus-locked judges, like the topbar) */}
+          {pinRole !== "judge" && onExportXLSX && onExportPDF && (<>
+            {exportOpen && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, width: "100%" }}>
+                <NavItem icon={icons.grid} label="Export Excel" title="Export Excel" onClick={onExportXLSX} />
+                <NavItem icon={icons.doc} label="Export PDF" title="Export PDF" onClick={onExportPDF} />
+              </div>
+            )}
+            <button className="as-signout" onClick={() => setExportOpen(o => !o)}
+              title={collapsed ? "Export" : undefined} aria-expanded={exportOpen}>
+              {icons.download}
+              <span className="as-label" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Export
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transform: exportOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                  <path d="M4 10l4-4 4 4"/>
+                </svg>
+              </span>
+            </button>
+          </>)}
           <button className="as-signout" onClick={onExit}>
             {icons.logout}
             <span className="as-label">Exit</span>

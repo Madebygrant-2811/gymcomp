@@ -1118,6 +1118,14 @@ export default function App() {
     setTimeout(() => setShowShareToast(false), 4000);
   };
 
+  // ---- Result exports (same calls as the phase-2 topbar buttons) ----
+  const handleExportXLSX = () => exportResultsXLSX(compData, gymnasts, scores);
+  const handleExportPDF = () => {
+    const brandBg = compData.brandColor || "#000dff";
+    const brandText = getContrastTextColor(brandBg);
+    printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf", { skipBaseCss: true, footerOpts: { brandBg, brandText } });
+  };
+
   const phase2Steps = [
     { label: "Score Input", done: Object.keys(scores).length > 0 },
     { label: "Results", done: false },
@@ -1392,14 +1400,10 @@ export default function App() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {phase === 2 && pinRole !== "judge" && (
               <>
-                <button className="btn btn-secondary btn-sm" onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportXLSX}>
                   Export XLSX
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => {
-                  const brandBg = compData.brandColor || "#000dff";
-                  const brandText = getContrastTextColor(brandBg);
-                  printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf", { skipBaseCss: true, footerOpts: { brandBg, brandText } });
-                }}>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>
                   Export PDF
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={handleSharePublic}>
@@ -1584,6 +1588,8 @@ export default function App() {
             rounds={compData.rounds || []}
             activeRound={effectiveActiveRound}
             setActiveRound={setActiveRound}
+            onExportXLSX={handleExportXLSX}
+            onExportPDF={handleExportPDF}
             onExit={() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }}
           />
           <div className="app-main" ref={appMainRef}>
