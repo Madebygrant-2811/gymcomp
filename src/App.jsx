@@ -36,6 +36,69 @@ import TermsOfServiceScreen from "./components/pages/TermsOfServiceScreen.jsx";
 import PaymentSuccessScreen from "./components/pages/PaymentSuccessScreen.jsx";
 
 
+// Whether two apparatus lists differ in membership (added/removed), ignoring order.
+// A pure reorder is data-safe — scores are keyed by apparatus name, not position —
+// so it should never trip the destructive-change warning.
+const apparatusSetChanged = (prev = [], next = []) =>
+  prev.length !== next.length ||
+  [...prev].sort().join(" ") !== [...next].sort().join(" ");
+
+// A rotation's number tracks its apparatus position: "Rotation N" is the squad on
+// the Nth apparatus. When apparatus are reordered, re-apply that binding: reorder
+// each round's rotation list by the same permutation, renumber sequentially (keeping
+// the existing cross-round offset), and return a map from each old rotation label to
+// its new one. Returns null when the change isn't a pure reorder (same members, same
+// count, different order), so callers leave rotations untouched.
+function remapRotationsForApparatusReorder(prevApparatus, nextApparatus, compData) {
+  const strip = (list) => (list || []).filter((a) => a !== "Rest");
+  const prev = strip(prevApparatus);
+  const next = strip(nextApparatus);
+  if (prev.length === 0 || prev.length !== next.length) return null;
+  if ([...prev].sort().join(" ") !== [...next].sort().join(" ")) return null;
+  // perm[i] = old index of the apparatus now sitting at new index i (first unused
+  // match, so duplicate apparatus names can't collide onto one slot).
+  const used = new Array(prev.length).fill(false);
+  const perm = next.map((app) => {
+    let idx = prev.indexOf(app);
+    while (idx !== -1 && used[idx]) idx = prev.indexOf(app, idx + 1);
+    if (idx !== -1) used[idx] = true;
+    return idx;
+  });
+  if (perm.some((i) => i < 0)) return null;
+
+  const gbr = compData.groupsByRound || {};
+  const newGbr = { ...gbr };
+  const labelMap = {};
+  let offset = 0;
+  (compData.rounds || []).forEach((rd) => {
+    const oldGroups = gbr[rd.id] || [];
+    // Only permute rounds whose rotation count lines up with the apparatus; otherwise
+    // keep their order and just renumber in place from the running offset.
+    const reordered = oldGroups.length === prev.length ? perm.map((oi) => oldGroups[oi]) : [...oldGroups];
+    const relabelled = reordered.map((_, i) => `Rotation ${offset + i + 1}`);
+    reordered.forEach((oldLabel, i) => { if (oldLabel != null) labelMap[String(oldLabel)] = relabelled[i]; });
+    if (oldGroups.length) newGbr[rd.id] = relabelled;
+    offset += oldGroups.length;
+  });
+  return { groupsByRound: newGbr, labelMap };
+}
+
+// Detect a pure apparatus reorder on a comp-data change and, if found, return the
+// next comp-data with rotations renumbered plus the gymnast list with each stored
+// rotation label remapped. Otherwise returns the inputs unchanged.
+function applyApparatusReorder(prev, next, currentGymnasts) {
+  const orderChanged = JSON.stringify(prev.apparatus || []) !== JSON.stringify(next.apparatus || []);
+  if (!orderChanged || apparatusSetChanged(prev.apparatus, next.apparatus)) {
+    return { next, remappedGymnasts: null };
+  }
+  const remap = remapRotationsForApparatusReorder(prev.apparatus, next.apparatus, next);
+  if (!remap) return { next, remappedGymnasts: null };
+  const remappedGymnasts = (currentGymnasts || []).map((g) =>
+    g.group && remap.labelMap[String(g.group)] ? { ...g, group: remap.labelMap[String(g.group)] } : g
+  );
+  return { next: { ...next, groupsByRound: remap.groupsByRound }, remappedGymnasts };
+}
+
 // ============================================================
 // APP ROOT
 // ============================================================
@@ -324,9 +387,11 @@ export default function App() {
 
   const setCompData = useCallback((updater) => {
     setCompDataRaw(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
+      const raw = typeof updater === "function" ? updater(prev) : updater;
+      // A pure apparatus reorder renumbers rotations to follow the new order.
+      const { next, remappedGymnasts } = applyApparatusReorder(prev, raw, gymnasts);
       if (gymnasts.length > 0) {
-        const apparatusChanged = JSON.stringify(prev.apparatus) !== JSON.stringify(next.apparatus);
+        const apparatusChanged = apparatusSetChanged(prev.apparatus, next.apparatus);
         const roundsChanged = JSON.stringify(prev.rounds.map(r => r.id)) !== JSON.stringify(next.rounds.map(r => r.id));
         const levelsChanged = JSON.stringify(prev.levels.map(l => l.id)) !== JSON.stringify(next.levels.map(l => l.id));
         if (apparatusChanged || roundsChanged || levelsChanged) {
@@ -335,7 +400,9 @@ export default function App() {
           return prev;
         }
       }
-      scheduleSync(next, gymnasts);
+      const nextGymnasts = remappedGymnasts || gymnasts;
+      if (remappedGymnasts) setGymnasts(remappedGymnasts);
+      scheduleSync(next, nextGymnasts);
       return next;
     });
   }, [gymnasts, scheduleSync]);
@@ -344,9 +411,11 @@ export default function App() {
   // Used in Phase 1 setup so edits aren't auto-saved.
   const setCompDataLocal = useCallback((updater) => {
     setCompDataRaw(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
+      const raw = typeof updater === "function" ? updater(prev) : updater;
+      // A pure apparatus reorder renumbers rotations to follow the new order.
+      const { next, remappedGymnasts } = applyApparatusReorder(prev, raw, gymnasts);
       if (gymnasts.length > 0) {
-        const apparatusChanged = JSON.stringify(prev.apparatus) !== JSON.stringify(next.apparatus);
+        const apparatusChanged = apparatusSetChanged(prev.apparatus, next.apparatus);
         const roundsChanged = JSON.stringify(prev.rounds.map(r => r.id)) !== JSON.stringify(next.rounds.map(r => r.id));
         const levelsChanged = JSON.stringify(prev.levels.map(l => l.id)) !== JSON.stringify(next.levels.map(l => l.id));
         if (apparatusChanged || roundsChanged || levelsChanged) {
@@ -355,6 +424,7 @@ export default function App() {
           return prev;
         }
       }
+      if (remappedGymnasts) setGymnasts(remappedGymnasts);
       return next;
     });
   }, [gymnasts]);
@@ -413,9 +483,11 @@ export default function App() {
   const setDraftCompDataLocal = useCallback((updater) => {
     setDraftCompData(prev => {
       if (prev === null) return prev;
-      const next = typeof updater === "function" ? updater(prev) : updater;
+      const raw = typeof updater === "function" ? updater(prev) : updater;
+      // A pure apparatus reorder renumbers rotations to follow the new order.
+      const { next, remappedGymnasts } = applyApparatusReorder(prev, raw, draftGymnasts);
       if ((draftGymnasts || []).length > 0) {
-        const apparatusChanged = JSON.stringify(prev.apparatus) !== JSON.stringify(next.apparatus);
+        const apparatusChanged = apparatusSetChanged(prev.apparatus, next.apparatus);
         const roundsChanged = JSON.stringify(prev.rounds.map(r => r.id)) !== JSON.stringify(next.rounds.map(r => r.id));
         const levelsChanged = JSON.stringify(prev.levels.map(l => l.id)) !== JSON.stringify(next.levels.map(l => l.id));
         if (apparatusChanged || roundsChanged || levelsChanged) {
@@ -424,6 +496,7 @@ export default function App() {
           return prev;
         }
       }
+      if (remappedGymnasts) setDraftGymnasts(remappedGymnasts);
       return next;
     });
   }, [draftGymnasts]);
