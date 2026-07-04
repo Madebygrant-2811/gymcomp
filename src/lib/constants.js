@@ -52,6 +52,7 @@ export const NGA_LEVELS = [
 export const SCORING_MODES = {
   FIG: 'fig',
   NGA: 'nga',
+  SIMPLE: 'simple',
 };
 
 export const NGA_COURTESY_SCORE = 5.0;

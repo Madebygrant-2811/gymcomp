@@ -265,6 +265,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           {[
             { value: "fig", label: "FIG Scoring" },
             { value: "nga", label: "NGA Scoring" },
+            { value: "simple", label: "Simple Scoring" },
           ].map(m => {
             const active = (data.scoringMode || "fig") === m.value;
             const isLocked = eventStatus === "active" || eventStatus === "live" || eventStatus === "completed";
@@ -273,14 +274,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                 disabled={isLocked}
                 onClick={() => {
                   if (active) return;
-                  // Switching to NGA and has custom levels? Confirm first
-                  if (m.value === "nga" && data.levels.length > 0) {
-                    setPendingScoringSwitch("nga");
-                    return;
-                  }
-                  // Switching to FIG from NGA and has NGA levels? Confirm first
-                  if (m.value === "fig" && (data.scoringMode === "nga") && data.levels.length > 0) {
-                    setPendingScoringSwitch("fig");
+                  // Levels are only wiped crossing the NGA boundary — NGA uses its
+                  // fixed hierarchy, FIG and Simple share custom levels.
+                  const current = data.scoringMode || "fig";
+                  if ((m.value === "nga" || current === "nga") && data.levels.length > 0) {
+                    setPendingScoringSwitch(m.value);
                     return;
                   }
                   setData(d => ({ ...d, scoringMode: m.value }));
@@ -306,6 +304,11 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         {(data.scoringMode || "fig") === "nga" && (
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8 }}>
             NGA uses a Perfect 10 system. Start values are capped at 10.0, execution deductions are subtracted from the start value, and the lowest possible score is 5.0 (courtesy). Use this mode for NGA UK sanctioned events.
+          </div>
+        )}
+        {(data.scoringMode || "fig") === "simple" && (
+          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8, fontFamily: "var(--font-display)" }}>
+            Simple mode records a single final score per routine — no D score, E score, bonus or penalty breakdown. Every apparatus (including vault) takes one score entry.
           </div>
         )}
 
@@ -752,7 +755,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         <ConfirmModal
           message={pendingScoringSwitch === "nga"
             ? "Switching to NGA mode will replace your custom levels with the NGA level hierarchy. Your current levels will be lost. Continue?"
-            : "Switching to FIG mode will clear your NGA levels. You will need to add levels manually. Continue?"}
+            : "Switching from NGA mode will clear your NGA levels. You will need to add levels manually. Continue?"}
           onConfirm={() => {
             setData(d => ({ ...d, scoringMode: pendingScoringSwitch, levels: [] }));
             setPendingScoringSwitch(null);

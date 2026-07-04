@@ -1090,7 +1090,7 @@
 
   // ── Render helpers ──
   function renderApparatusBlock(rid, gid, app) {
-    const fig = true;
+    const fig = (compData && compData.scoringMode) !== "simple";
     const total = getTotal(rid, gid, app);
     const isQueried = !!scores[subKey(rid, gid, app, "query")];
     const isResolved = !!scores[subKey(rid, gid, app, "queryResolved")];
@@ -1190,15 +1190,8 @@
         `;
       }
     } else {
-      // Simple mode — no D/E breakdown available
-      breakdownHtml = `
-        <div class="app-breakdown">
-          <div class="bd-cell"><span class="bd-label">D</span><span class="bd-val na">N/A</span></div>
-          <div class="bd-cell"><span class="bd-label">E</span><span class="bd-val na">N/A</span></div>
-          <div class="bd-cell"><span class="bd-label">B</span><span class="bd-val na">N/A</span></div>
-          <div class="bd-cell"><span class="bd-label">P</span><span class="bd-val na">N/A</span></div>
-        </div>
-      `;
+      // Simple mode — single final score, no D/E breakdown to show
+      breakdownHtml = "";
     }
 
     let queryHtml = "";
@@ -1331,7 +1324,6 @@
       : "";
     const venue = compData.venue || compData.location || "";
 
-    const fig = true;
     const queryCount = countActiveQueries();
 
     document.getElementById("main").innerHTML = `

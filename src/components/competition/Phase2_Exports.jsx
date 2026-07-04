@@ -1,4 +1,4 @@
-import { printDocument, buildDiagnosticHTML, buildResultsHTML, exportResultsXLSX } from "../../lib/pdf.js";
+import { printDocument, buildResultsHTML, exportResultsXLSX } from "../../lib/pdf.js";
 import { getContrastTextColor } from "../../lib/utils.js";
 
 function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
@@ -27,23 +27,13 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
       unavailableMsg: "Enter scores in Score Input to generate results.",
       isResults: true,
     },
-    {
-      id: "diagnostic",
-      title: "Gymnast Diagnostic Report",
-      icon: "📊",
-      desc: "Per-gymnast breakdown comparing Difficulty vs Execution against level peers. Identifies strengths, flags areas for development, and highlights performance patterns across apparatus.",
-      use: "Share with coaches post-competition for full D/E analysis.",
-      available: hasScores,
-      unavailableMsg: "Enter D/E scores in Score Input to generate diagnostics.",
-      action: () => printDocument(buildDiagnosticHTML(compData, gymnasts, scores), "gymcomp-diagnostic.pdf"),
-    },
   ];
 
   return (
     <div>
       <div className="page-header">
         <div className="page-title">Post-Competition <span>Exports</span></div>
-        <div className="page-sub">Results and diagnostic reports — generated after scoring is complete</div>
+        <div className="page-sub">Results and shareable links — generated after scoring is complete</div>
       </div>
 
       <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: 20, fontSize: 12, color: "var(--muted)" }}>

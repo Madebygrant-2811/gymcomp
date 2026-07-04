@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { gymnast_key, combineVaults, calculateNGAScore } from "../../lib/scoring.js";
+import { gymnast_key, combineVaults, calculateNGAScore, isDualVault } from "../../lib/scoring.js";
 import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
@@ -19,11 +19,16 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const [modalPristine, setModalPristine] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { gid, app }
   const [moveModal, setMoveModal] = useState(null); // { gid } or null
-  const [moveRound, setMoveRound] = useState("");    // target round id
+  const [moveRound, setMoveRound] = useState("");    // target round id ("" = keep current)
   const [moveGroup, setMoveGroup] = useState("");    // target rotation label
+  const [moveLevel, setMoveLevel] = useState("");    // target level id
+  const [moveAge, setMoveAge] = useState("");        // target age group label
+  const [customAgeMode, setCustomAgeMode] = useState(false); // typing a new age group
+  const [vaultGuard, setVaultGuard] = useState(null); // { payload, vaultScores: [{rid, app}] } — dual-vault flip confirm
   const canMoveGymnasts = !!setGymnasts; // organiser-only; judges never receive setGymnasts
   const isNGA = compData.scoringMode === "nga";
-  const fig = !isNGA;
+  const isSimple = compData.scoringMode === "simple";
+  const fig = !isNGA && !isSimple;
   const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const isLockedJudge = pinRole === "judge" && lockedApparatus;
   const scoringApparatus = isLockedJudge ? allScoringApparatus.filter(a => a === lockedApparatus) : allScoringApparatus;
@@ -147,7 +152,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const vaultMode = compData.vaultMode || "single";
   const isVaultApparatus = (app) => (app || "").toLowerCase().includes("vault");
   const isDualVaultForGymnast = (gid, app) => {
-    if (isNGA) return false;
+    if (isNGA || isSimple) return false;
     return isVaultApparatus(app) && (vaultMode === "average" || vaultMode === "highest");
   };
 
@@ -257,7 +262,13 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     const dual = isDualVaultForGymnast(gid, app);
     fields._dual = dual;
 
-    if (dual) {
+    if (isSimple) {
+      // Single final-score entry — stored on the base key only, 3dp
+      const v = readVal(gid, app);
+      fields.fin = v;
+      const n = parseFloat(v);
+      bufs.fin = (!v || isNaN(n) || n === 0) ? "" : n.toFixed(3);
+    } else if (dual) {
       const n = judgeCount(app);
       for (const prefix of ["v1", "v2"]) {
         for (const sub of ["dv", "bon", "pen"]) {
@@ -329,11 +340,26 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     return calculateNGAScore(sv, deductions, neutral, falls);
   };
 
+  const calcSimpleModalTotal = () => parseFloat(modalFields.fin) || 0;
+
   const submitScoreModal = () => {
     const { gid, app } = scoreModal;
     const dual = modalFields._dual;
 
-    if (dual) {
+    if (isSimple) {
+      // Simple mode: single final score on the base key only — no subkeys, so
+      // ranking / realtime / public views all work off final_score unchanged.
+      const n = parseFloat(modalFields.fin);
+      const val = !isNaN(n) && n > 0 ? String(parseFloat(n.toFixed(3))) : "";
+      setScores(s => ({ ...s, [baseKey(gid, app)]: val }));
+      if (val === "") {
+        // A base-key-only zero row is skipped by flatToScoreRows, so clearing
+        // must delete the stored row rather than upsert it.
+        if (onScoreDelete) onScoreDelete(activeRound, gid, app);
+      } else if (onScoreCommit) {
+        onScoreCommit(activeRound, gid, app, { [baseKey(gid, app)]: val });
+      }
+    } else if (dual) {
       // Dual vault submit
       const v1Final = calcVaultFinal(modalFields, "v1", app);
       const v2Final = calcVaultFinal(modalFields, "v2", app);
@@ -488,8 +514,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   };
 
   const openMoveModal = (gid) => {
+    const g = gymnasts.find(x => x.id === gid);
     setMoveRound("");
     setMoveGroup("");
+    setMoveLevel(g?.level || "");
+    setMoveAge(g?.age || "");
+    setCustomAgeMode(false);
     setMoveModal({ gid });
   };
 
@@ -498,51 +528,128 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     const g = gymnasts.find(x => x.id === moveModal.gid);
     if (!g) { setMoveModal(null); return; }
     const source = g.round;
-    // Hard block — no override — if already scored in the source round.
-    if (hasPositiveScoreInRound(source, g.id)) return;
-    // Target must be a real round/rotation so the gymnast can never land unassigned.
-    if (!moveRound || !isValidGroup(compData, moveRound, moveGroup)) return;
+    const isUnassigned = !isValidGroup(compData, g.round, g.group);
+    // Round change is optional for assigned gymnasts, mandatory for unassigned.
+    const movingRound = isUnassigned || !!moveRound;
+    if (movingRound) {
+      // Hard block — no override — if already scored in the source round.
+      if (hasPositiveScoreInRound(source, g.id)) return;
+      // Target must be a real round/rotation so the gymnast can never land unassigned.
+      if (!moveRound || !isValidGroup(compData, moveRound, moveGroup)) return;
+    }
 
-    const idx = nextOrderIndex(gymnasts, moveRound, moveGroup);
-    // Only ever touch the one moved gymnast's round / group / orderIndex.
-    setGymnasts(prev => prev.map(x =>
-      x.id === g.id ? { ...x, round: moveRound, group: moveGroup, orderIndex: idx } : x
-    ));
+    const targetLevelObj = compData.levels.find(l => l.id === moveLevel);
+    if (!targetLevelObj) return;
+    const levelChanged = moveLevel !== g.level;
+    const ranksByAge = (targetLevelObj.rankBy || "level") === "level+age";
+    // Age is derived from the level's rankBy: level+age levels require one; a
+    // change onto a level-only level assigns none. A pure round move on a
+    // level-only level leaves the stored age untouched.
+    const nextAge = ranksByAge ? moveAge.trim() : (levelChanged ? "" : (g.age || ""));
+    if (ranksByAge && !nextAge) return;
 
-    // Defensively clear any leftover empty/zero score keys for this gymnast under
-    // the OLD round only — locally and in the scores table.
-    if (source) {
-      const prefix = `${source}__${g.id}__`;
+    const payload = {
+      gid: g.id, movingRound, source,
+      round: moveRound, group: moveGroup,
+      level: moveLevel, age: nextAge,
+    };
+
+    // Dual-vault guard (FIG only): a level change that flips isDualVault in
+    // either direction invalidates the stored vault score format — never apply
+    // silently; confirm and clear.
+    if (levelChanged && fig) {
+      const flippedVaults = Object.keys(scores)
+        .filter(k => {
+          const parts = k.split("__");
+          return parts.length === 3 && parts[1] === g.id
+            && parts[2].toLowerCase().includes("vault")
+            && (parseFloat(scores[k]) || 0) > 0;
+        })
+        .filter(k => {
+          const app = k.split("__")[2];
+          return isDualVault(app, g.level, compData) !== isDualVault(app, moveLevel, compData);
+        })
+        .map(k => { const [rid, , app] = k.split("__"); return { rid, app }; });
+      if (flippedVaults.length > 0) {
+        setVaultGuard({ payload, vaultScores: flippedVaults });
+        return;
+      }
+    }
+
+    applyMove(payload);
+  };
+
+  const applyMove = (payload, clearVaultScores = null) => {
+    const g = gymnasts.find(x => x.id === payload.gid);
+    if (!g) { setVaultGuard(null); setMoveModal(null); return; }
+
+    // Dual-vault flip confirmed — clear the affected vault scores locally and
+    // in the scores table before re-levelling.
+    if (clearVaultScores && clearVaultScores.length > 0) {
       setScores(s => {
         const next = { ...s };
-        for (const k of Object.keys(next)) {
-          if (k.startsWith(prefix)) delete next[k];
+        for (const { rid, app } of clearVaultScores) {
+          const prefix = `${rid}__${g.id}__${app}`;
+          for (const k of Object.keys(next)) {
+            if (k === prefix || k.startsWith(prefix + "__")) delete next[k];
+          }
         }
         return next;
       });
-      if (onMoveScoreCleanup) onMoveScoreCleanup(source, g.id);
+      if (onScoreDelete) clearVaultScores.forEach(({ rid, app }) => onScoreDelete(rid, g.id, app));
     }
 
+    if (payload.movingRound) {
+      const idx = nextOrderIndex(gymnasts, payload.round, payload.group);
+      // Only ever touch the one moved gymnast's fields.
+      setGymnasts(prev => prev.map(x =>
+        x.id === g.id ? { ...x, round: payload.round, group: payload.group, orderIndex: idx, level: payload.level, age: payload.age } : x
+      ));
+
+      // Defensively clear any leftover empty/zero score keys for this gymnast under
+      // the OLD round only — locally and in the scores table.
+      if (payload.source) {
+        const prefix = `${payload.source}__${g.id}__`;
+        setScores(s => {
+          const next = { ...s };
+          for (const k of Object.keys(next)) {
+            if (k.startsWith(prefix)) delete next[k];
+          }
+          return next;
+        });
+        if (onMoveScoreCleanup) onMoveScoreCleanup(payload.source, g.id);
+      }
+    } else {
+      // Level/age only — scores are keyed round__gymnast__apparatus, so they
+      // are preserved and rankings simply re-bucket.
+      setGymnasts(prev => prev.map(x =>
+        x.id === g.id ? { ...x, level: payload.level, age: payload.age } : x
+      ));
+    }
+
+    setVaultGuard(null);
     setMoveModal(null);
   };
 
   const mf = (field, val) => setModalFields(f => ({ ...f, [field]: val }));
   const mb = (field, val) => setModalBufs(b => ({ ...b, [field]: val }));
 
-  // Auto-decimal helpers: type digits (implied .XX) or press "." to place decimal explicitly
-  const bufToVal = (b) => {
+  // Auto-decimal helpers: type digits (implied .XX) or press "." to place decimal
+  // explicitly. dp is the decimal precision — 2 for FIG/NGA components, 3 for the
+  // Simple-mode final score.
+  const bufToVal = (b, dp = 2) => {
     if (!b || b === ".") return 0;
     if (b.includes(".")) return parseFloat(b) || 0;
-    return parseInt(b, 10) / 100;
+    return parseInt(b, 10) / Math.pow(10, dp);
   };
 
-  const scoreDisplay = (field) => {
+  const scoreDisplay = (field, dp = 2) => {
     const buf = modalBufs[field] || "";
     if (!buf) return "";
-    return bufToVal(buf).toFixed(2);
+    return bufToVal(buf, dp).toFixed(dp);
   };
 
-  const processKey = (field, max, key) => {
+  const processKey = (field, max, key, dp = 2) => {
     let buf = modalBufs[field] || "";
 
     if (key === "Backspace") {
@@ -554,8 +661,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
       }
       const next = buf.slice(0, -1);
       mb(field, next);
-      const v = bufToVal(next);
-      mf(field, v === 0 ? "" : v.toFixed(2));
+      const v = bufToVal(next, dp);
+      mf(field, v === 0 ? "" : v.toFixed(dp));
       return;
     }
 
@@ -568,8 +675,8 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
       if (buf.includes(".")) return;
       const next = (buf || "0") + ".";
       mb(field, next);
-      const v = bufToVal(next);
-      mf(field, v === 0 ? "" : v.toFixed(2));
+      const v = bufToVal(next, dp);
+      mf(field, v === 0 ? "" : v.toFixed(dp));
       return;
     }
 
@@ -577,28 +684,28 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
 
     if (buf.includes(".")) {
       const afterDot = buf.split(".")[1] || "";
-      if (afterDot.length >= 2) return;
+      if (afterDot.length >= dp) return;
     }
 
     const next = buf + key;
-    const v = bufToVal(next);
+    const v = bufToVal(next, dp);
     if (max !== undefined && v > max) return;
     mb(field, next);
-    mf(field, v === 0 ? "" : v.toFixed(2));
+    mf(field, v === 0 ? "" : v.toFixed(dp));
   };
 
-  const handleScoreKey = (field, max) => (e) => {
+  const handleScoreKey = (field, max, dp) => (e) => {
     if (e.key === "Enter") { submitScoreModal(); return; }
     if (e.key === "Tab" || e.key === "Escape") return;
     e.preventDefault();
-    processKey(field, max, e.key);
+    processKey(field, max, e.key, dp);
   };
 
   // Mobile: capture input from soft keyboard via beforeinput
-  const handleBeforeInput = (field, max) => (e) => {
+  const handleBeforeInput = (field, max, dp) => (e) => {
     e.preventDefault();
     const chars = e.data || "";
-    for (const ch of chars) processKey(field, max, ch);
+    for (const ch of chars) processKey(field, max, ch, dp);
   };
 
   const scoreInput = (field, max, autoFocus, large) => (
@@ -876,7 +983,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                                       borderRadius: 4, cursor: "pointer",
                                       fontFamily: "var(--font-display)",
                                     }}
-                                    title="Move this gymnast to another round"
+                                    title="Move this gymnast — change round, level or age"
                                     onClick={() => openMoveModal(g.id)}>
                                     Move
                                   </button>
@@ -900,20 +1007,20 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         const g = gymnasts.find(x => x.id === scoreModal.gid);
         if (!g) return null;
         const dual = modalFields._dual;
-        const modalTotal = dual ? calcDualVaultModalTotal() : (isNGA ? calcNGAModalTotal() : calcModalTotal());
+        const modalTotal = dual ? calcDualVaultModalTotal() : isNGA ? calcNGAModalTotal() : isSimple ? calcSimpleModalTotal() : calcModalTotal();
         const ngaCourtesyApplied = isNGA && modalTotal === NGA_COURTESY_SCORE && (parseFloat(modalFields.dv) || 0) > 0;
         const n = judgeCount(scoreModal.app);
 
         const _lbl = { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#001af7", fontFamily: "var(--font-display)", marginBottom: 4 };
         const _inp = { caretColor: "transparent", width: "100%", fontSize: 18, padding: "12px 16px", fontWeight: 700, textAlign: "center", borderRadius: 8, border: "1px solid rgba(0,0,0,0.15)", background: "#fff", boxSizing: "border-box" };
-        const cardInput = (field, max, autoFocus) => (
+        const cardInput = (field, max, autoFocus, dp) => (
           <input className="score-input" type="text" inputMode="decimal"
-            value={scoreDisplay(field)}
+            value={scoreDisplay(field, dp)}
             style={_inp}
             onChange={() => {}}
             onFocus={() => { if (modalBufs[field]) setModalPristine(p => ({ ...p, [field]: true })); }}
-            onKeyDown={handleScoreKey(field, max)}
-            onBeforeInput={handleBeforeInput(field, max)}
+            onKeyDown={handleScoreKey(field, max, dp)}
+            onBeforeInput={handleBeforeInput(field, max, dp)}
             autoFocus={autoFocus} />
         );
 
@@ -961,7 +1068,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                   fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase",
                   padding: "5px 14px", borderRadius: 56, fontFamily: "var(--font-display)",
                 }}>
-                  {isNGA ? "NGA Scoring" : "FIG Scoring"}
+                  {isNGA ? "NGA Scoring" : isSimple ? "Simple Scoring" : "FIG Scoring"}
                 </div>
                 <div><div style={infoLbl}>Number</div><div style={infoVal}>#{g.number}</div></div>
                 <div><div style={infoLbl}>Name</div><div style={infoVal}>{g.name}</div></div>
@@ -1011,6 +1118,18 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                     </div>
                     <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5, fontStyle: "italic" }}>
                       Enter deductions — subtracted from 10. Final = average of both vaults.
+                    </div>
+                  </>
+                ) : isSimple ? (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+                      <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                        <div style={_lbl}>Final Score</div>
+                        {cardInput("fin", undefined, true, 3)}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 16, fontStyle: "italic", fontFamily: "var(--font-display)" }}>
+                      Enter the routine's final score — up to 3 decimal places
                     </div>
                   </>
                 ) : isNGA ? (
@@ -1147,7 +1266,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         document.body
       )}
 
-      {/* ── Move to Round Modal ── */}
+      {/* ── Move Gymnast Modal (round / level / age) ── */}
       {moveModal && (() => {
         const g = gymnasts.find(x => x.id === moveModal.gid);
         if (!g) return null;
@@ -1161,41 +1280,65 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         // normal move the current round is excluded.
         const targetRounds = (compData.rounds || []).filter(r => (isUnassigned || r.id !== source) && roundGroups(compData, r.id).length > 0);
         const rotations = roundGroups(compData, moveRound);
-        const canConfirm = !blocked && !!moveRound && isValidGroup(compData, moveRound, moveGroup);
+
+        const targetLevelObj = compData.levels.find(l => l.id === moveLevel);
+        const ranksByAge = !!targetLevelObj && (targetLevelObj.rankBy || "level") === "level+age";
+        const levelChanged = !!targetLevelObj && moveLevel !== g.level;
+        const trimmedAge = moveAge.trim();
+        const ageChanged = ranksByAge && trimmedAge !== (g.age || "");
+        const roundValid = !!moveRound && isValidGroup(compData, moveRound, moveGroup);
+        const hasChange = levelChanged || ageChanged || !!moveRound || isUnassigned;
+        const canConfirm = hasChange && !!targetLevelObj
+          && (!moveRound || (!blocked && roundValid))
+          && (!isUnassigned || (!blocked && roundValid))
+          && (!ranksByAge || !!trimmedAge);
+        const ageInRanges = !trimmedAge || (compData.ageRanges || []).some(a => a.toLowerCase() === trimmedAge.toLowerCase());
+        const finalRound = moveRound || (isUnassigned ? "" : source);
+        const groupPeers = ranksByAge && trimmedAge && finalRound
+          ? gymnasts.filter(x => x.id !== g.id && !x.dns && !x.withdrawn && x.round === finalRound && x.level === moveLevel && (x.age || "") === trimmedAge).length
+          : 0;
         const ds = { fontFamily: "var(--font-display)" };
 
         return createPortal(
           <div className="modal-backdrop" onClick={() => setMoveModal(null)}>
             <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, width: "94%", ...ds }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, ...ds }}>{isUnassigned ? "Assign to round" : "Move to another round"}</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, ...ds }}>{isUnassigned ? "Assign to round" : "Move Gymnast"}</div>
               <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16, ...ds }}>
                 {g.name} · #{g.number}{isUnassigned ? "" : ` · currently in ${sourceName}`}
               </div>
 
+              {/* Round — existing move/assign behaviour, now optional for assigned gymnasts */}
+              <label className="label" style={ds}>Target round</label>
               {blocked ? (
                 <div style={{
                   background: "var(--surface2)", border: "1px solid var(--border)",
-                  borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "var(--danger)", ...ds,
+                  borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "var(--muted)", marginBottom: 16, ...ds,
                 }}>
-                  {g.name} has already been scored in {sourceName} and cannot be moved.
+                  {g.name} has already been scored in {sourceName}, so their round cannot be changed. Level and age can still be updated below.
                 </div>
               ) : targetRounds.length === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--muted)", ...ds }}>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, ...ds }}>
                   No rounds with rotations are available to {isUnassigned ? "assign" : "move"} to.
                 </div>
               ) : (
                 <>
-                  <label className="label" style={ds}>Target round</label>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: isUnassigned ? 16 : 6 }}>
                     {targetRounds.map(r => (
                       <button key={r.id} className={`btn btn-sm ${moveRound === r.id ? "btn-primary" : "btn-secondary"}`}
                         style={ds}
-                        onClick={() => { setMoveRound(r.id); setMoveGroup(""); }}>
+                        onClick={() => {
+                          if (moveRound === r.id && !isUnassigned) { setMoveRound(""); setMoveGroup(""); }
+                          else { setMoveRound(r.id); setMoveGroup(""); }
+                        }}>
                         {r.name}
                       </button>
                     ))}
                   </div>
-
+                  {!isUnassigned && !moveRound && (
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 16, ...ds }}>
+                      Leave unselected to keep {g.name} in {sourceName}.
+                    </div>
+                  )}
                   {moveRound && (
                     <>
                       <label className="label" style={ds}>Rotation</label>
@@ -1211,7 +1354,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                           );
                         })}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8, ...ds }}>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 16, ...ds }}>
                         Added to the end of the selected rotation's running order.
                       </div>
                     </>
@@ -1219,16 +1362,122 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                 </>
               )}
 
+              {/* Level — scores are keyed by round, so a level change re-buckets rankings without touching scores */}
+              <label className="label" style={ds}>Level</label>
+              <select className="select" value={moveLevel}
+                style={{ marginBottom: 8, fontSize: 13, ...ds }}
+                onChange={e => {
+                  const l = compData.levels.find(x => x.id === e.target.value);
+                  if (!l) return;
+                  setMoveLevel(l.id);
+                  setMoveAge((l.rankBy || "level") === "level+age" ? (g.age || "") : "");
+                  setCustomAgeMode(false);
+                }}>
+                {(compData.levels || []).map(l => (
+                  <option key={l.id} value={l.id}>{l.name}{l.id === g.level ? " (current)" : ""}</option>
+                ))}
+              </select>
+              {targetLevelObj && !ranksByAge && levelChanged && (
+                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 8, ...ds }}>
+                  {targetLevelObj.name} ranks by level only — no age group is assigned.
+                </div>
+              )}
+
+              {/* Age — only when the selected level ranks by level + age. Age groups
+                  already ranking in the selected level lead the list. */}
+              {ranksByAge && (() => {
+                const levelAges = [...new Set(
+                  gymnasts
+                    .filter(x => x.level === moveLevel && (!finalRound || x.round === finalRound))
+                    .map(x => (x.age || "").trim())
+                    .filter(Boolean)
+                )].sort();
+                const otherAges = (compData.ageRanges || []).filter(a => !levelAges.some(la => la.toLowerCase() === a.toLowerCase()));
+                const inLists = [...levelAges, ...otherAges].includes(moveAge);
+                return (
+                <div style={{ marginTop: 8 }}>
+                  <label className="label" style={ds}>Age group</label>
+                  <select className="select" value={customAgeMode ? "__custom__" : moveAge}
+                    style={{ marginBottom: 8, fontSize: 13, ...ds }}
+                    onChange={e => {
+                      if (e.target.value === "__custom__") { setCustomAgeMode(true); setMoveAge(""); }
+                      else { setCustomAgeMode(false); setMoveAge(e.target.value); }
+                    }}>
+                    <option value="">Select an age group…</option>
+                    {levelAges.length > 0 && (
+                      <optgroup label={`Currently ranking in ${targetLevelObj.name}`}>
+                        {levelAges.map(a => (
+                          <option key={a} value={a}>{a}{a === (g.age || "") ? " (current)" : ""}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherAges.length > 0 && (
+                      <optgroup label="Other age ranges">
+                        {otherAges.map(a => (
+                          <option key={a} value={a}>{a}{a === (g.age || "") ? " (current)" : ""}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {!customAgeMode && moveAge && !inLists && <option value={moveAge}>{moveAge}</option>}
+                    <option value="__custom__">＋ Add new age group…</option>
+                  </select>
+                  {customAgeMode && (
+                    <input className="input" placeholder="New age group name…" value={moveAge}
+                      onChange={e => setMoveAge(e.target.value)} autoFocus
+                      style={{ marginBottom: 8, fontSize: 13, ...ds }} />
+                  )}
+                  {trimmedAge && !ageInRanges && (
+                    <div className="warn-box" style={{ marginBottom: 8, fontSize: 12, padding: "10px 14px", ...ds }}>
+                      "{trimmedAge}" isn't one of this competition's age ranges — a new age group will be created. You can still continue.
+                    </div>
+                  )}
+                  {trimmedAge ? (
+                    <div style={{ fontSize: 11, color: "var(--muted)", ...ds }}>
+                      Will rank in <strong style={{ color: "var(--text)" }}>{targetLevelObj.name} — {trimmedAge}</strong>
+                      {finalRound ? (groupPeers > 0
+                        ? `, alongside ${groupPeers} other gymnast${groupPeers !== 1 ? "s" : ""}.`
+                        : " (a new age group in this round).") : "."}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: "var(--danger)", ...ds }}>
+                      {targetLevelObj.name} ranks by level + age — an age group is required.
+                    </div>
+                  )}
+                </div>
+                );
+              })()}
+
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                <button className="btn btn-ghost" style={ds} onClick={() => setMoveModal(null)}>
-                  {blocked || targetRounds.length === 0 ? "Close" : "Cancel"}
+                <button className="btn btn-ghost" style={ds} onClick={() => setMoveModal(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ ...ds, opacity: canConfirm ? 1 : 0.5 }}
+                  disabled={!canConfirm} onClick={confirmMove}>
+                  {isUnassigned ? "Assign gymnast" : "Apply changes"}
                 </button>
-                {!blocked && targetRounds.length > 0 && (
-                  <button className="btn btn-primary" style={{ ...ds, opacity: canConfirm ? 1 : 0.5 }}
-                    disabled={!canConfirm} onClick={confirmMove}>
-                    {isUnassigned ? "Assign gymnast" : "Move gymnast"}
-                  </button>
-                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
+
+      {/* ── Dual-vault flip confirm (FIG only) ── */}
+      {vaultGuard && (() => {
+        const g = gymnasts.find(x => x.id === vaultGuard.payload.gid);
+        const targetName = compData.levels.find(l => l.id === vaultGuard.payload.level)?.name || "the new level";
+        return createPortal(
+          <div className="modal-backdrop" onClick={() => setVaultGuard(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ fontFamily: "var(--font-display)" }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, fontFamily: "var(--font-display)" }}>Vault score will be cleared</div>
+              <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16, lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
+                Moving {g?.name || "this gymnast"} to {targetName} switches their vault between single and dual-vault formats,
+                so the existing vault score cannot be kept. It will be cleared and will need re-entering.
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost" style={{ fontFamily: "var(--font-display)" }} onClick={() => setVaultGuard(null)}>Cancel</button>
+                <button className="btn btn-danger" style={{ fontFamily: "var(--font-display)" }}
+                  onClick={() => applyMove(vaultGuard.payload, vaultGuard.vaultScores)}>
+                  Clear vault score & continue
+                </button>
               </div>
             </div>
           </div>,
