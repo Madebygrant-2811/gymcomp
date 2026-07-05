@@ -153,6 +153,8 @@ export default function App() {
   const [shareUrl, setShareUrl] = useState(null);
   const [showShareToast, setShowShareToast] = useState(false);
   const [shareToastType, setShareToastType] = useState("public");
+  const [exportPicker, setExportPicker] = useState(null); // { type: "xlsx" | "pdf" } | null — round chooser
+  const [exportRoundSel, setExportRoundSel] = useState("all");
   const [showCompId, setShowCompId] = useState(false);
   const syncTimer = useRef(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -1118,13 +1120,46 @@ export default function App() {
     setTimeout(() => setShowShareToast(false), 4000);
   };
 
-  // ---- Result exports (same calls as the phase-2 topbar buttons) ----
-  const handleExportXLSX = () => exportResultsXLSX(compData, gymnasts, scores);
-  const handleExportPDF = () => {
-    const brandBg = compData.brandColor || "#000dff";
-    const brandText = getContrastTextColor(brandBg);
-    printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf", { skipBaseCss: true, footerOpts: { brandBg, brandText } });
+  // ---- Result exports ----
+  // The builders are untouched: a single-round export pre-filters the data
+  // passed in — gymnasts by g.round, scores by their roundId__ key prefix,
+  // compData.rounds to the one round — and suffixes the round name so both
+  // the document title and filename identify the round. "all" passes
+  // everything through exactly as before.
+  const runExport = (type, roundId) => {
+    let cd = compData, g = gymnasts, sc = scores;
+    let pdfName = "gymcomp-results.pdf";
+    if (roundId && roundId !== "all") {
+      const round = (compData.rounds || []).find(r => r.id === roundId);
+      if (round) {
+        cd = { ...compData, rounds: [round], name: `${compData.name || "Competition"} — ${round.name}` };
+        g = gymnasts.filter(x => x.round === roundId);
+        sc = {};
+        for (const [k, v] of Object.entries(scores)) {
+          if (k.startsWith(roundId + "__")) sc[k] = v;
+        }
+        const slug = (round.name || "round").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "round";
+        pdfName = `gymcomp-results-${slug}.pdf`;
+      }
+    }
+    if (type === "xlsx") {
+      exportResultsXLSX(cd, g, sc);
+    } else {
+      const brandBg = compData.brandColor || "#000dff";
+      const brandText = getContrastTextColor(brandBg);
+      printDocument(buildResultsHTML(cd, g, sc), pdfName, { skipBaseCss: true, footerOpts: { brandBg, brandText } });
+    }
   };
+
+  // Single-round comps skip the chooser and export immediately (current behaviour).
+  const requestExport = (type) => {
+    if ((compData.rounds || []).length <= 1) { runExport(type, "all"); return; }
+    setExportRoundSel("all");
+    setExportPicker({ type });
+  };
+
+  const handleExportXLSX = () => requestExport("xlsx");
+  const handleExportPDF = () => requestExport("pdf");
 
   const phase2Steps = [
     { label: "Score Input", done: Object.keys(scores).length > 0 },
@@ -1546,7 +1581,7 @@ export default function App() {
       ) : (
         <ErrorBoundary label={step === 3 ? "exports" : "MC mode"}>
         <main className="content" style={{ maxWidth: 1200 }}>
-          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} />}
+          {step === 3 && <Phase2_Exports compData={compData} gymnasts={gymnasts} scores={scores} onSharePublic={handleSharePublic} onShareCoach={handleShareCoach} onExportXLSX={handleExportXLSX} onExportPDF={handleExportPDF} />}
           {step === 4 && <MCMode compData={compData} gymnasts={gymnasts} scores={scores} />}
         </main>
         </ErrorBoundary>
@@ -1641,6 +1676,53 @@ export default function App() {
           onConfirm={() => { setShowDiscardModal(false); if (discardCallbackRef.current) discardCallbackRef.current(); }}
           onCancel={() => setShowDiscardModal(false)}
         />
+      )}
+
+      {/* Export round chooser — mirrors ConfirmModal's layout */}
+      {exportPicker && (
+        <div className="modal-backdrop" onClick={() => setExportPicker(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, fontFamily: "var(--font-display)" }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>{exportPicker.type === "xlsx" ? "📊" : "📄"}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, fontFamily: "var(--font-display)" }}>
+              Export Results — {exportPicker.type === "xlsx" ? "Spreadsheet" : "PDF"}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16, lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
+              Choose which round to export.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
+              {[{ id: "all", name: "All Rounds" }, ...(compData.rounds || [])].map(r => {
+                const active = exportRoundSel === r.id;
+                return (
+                  <button key={r.id} onClick={() => setExportRoundSel(r.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                      borderRadius: "var(--radius)", cursor: "pointer", textAlign: "left",
+                      background: active ? "rgba(0,13,255,0.04)" : "var(--surface)",
+                      border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                      color: active ? "var(--accent)" : "var(--text)",
+                      fontFamily: "var(--font-display)", fontSize: 13, fontWeight: active ? 600 : 500,
+                      transition: "all 0.15s",
+                    }}>
+                    <span style={{
+                      width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                      border: `1.5px solid ${active ? "var(--accent)" : "var(--border)"}`,
+                      background: active ? "var(--accent)" : "transparent",
+                      boxShadow: active ? "inset 0 0 0 3px var(--surface)" : "none",
+                    }} />
+                    {r.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary"
+                onClick={() => { const p = exportPicker; setExportPicker(null); runExport(p.type, exportRoundSel); }}>
+                {exportPicker.type === "xlsx" ? "Export Spreadsheet" : "Export PDF"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setExportPicker(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showPinModal && (

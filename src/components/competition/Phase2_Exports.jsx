@@ -1,7 +1,4 @@
-import { printDocument, buildResultsHTML, exportResultsXLSX } from "../../lib/pdf.js";
-import { getContrastTextColor } from "../../lib/utils.js";
-
-function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach }) {
+function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoach, onExportXLSX, onExportPDF }) {
   const colour = "#000dff";
   const hasGymnasts = gymnasts.length > 0;
   const hasScores = Object.keys(scores).length > 0;
@@ -86,17 +83,13 @@ function Phase2_Exports({ compData, gymnasts, scores, onSharePublic, onShareCoac
                 <button
                   className="btn btn-primary"
                   style={{ flex: 1, background: colour, color: "#fff" }}
-                  onClick={() => {
-                    const brandBg = compData.brandColor || "#000dff";
-                    const brandText = getContrastTextColor(brandBg);
-                    printDocument(buildResultsHTML(compData, gymnasts, scores), "gymcomp-results.pdf", { skipBaseCss: true, footerOpts: { brandBg, brandText } });
-                  }}>
+                  onClick={onExportPDF}>
                   ⬇ Generate PDF
                 </button>
                 <button
                   className="btn btn-secondary"
                   style={{ flex: 1 }}
-                  onClick={() => exportResultsXLSX(compData, gymnasts, scores)}>
+                  onClick={onExportXLSX}>
                   ⬇ Spreadsheet
                 </button>
               </div>
