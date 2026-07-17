@@ -16,7 +16,7 @@ function TermsOfServiceScreen() {
         <h1 style={{ fontSize: 32, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2, marginBottom: 8 }}>
           Terms of Service
         </h1>
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: March 2026</p>
+        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: July 2026</p>
 
         <div style={sectionStyle}>
           <h2 style={headingStyle}>1. Acceptance of Terms</h2>
@@ -68,17 +68,19 @@ function TermsOfServiceScreen() {
             <li>You accept full responsibility for the accuracy of data you enter</li>
           </ul>
           <p style={paraStyle}>
-            GymComp acts as a data processor only. We process competitor data solely on your instructions and in accordance with our <a href="/privacy" style={{ color: "var(--text-secondary)", textDecoration: "underline" }}>Privacy Policy</a>.
+            GymComp acts as a data processor only. We process competitor data solely on your instructions and in accordance with our <a href="/privacy" style={{ color: "var(--text-secondary)", textDecoration: "underline" }}>Privacy Policy</a>. The GymComp Data Processing Agreement, available at <a href="/dpa" style={{ color: "var(--text-secondary)", textDecoration: "underline" }}>gymcomp.co.uk/dpa</a>, forms part of these terms and applies to all processing of competitor personal data.
           </p>
         </div>
 
         <div style={sectionStyle}>
           <h2 style={headingStyle}>6. Subscription and Payment</h2>
           <ul style={listStyle}>
-            <li>GymComp is free to use for competition setup</li>
-            <li>Starting a live competition requires an active paid subscription at the current advertised rate</li>
-            <li>Subscriptions are billed monthly and can be cancelled at any time</li>
-            <li>Cancellation takes effect at the end of the current billing period — no partial refunds are issued</li>
+            <li>Creating an account and setting up competitions is free</li>
+            <li>Starting a live competition requires an active paid subscription at the current advertised rates</li>
+            <li>Subscriptions are available as fixed-term plans — quarterly, 6-month or annual — and renew automatically at the end of each term</li>
+            <li>You may cancel at any time to stop the next renewal — access continues until the end of the current term, and no partial refunds are issued</li>
+            <li>You may upgrade to a longer plan mid-term, with credit applied for the unused portion of your current plan; downgrades take effect at your next renewal</li>
+            <li>Once a competition has been started it remains accessible permanently, regardless of your subscription status</li>
             <li>We reserve the right to change pricing with 30 days notice to active subscribers</li>
             <li>All prices are in GBP and inclusive of VAT where applicable</li>
           </ul>

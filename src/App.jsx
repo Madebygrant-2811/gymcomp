@@ -33,6 +33,7 @@ import PinSetupModal from "./components/pages/PinSetupModal.jsx";
 import AccountSettingsModal from "./components/pages/AccountSettingsModal.jsx";
 import PrivacyPolicyScreen from "./components/pages/PrivacyPolicyScreen.jsx";
 import TermsOfServiceScreen from "./components/pages/TermsOfServiceScreen.jsx";
+import DataProcessingAgreementScreen from "./components/pages/DataProcessingAgreementScreen.jsx";
 import PaymentSuccessScreen from "./components/pages/PaymentSuccessScreen.jsx";
 
 
@@ -1185,6 +1186,14 @@ export default function App() {
       <>
         <style>{css}</style>
         <TermsOfServiceScreen />
+      </>
+    );
+  }
+  if (window.location.pathname === "/dpa") {
+    return (
+      <>
+        <style>{css}</style>
+        <DataProcessingAgreementScreen />
       </>
     );
   }

@@ -122,7 +122,7 @@ function AuthScreen({ onResume }) {
 
   const footer = (
     <div style={{ fontFamily: "var(--font-display)", fontSize: 12, color: "var(--text-tertiary)", textAlign: "center" }}>
-      All Rights Reserved 2026 GymComp© · <a href="/privacy" style={{ color: "var(--text-tertiary)", textDecoration: "underline" }}>Privacy Policy</a> · <a href="/terms" style={{ color: "var(--text-tertiary)", textDecoration: "underline" }}>Terms of Service</a>
+      All Rights Reserved 2026 GymComp© · <a href="/privacy" style={{ color: "var(--text-tertiary)", textDecoration: "underline" }}>Privacy Policy</a> · <a href="/terms" style={{ color: "var(--text-tertiary)", textDecoration: "underline" }}>Terms of Service</a> · <a href="/dpa" style={{ color: "var(--text-tertiary)", textDecoration: "underline" }}>Data Processing Agreement</a>
     </div>
   );
 
