@@ -8,11 +8,24 @@ export const EVENT_STATUSES = [
 ];
 export const statusMeta = (val) => EVENT_STATUSES.find(s => s.value === val) || EVENT_STATUSES[0];
 
+// Items listed in standard competition order — WAG: Vault, Beam, Bars, Floor,
+// Range; MAG: Olympic order. This drives both the picker display and the
+// default apparatus ordering below.
 export const APPARATUS_GROUPS = [
-  { label: "WAG (Women's)", items: ["Floor", "Bars", "Beam", "Vault", "Range"] },
+  { label: "WAG (Women's)", items: ["Vault", "Beam", "Bars", "Floor", "Range"] },
   { label: "MAG (Men's)", items: ["Floor", "Pommel Horse", "Rings", "Vault", "Parallel Bars", "Horizontal Bar"] },
 ];
 export const APPARATUS_OPTIONS = APPARATUS_GROUPS.flatMap(g => g.items.map(a => `${a} (${g.label.split(" ")[0]})`));
+
+// Default apparatus ordering: standard competition order, Rest always last,
+// anything unrecognised just before Rest. Applied whenever apparatus are
+// added, so the stored order no longer depends on tick order.
+const apparatusRank = (a) => {
+  if (a === "Rest") return 999;
+  const i = APPARATUS_OPTIONS.indexOf(a);
+  return i === -1 ? 900 : i;
+};
+export const sortApparatus = (list = []) => [...list].sort((a, b) => apparatusRank(a) - apparatusRank(b));
 
 // Migrate old bare apparatus names (e.g. "Beam") → new format ("Beam (WAG)")
 export const APPARATUS_MIGRATE = {};
@@ -30,6 +43,9 @@ export const UK_LEVELS = [
   { group: "FIG / International", options: ["FIG Dev 1", "FIG Dev 2", "FIG Dev 3", "FIG Junior", "FIG Senior"] },
 ];
 export const UK_LEVELS_FLAT = UK_LEVELS.flatMap(g => g.options);
+
+// Judge qualification levels — fixed list, lowest to highest
+export const JUDGE_LEVELS = ["Club", "County", "Regional", "National", "Brevet"];
 
 // ── NGA (National Gymnastics Association UK) ─────────────────
 export const NGA_LEVELS = [
@@ -54,6 +70,10 @@ export const SCORING_MODES = {
   NGA: 'nga',
   SIMPLE: 'simple',
 };
+
+// Agenda entries seeded onto every newly created round (no times set).
+// Organisers reorder, relabel and extend the list freely per round.
+export const DEFAULT_ROUND_AGENDA = ["Registration", "Warm-up", "First Piece", "Presentation"];
 
 export const NGA_COURTESY_SCORE = 5.0;
 export const NGA_FALL_PENALTY = 0.5;

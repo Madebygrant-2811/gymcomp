@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { gymnast_key, combineVaults, calculateNGAScore, isDualVault } from "../../lib/scoring.js";
+import { gymnast_key, combineVaults, calculateNGAScore, isDualVault, getEScoreStart } from "../../lib/scoring.js";
+import { hashPin } from "../../lib/utils.js";
 import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
-import { roundGroups, isValidGroup, nextOrderIndex } from "../../lib/rotations.js";
+import { roundGroups, isValidGroup, nextOrderIndex, runningOrderCompare } from "../../lib/rotations.js";
 
 function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, setGymnasts, onMoveScoreCleanup, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
   const [localRound, setLocalRound] = useState(compData.rounds[0]?.id || "");
@@ -26,9 +27,18 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const [customAgeMode, setCustomAgeMode] = useState(false); // typing a new age group
   const [vaultGuard, setVaultGuard] = useState(null); // { payload, vaultScores: [{rid, app}] } — dual-vault flip confirm
   const canMoveGymnasts = !!setGymnasts; // organiser-only; judges never receive setGymnasts
+  // Score lock: submitted scores are read-only for PIN sessions (judges /
+  // scorekeepers). The score edit PIN unlocks a score for ONE edit — the
+  // modal opens, and once it closes the score is locked again, so every
+  // subsequent edit needs the PIN afresh. Organisers on the full app (no
+  // pinRole) bypass the prompt entirely.
+  const scoreLockActive = !!compData.scoreLockEnabled && !!compData.scoreEditPin && !!pinRole;
+  const [scorePinPrompt, setScorePinPrompt] = useState(null); // { gid, app, value, error, checking }
   const isNGA = compData.scoringMode === "nga";
   const isSimple = compData.scoringMode === "simple";
   const fig = !isNGA && !isSimple;
+  // FIG execution baseline: E = eStart − deduction (configurable per comp)
+  const eStart = getEScoreStart(compData);
   const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const isLockedJudge = pinRole === "judge" && lockedApparatus;
   const scoringApparatus = isLockedJudge ? allScoringApparatus.filter(a => a === lockedApparatus) : allScoringApparatus;
@@ -69,7 +79,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     let eSum = 0, eCount = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(next[subKey(gid, app, `e${i}`)]);
-      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+      if (!isNaN(v)) { eSum += (eStart - v); eCount++; }
     }
     const eAvg    = eCount > 0 ? eSum / eCount : 0;
     const hasAny  = dv > 0 || bonus > 0 || eAvg > 0;
@@ -116,7 +126,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     let sum = 0, count = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(scores[subKey(gid, app, `e${i}`)]);
-      if (!isNaN(v)) { sum += (10 - v); count++; }
+      if (!isNaN(v)) { sum += (eStart - v); count++; }
     }
     return count > 0 ? sum / count : null;
   };
@@ -164,7 +174,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     let eSum = 0, eCount = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(fields[`${prefix}e${i}`]);
-      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+      if (!isNaN(v)) { eSum += (eStart - v); eCount++; }
     }
     const eAvg = eCount > 0 ? eSum / eCount : 0;
     const hasAny = dv > 0 || bonus > 0 || eAvg > 0;
@@ -223,24 +233,59 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     const g = {};
     filteredGymnasts.forEach(gym => {
       const grp = gym.group || "\u2014";
-      const levelName = compData.levels.find(l => l.id === gym.level)?.name || gym.level || "No Level";
+      const lo = compData.levels.find(l => l.id === gym.level);
+      const levelName = lo?.name || gym.level || "No Level";
+      // Titles mirror the ranking categories: levels ranked by level + age
+      // split into "Level + age pill" sub-headings
+      const ageLabel = lo?.rankBy === "level+age" ? (gym.age || "Age not set") : "";
+      const key = ageLabel ? `${levelName} \u2014 ${ageLabel}` : levelName;
       if (!g[grp]) g[grp] = {};
-      if (!g[grp][levelName]) g[grp][levelName] = [];
-      g[grp][levelName].push(gym);
+      if (!g[grp][key]) g[grp][key] = { levelName, ageLabel, list: [] };
+      g[grp][key].list.push(gym);
     });
-    // Sort gymnasts by number within each level
+    // Sort gymnasts by running order within each level — numbers are only
+    // rewritten on save, so they can lag the current order
     Object.values(g).forEach(levels => {
-      Object.values(levels).forEach(arr => arr.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
+      Object.values(levels).forEach(entry => entry.list.sort(runningOrderCompare));
     });
     return g;
   }, [filteredGymnasts, compData.levels]);
 
-  const sortedGroupKeys = useMemo(() =>
-    Object.keys(grouped).sort((a, b) => {
+  // Age pill colours — same pastel scheme as Rounds & Rotations, indexed over
+  // the whole competition's ages so a given age keeps its colour everywhere
+  const agePillColors = [
+    "#E8D5F5", "#D5E8F5", "#D5F5E0", "#F5EAD5", "#F5D5D5",
+    "#D5F5F0", "#F5D5EA", "#E0F5D5", "#D5D5F5", "#F5F0D5",
+  ];
+  const uniqueAges = useMemo(() => {
+    const seen = [];
+    gymnasts.forEach(g => { if (g.age && !seen.includes(g.age)) seen.push(g.age); });
+    return seen;
+  }, [gymnasts]);
+  const agePill = (age) => {
+    const idx = uniqueAges.indexOf(age);
+    return (
+      <span style={{
+        fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 56,
+        background: idx >= 0 ? agePillColors[idx % agePillColors.length] : "var(--background-neutral)",
+        color: "var(--text-primary)", fontFamily: "var(--font-display)", whiteSpace: "nowrap",
+      }}>
+        {age}
+      </span>
+    );
+  };
+
+  const sortedGroupKeys = useMemo(() => {
+    const groupOrder = roundGroups(compData, activeRound);
+    return Object.keys(grouped).sort((a, b) => {
+      const ai = groupOrder.indexOf(a);
+      const bi = groupOrder.indexOf(b);
+      if (ai !== bi) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
       const na = parseInt(a.replace(/\D/g, "")) || 0;
       const nb = parseInt(b.replace(/\D/g, "")) || 0;
       return na - nb;
-    }), [grouped]);
+    });
+  }, [grouped, compData, activeRound]);
 
   // ── Unassigned gymnasts (organiser-only) ─────────────────
   // Anyone not in a valid round+rotation — no round, or a round whose group
@@ -249,12 +294,37 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const unassignedGymnasts = useMemo(() =>
     canMoveGymnasts
       ? gymnasts.filter(g => !isValidGroup(compData, g.round, g.group))
-                .sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0))
+                .sort(runningOrderCompare)
       : [],
     [canMoveGymnasts, gymnasts, compData]);
 
   // ── Score Modal helpers ──────────────────────────────────
   const openScoreModal = (gid, app, isEdit) => {
+    // Editing a submitted score under an active score lock always prompts for
+    // the score edit PIN — the unlock covers only the modal it opens, and the
+    // score re-locks the moment that modal closes.
+    if (isEdit && scoreLockActive) {
+      setScorePinPrompt({ gid, app, value: "", error: "", checking: false });
+      return;
+    }
+    doOpenScoreModal(gid, app, isEdit);
+  };
+
+  const submitScoreEditPin = async () => {
+    const p = scorePinPrompt;
+    if (!p || p.checking) return;
+    setScorePinPrompt((prev) => (prev ? { ...prev, checking: true, error: "" } : prev));
+    const hashed = await hashPin(p.value || "");
+    if (hashed === compData.scoreEditPin) {
+      setScorePinPrompt(null);
+      // One-shot unlock: opens this modal only; nothing is remembered after
+      doOpenScoreModal(p.gid, p.app, true);
+    } else {
+      setScorePinPrompt((prev) => (prev ? { ...prev, checking: false, error: "Incorrect score edit PIN." } : prev));
+    }
+  };
+
+  const doOpenScoreModal = (gid, app, isEdit) => {
     const fields = {};
     const bufs = {};
     const toBuf = (v) => { const n = parseFloat(v); return (!v || isNaN(n) || n === 0) ? "" : n.toFixed(2); };
@@ -317,7 +387,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     let eSum = 0, eCount = 0;
     for (let i = 1; i <= Math.max(n, 1); i++) {
       const v = parseFloat(modalFields[`e${i}`]);
-      if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+      if (!isNaN(v)) { eSum += (eStart - v); eCount++; }
     }
     const eAvg = eCount > 0 ? eSum / eCount : 0;
     const penalty = parseFloat(modalFields.pen) || 0;
@@ -470,7 +540,7 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         let eSum = 0, eCount = 0;
         for (let i = 1; i <= Math.max(n, 1); i++) {
           const v = parseFloat(round2dp(modalFields[`e${i}`]));
-          if (!isNaN(v)) { eSum += (10 - v); eCount++; }
+          if (!isNaN(v)) { eSum += (eStart - v); eCount++; }
         }
         const eAvg = eCount > 0 ? eSum / eCount : 0;
         const hasAny = dv > 0 || bon > 0 || eAvg > 0;
@@ -881,9 +951,12 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
               <span className="group-label">{grp}</span>
               <div className="group-line" />
             </div>
-            {Object.entries(grouped[grp]).map(([level, glist]) => (
-              <div key={level} style={{ marginBottom: 24 }}>
-                <div className="sub-group-label">{level}</div>
+            {Object.entries(grouped[grp]).map(([key, { levelName, ageLabel, list: glist }]) => (
+              <div key={key} style={{ marginBottom: 24 }}>
+                <div className="sub-group-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {levelName}
+                  {ageLabel && agePill(ageLabel)}
+                </div>
                 <div className="table-wrap">
                   <table className="si-table" style={{ minWidth: 388 + scoringApparatus.length * 100 + 140 }}>
                     <colgroup>
@@ -1484,6 +1557,33 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
           document.body
         );
       })()}
+
+      {/* ── Score edit PIN prompt (score lock) ── */}
+      {scorePinPrompt && createPortal(
+        <div className="modal-backdrop" onClick={() => setScorePinPrompt(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 380, width: "100%", textAlign: "left", fontFamily: "var(--font-display)" }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, fontFamily: "var(--font-display)" }}>Score is locked</div>
+            <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 14, lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
+              This score has been submitted and the competition's score lock is on. Enter the score edit PIN to unlock it for editing.
+            </div>
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label className="label">Score edit PIN</label>
+              <input className="input" type="password" inputMode="numeric" autoFocus
+                value={scorePinPrompt.value}
+                onChange={e => setScorePinPrompt(prev => (prev ? { ...prev, value: e.target.value.replace(/\D/g, "").slice(0, 8), error: "" } : prev))}
+                onKeyDown={e => { if (e.key === "Enter") submitScoreEditPin(); }} />
+            </div>
+            {scorePinPrompt.error && <div className="field-error" style={{ marginBottom: 10 }}>{scorePinPrompt.error}</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" style={{ fontFamily: "var(--font-display)" }} onClick={() => setScorePinPrompt(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ fontFamily: "var(--font-display)" }} onClick={submitScoreEditPin} disabled={scorePinPrompt.checking}>
+                {scorePinPrompt.checking ? "Checking…" : "Unlock score"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

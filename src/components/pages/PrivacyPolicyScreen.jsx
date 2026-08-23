@@ -20,7 +20,7 @@ function PrivacyPolicyScreen() {
         <h1 style={{ fontSize: 32, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.2, marginBottom: 8 }}>
           Privacy Policy
         </h1>
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: May 2026</p>
+        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 40 }}>Last updated: August 2026</p>
 
         <div style={sectionStyle}>
           <h2 style={headingStyle}>1. Who we are</h2>
@@ -44,8 +44,12 @@ function PrivacyPolicyScreen() {
           <p style={{ ...paraStyle, fontWeight: 600 }}>Competition data (entered by organisers):</p>
           <ul style={listStyle}>
             <li>Gymnast names, numbers, ages, club affiliations and scores</li>
+            <li>Judge names, club affiliations, qualification levels and, optionally, contact email addresses</li>
             <li>Competition dates and locations</li>
           </ul>
+          <p style={paraStyle}>
+            Judge contact details are recorded by organisers for their own administration (for example, sanctioned-event records). GymComp holds these on the organiser's behalf as data processor; they are never published on results pages, included in exports, or shared with anyone other than the organiser who entered them.
+          </p>
           <p style={{ ...paraStyle, fontWeight: 600 }}>Technical data:</p>
           <ul style={listStyle}>
             <li>Browser type and device information</li>
@@ -62,6 +66,7 @@ function PrivacyPolicyScreen() {
           <ul style={listStyle}>
             <li>Email address and display name: account creation and sign-in (contract performance)</li>
             <li>Gymnast data: competition management and results (legitimate interests of the organiser)</li>
+            <li>Judge details: competition administration and the organiser's own records (legitimate interests of the organiser)</li>
             <li>Technical data: security, fraud prevention, platform stability (legitimate interests)</li>
           </ul>
         </div>

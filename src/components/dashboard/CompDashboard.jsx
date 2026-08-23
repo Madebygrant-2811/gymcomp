@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
-import { generateId, generateClubCode } from "../../lib/utils.js";
+import { generateId, generateClubCode, newRound, agendaWindow } from "../../lib/utils.js";
+import { roundCycle, restCount } from "../../lib/rotations.js";
+import { JUDGE_LEVELS } from "../../lib/constants.js";
 import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML, buildPublicQRPdf, buildCoachQRPdf } from "../../lib/pdf.js";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
@@ -16,7 +18,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const [topbarHidden, setTopbarHidden] = useState(false);
   const [newClubName, setNewClubName] = useState("");
   const lastScrollY = useRef(0);
-  const [judgeModal, setJudgeModal] = useState(null); // { mode: "add"|"edit", apparatus, id?, name, club }
+  const [judgeModal, setJudgeModal] = useState(null); // { mode: "add"|"edit", apparatus, id?, name, club, level, email, error }
   const [judgeRemoveConfirm, setJudgeRemoveConfirm] = useState(null);
   const [roundCount, setRoundCount] = useState(compData.rounds?.length || 1);
   const [collapsed, setCollapsed] = useState(new Set());
@@ -24,9 +26,79 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   // Seed Round 1 on first load if rounds array is empty
   useEffect(() => {
     if (!compData.rounds || compData.rounds.length === 0) {
-      onUpdateCompData(d => ({ ...d, rounds: [{ id: generateId(), name: "Round 1", start: "", end: "" }] }));
+      onUpdateCompData(d => ({ ...d, rounds: [newRound("Round 1")] }));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Apparatus order (base rotation cycle) per round ───────
+  // Rotation 1's sequence for the round — every other rotation cascades one
+  // step behind. Rest slots can sit anywhere in the sequence.
+  const cycleDragRef = useRef(null); // { rid, idx } while dragging a chip
+  const moveCycleEntry = (rid, from, to) => {
+    const order = [...roundCycle(compData, rid)];
+    if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return;
+    const [item] = order.splice(from, 1);
+    order.splice(to, 0, item);
+    onUpdateCompData(d => ({ ...d, cycleByRound: { ...(d.cycleByRound || {}), [rid]: order } }));
+  };
+
+  // ── Agenda editing ────────────────────────────────────────
+  // Agenda items (labels + order) are shared across every round — adding,
+  // renaming, reordering or removing an item applies to all rounds. Each
+  // round keeps its own times per item, and while any items exist the round's
+  // start/end are driven by them (agendaWindow) rather than set by hand.
+  const withWindow = (r) => {
+    if (!(r.agenda || []).length) return r;
+    const w = agendaWindow(r.agenda);
+    // Until any item has a time, keep whatever window the round already had
+    // (covers rounds with hand-set times from before agendas drove them).
+    if (!w.start && !w.end) return r;
+    return { ...r, ...w };
+  };
+
+  // Structural ops: normalise every round to the first round's item list
+  // (keeping each round's own times by position), apply fn, re-derive windows.
+  const updateAllAgendas = (fn) =>
+    onUpdateCompData(d => {
+      const rounds = d.rounds || [];
+      const template = rounds[0]?.agenda || [];
+      return {
+        ...d,
+        rounds: rounds.map(r => {
+          const cur = r.agenda || [];
+          const aligned = template.map((t, i) =>
+            cur[i] ? { ...cur[i], label: t.label } : { id: generateId(), label: t.label, start: "", end: "" }
+          );
+          return withWindow({ ...r, agenda: fn(aligned) });
+        }),
+      };
+    });
+
+  const addSharedAgendaItem = () =>
+    updateAllAgendas(list => [...list, { id: generateId(), label: "", start: "", end: "" }]);
+  const renameSharedAgendaItem = (idx, label) =>
+    updateAllAgendas(list => list.map((e, i) => (i === idx ? { ...e, label } : e)));
+  const removeSharedAgendaItem = (idx) =>
+    updateAllAgendas(list => list.filter((_, i) => i !== idx));
+  const moveSharedAgendaItem = (idx, dir) =>
+    updateAllAgendas(list => {
+      const j = idx + dir;
+      if (j < 0 || j >= list.length) return list;
+      const n = [...list];
+      [n[idx], n[j]] = [n[j], n[idx]];
+      return n;
+    });
+
+  // Per-round time edit for one item (times are the only per-round part)
+  const updateAgendaEntry = (rid, eid, patch) =>
+    onUpdateCompData(d => ({
+      ...d,
+      rounds: (d.rounds || []).map(r =>
+        r.id === rid
+          ? withWindow({ ...r, agenda: (r.agenda || []).map(e => (e.id === eid ? { ...e, ...patch } : e)) })
+          : r
+      ),
+    }));
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
@@ -83,15 +155,27 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
 
   const saveJudgeModal = () => {
     if (!judgeModal?.name.trim()) return;
+    // Email is optional but must be a valid format when present
+    const email = (judgeModal.email || "").trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setJudgeModal(m => ({ ...m, error: "Enter a valid email address, or leave it empty." }));
+      return;
+    }
+    const fields = {
+      name: judgeModal.name.trim(),
+      club: (judgeModal.club || "").trim(),
+      level: judgeModal.level || "",
+      email,
+    };
     if (judgeModal.mode === "add") {
       onUpdateCompData(d => ({
         ...d,
-        judges: [...d.judges, { id: generateId(), name: judgeModal.name.trim(), club: judgeModal.club.trim(), apparatus: judgeModal.apparatus }]
+        judges: [...d.judges, { id: generateId(), ...fields, apparatus: judgeModal.apparatus }]
       }));
     } else {
       onUpdateCompData(d => ({
         ...d,
-        judges: d.judges.map(j => j.id === judgeModal.id ? { ...j, name: judgeModal.name.trim(), club: judgeModal.club.trim() } : j)
+        judges: d.judges.map(j => j.id === judgeModal.id ? { ...j, ...fields } : j)
       }));
     }
     setJudgeModal(null);
@@ -112,16 +196,24 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const incompleteGymnasts = gymnasts.filter(g => requiredFields.some(f => !g[f] || !g[f].toString().trim()));
   const allGymnastsComplete = incompleteGymnasts.length === 0;
 
-  // 5-step readiness checklist
+  // Readiness checklist
   const gymnastsWithoutClub = gymnasts.filter(g => !g.club || !g.club.trim());
   const uncoveredApparatus = scoringApparatus.filter(app => !judges.some(j => j.apparatus === app));
   const unassignedGymnasts = gymnasts.filter(g => !g.round || !g.group);
+  // A gymnast with no age in a level ranked by level + age would rank in an
+  // "Age not set" group — the gap is closed here, before the comp can start.
+  const missingAgeGymnasts = gymnasts.filter(g => {
+    if (g.dns || g.withdrawn) return false;
+    const lo = (compData.levels || []).find(l => l.id === g.level);
+    return lo?.rankBy === "level+age" && !(g.age || "").trim();
+  });
   const readinessSteps = [
     { label: "Add clubs", sub: "At least one club required", done: (compData.clubs || []).length > 0, scrollTo: "card-clubs" },
     { label: "Add gymnasts and assign to clubs", sub: gymnasts.length === 0 ? "No gymnasts added yet" : gymnastsWithoutClub.length > 0 ? `${gymnastsWithoutClub.length} gymnast${gymnastsWithoutClub.length !== 1 ? "s" : ""} need a club` : "All gymnasts assigned to clubs", done: gymnasts.length > 0 && gymnastsWithoutClub.length === 0, scrollTo: "card-gymnasts" },
     { label: "Add judges to apparatus", sub: scoringApparatus.length === 0 ? "Add apparatus in setup first" : uncoveredApparatus.length > 0 ? `${uncoveredApparatus.length} apparatus need a judge` : "All apparatus have judges", done: scoringApparatus.length > 0 && uncoveredApparatus.length === 0, scrollTo: "card-judges" },
     { label: "Set up rounds", sub: "At least one round required", done: (compData.rounds || []).length > 0, scrollTo: "card-rounds-groups" },
     { label: "Assign gymnasts to rotations within rounds", sub: gymnasts.length === 0 ? "Add gymnasts first" : unassignedGymnasts.length > 0 ? `${unassignedGymnasts.length} gymnast${unassignedGymnasts.length !== 1 ? "s" : ""} not yet assigned` : "All gymnasts assigned", done: gymnasts.length > 0 && unassignedGymnasts.length === 0, scrollTo: "card-rounds-groups" },
+    { label: "Set ages for level + age levels", sub: missingAgeGymnasts.length === 0 ? "Every gymnast ranked by level + age has an age" : `${missingAgeGymnasts.length} gymnast${missingAgeGymnasts.length !== 1 ? "s" : ""} in level + age levels missing an age: ${missingAgeGymnasts.map(g => g.name).join(", ")}`, done: missingAgeGymnasts.length === 0, scrollTo: "card-gymnasts" },
   ];
   // Pre-start readiness gate. Once a competition is live, resume is always
   // allowed — late-added gymnasts are now assigned inside live score-entry
@@ -298,114 +390,6 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </div>
         </div>
         )}
-
-        <div className="card" id="card-clubs" style={{ marginBottom: 24 }}>
-          <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: readinessSteps[0].done ? "pointer" : "default", marginBottom: collapsed.has("clubs") ? 0 : undefined, paddingBottom: collapsed.has("clubs") ? 0 : undefined, borderBottom: collapsed.has("clubs") ? "none" : undefined }}
-            onClick={() => toggleCard("clubs", readinessSteps[0].done)}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {!completed && readyIcon(readinessSteps[0].done)}Manage Clubs
-              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-tertiary)" }}>({(compData.clubs || []).length})</span>
-            </span>
-            {chevron("clubs")}
-          </div>
-          {!collapsed.has("clubs") && (compData.clubs || []).length === 0 && (
-            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "32px 24px", textAlign: "center" }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>🏟️</div>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No clubs added{completed ? "" : " yet"}</div>
-              {!completed && (<>
-                <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, maxWidth: 400, margin: "0 auto 16px" }}>
-                  Add participating clubs so gymnasts can be assigned to them.
-                </div>
-                <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", maxWidth: 400, margin: "0 auto" }}>
-                  <ClubPicker placeholder="Search clubs…" style={{ flex: 1 }}
-                    value={newClubName}
-                    onChange={val => setNewClubName(val)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && newClubName.trim()) {
-                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
-                        setNewClubName("");
-                      }
-                    }} />
-                  <button className="btn btn-sm btn-primary" onClick={() => {
-                    if (!newClubName.trim()) return;
-                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
-                    setNewClubName("");
-                  }}>Add</button>
-                </div>
-              </>)}
-            </div>
-          )}
-
-        {!collapsed.has("clubs") && (compData.clubs || []).length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            {!completed && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-                <ClubPicker placeholder="Add a club…" style={{ flex: 1 }}
-                  value={newClubName}
-                  onChange={val => setNewClubName(val)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && newClubName.trim()) {
-                      onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
-                      setNewClubName("");
-                    }
-                  }} />
-                <button className="btn btn-sm btn-primary" onClick={() => {
-                  if (!newClubName.trim()) return;
-                  onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
-                  setNewClubName("");
-                }}>Add</button>
-              </div>
-            )}
-            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
-              <div style={{ padding: "12px 18px", fontSize: 12, color: "var(--muted)", borderBottom: "1px solid var(--border)", lineHeight: 1.6 }}>
-                Each club has a unique code to access the Coach View. Share the relevant code with each club representative.
-              </div>
-              {compData.clubs.map((c, i) => (
-                <div key={c.id} style={{
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-                  padding: "12px 18px", fontSize: 14,
-                  borderBottom: i < compData.clubs.length - 1 ? "1px solid var(--border)" : "none",
-                  background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)"
-                }}>
-                  <div style={{ fontWeight: 600, color: "var(--text-primary)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
-                  <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: "var(--accent)", letterSpacing: "0.5px", flexShrink: 0 }}>{c.clubCode || "—"}</div>
-                  <button
-                    onClick={async () => {
-                      if (!c.clubCode) return;
-                      try { await navigator.clipboard.writeText(c.clubCode); } catch {}
-                      setCopiedCode(c.id);
-                      setTimeout(() => setCopiedCode(v => v === c.id ? null : v), 2000);
-                    }}
-                    style={{
-                      padding: "5px 14px", borderRadius: 56, border: "1px solid var(--border)", background: "none",
-                      cursor: c.clubCode ? "pointer" : "default", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
-                      color: copiedCode === c.id ? "var(--success)" : "var(--text-primary)", flexShrink: 0, minWidth: 72, textAlign: "center"
-                    }}
-                  >
-                    {copiedCode === c.id ? "Copied!" : "Copy Code"}
-                  </button>
-                  {!completed && (
-                    <button
-                      onClick={() => {
-                        onUpdateCompData(d => ({ ...d, clubs: d.clubs.filter(cl => cl.id !== c.id) }));
-                        if (onUpdateGymnasts) onUpdateGymnasts(prev => prev.map(g => g.club === c.name ? { ...g, club: "" } : g));
-                      }}
-                      style={{
-                        padding: "5px 14px", borderRadius: 56, border: "1px solid var(--border)", background: "none",
-                        cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
-                        color: "var(--danger)", flexShrink: 0
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        </div>
 
         <div className="card" id="card-gymnasts" style={{ marginBottom: 24 }}>
           <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: readinessSteps[1].done ? "pointer" : "default", marginBottom: collapsed.has("gymnasts") ? 0 : undefined, paddingBottom: collapsed.has("gymnasts") ? 0 : undefined, borderBottom: collapsed.has("gymnasts") ? "none" : undefined }}
@@ -600,6 +584,114 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
           </>)}
         </div>
 
+        <div className="card" id="card-clubs" style={{ marginBottom: 24 }}>
+          <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: readinessSteps[0].done ? "pointer" : "default", marginBottom: collapsed.has("clubs") ? 0 : undefined, paddingBottom: collapsed.has("clubs") ? 0 : undefined, borderBottom: collapsed.has("clubs") ? "none" : undefined }}
+            onClick={() => toggleCard("clubs", readinessSteps[0].done)}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {!completed && readyIcon(readinessSteps[0].done)}Manage Clubs
+              <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-tertiary)" }}>({(compData.clubs || []).length})</span>
+            </span>
+            {chevron("clubs")}
+          </div>
+          {!collapsed.has("clubs") && (compData.clubs || []).length === 0 && (
+            <div style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "var(--radius)", padding: "32px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>🏟️</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No clubs added{completed ? "" : " yet"}</div>
+              {!completed && (<>
+                <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, maxWidth: 400, margin: "0 auto 16px" }}>
+                  Add participating clubs so gymnasts can be assigned to them.
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", maxWidth: 400, margin: "0 auto" }}>
+                  <ClubPicker placeholder="Search clubs…" style={{ flex: 1 }}
+                    value={newClubName}
+                    onChange={val => setNewClubName(val)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && newClubName.trim()) {
+                        onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
+                        setNewClubName("");
+                      }
+                    }} />
+                  <button className="btn btn-sm btn-primary" onClick={() => {
+                    if (!newClubName.trim()) return;
+                    onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
+                    setNewClubName("");
+                  }}>Add</button>
+                </div>
+              </>)}
+            </div>
+          )}
+
+        {!collapsed.has("clubs") && (compData.clubs || []).length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            {!completed && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+                <ClubPicker placeholder="Add a club…" style={{ flex: 1 }}
+                  value={newClubName}
+                  onChange={val => setNewClubName(val)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && newClubName.trim()) {
+                      onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
+                      setNewClubName("");
+                    }
+                  }} />
+                <button className="btn btn-sm btn-primary" onClick={() => {
+                  if (!newClubName.trim()) return;
+                  onUpdateCompData(d => ({ ...d, clubs: [...d.clubs, { id: generateId(), name: newClubName.trim(), clubCode: generateClubCode(d.clubs.map(c => c.clubCode).filter(Boolean)) }] }));
+                  setNewClubName("");
+                }}>Add</button>
+              </div>
+            )}
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+              <div style={{ padding: "12px 18px", fontSize: 12, color: "var(--muted)", borderBottom: "1px solid var(--border)", lineHeight: 1.6 }}>
+                Each club has a unique code to access the Coach View. Share the relevant code with each club representative.
+              </div>
+              {compData.clubs.map((c, i) => (
+                <div key={c.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                  padding: "12px 18px", fontSize: 14,
+                  borderBottom: i < compData.clubs.length - 1 ? "1px solid var(--border)" : "none",
+                  background: i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.02)"
+                }}>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                  <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: "var(--accent)", letterSpacing: "0.5px", flexShrink: 0 }}>{c.clubCode || "—"}</div>
+                  <button
+                    onClick={async () => {
+                      if (!c.clubCode) return;
+                      try { await navigator.clipboard.writeText(c.clubCode); } catch {}
+                      setCopiedCode(c.id);
+                      setTimeout(() => setCopiedCode(v => v === c.id ? null : v), 2000);
+                    }}
+                    style={{
+                      padding: "5px 14px", borderRadius: 56, border: "1px solid var(--border)", background: "none",
+                      cursor: c.clubCode ? "pointer" : "default", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
+                      color: copiedCode === c.id ? "var(--success)" : "var(--text-primary)", flexShrink: 0, minWidth: 72, textAlign: "center"
+                    }}
+                  >
+                    {copiedCode === c.id ? "Copied!" : "Copy Code"}
+                  </button>
+                  {!completed && (
+                    <button
+                      onClick={() => {
+                        onUpdateCompData(d => ({ ...d, clubs: d.clubs.filter(cl => cl.id !== c.id) }));
+                        if (onUpdateGymnasts) onUpdateGymnasts(prev => prev.map(g => g.club === c.name ? { ...g, club: "" } : g));
+                      }}
+                      style={{
+                        padding: "5px 14px", borderRadius: 56, border: "1px solid var(--border)", background: "none",
+                        cursor: "pointer", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600,
+                        color: "var(--danger)", flexShrink: 0
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        </div>
+
         <div className="card" id="card-judges" style={{ marginBottom: 24 }}>
           <div className="card-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: readinessSteps[2].done ? "pointer" : "default", marginBottom: collapsed.has("judges") ? 0 : undefined, paddingBottom: collapsed.has("judges") ? 0 : undefined, borderBottom: collapsed.has("judges") ? "none" : undefined }}
             onClick={() => toggleCard("judges", readinessSteps[2].done)}>
@@ -646,11 +738,15 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                           <div key={j.id} style={{ padding: "6px 0", fontSize: 13, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div>
                               <div style={{ fontWeight: 400, color: "var(--text)" }}>{j.name}</div>
-                              {j.club && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{j.club}</div>}
+                              {(j.club || j.level) && (
+                                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>
+                                  {[j.club, j.level].filter(Boolean).join(" · ")}
+                                </div>
+                              )}
                             </div>
                             {!completed && (
                               <div style={{ display: "flex", gap: 4 }}>
-                                <button className="btn-icon" onClick={() => setJudgeModal({ mode: "edit", apparatus: app, id: j.id, name: j.name, club: j.club || "" })} title="Edit">
+                                <button className="btn-icon" onClick={() => setJudgeModal({ mode: "edit", apparatus: app, id: j.id, name: j.name, club: j.club || "", level: j.level || "", email: j.email || "", error: "" })} title="Edit">
                                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-tertiary)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z"/></svg>
                                 </button>
                                 <button className="btn-icon" onClick={() => setJudgeRemoveConfirm({ id: j.id, name: j.name, apparatus: app })}>×</button>
@@ -660,7 +756,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                         ))}
                         {!completed && (
                           <button className="btn btn-sm btn-secondary" style={{ marginTop: 8 }}
-                            onClick={() => setJudgeModal({ mode: "add", apparatus: app, name: "", club: "" })}>
+                            onClick={() => setJudgeModal({ mode: "add", apparatus: app, name: "", club: "", level: "", email: "", error: "" })}>
                             + Add Judge
                           </button>
                         )}
@@ -714,7 +810,28 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                     onKeyDown={e => { if (e.key === "Enter" && judgeModal.name.trim()) saveJudgeModal(); if (e.key === "Escape") setJudgeModal(null); }}
                     style={{ width: "100%" }} />
                 </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>Judging level</label>
+                  <select className="select" style={{ width: "100%" }}
+                    value={judgeModal.level || ""}
+                    onChange={e => setJudgeModal(m => ({ ...m, level: e.target.value }))}>
+                    <option value="">— Select level —</option>
+                    {JUDGE_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>Email (optional)</label>
+                  <input className="input" type="email" placeholder="judge@example.com"
+                    value={judgeModal.email || ""}
+                    onChange={e => setJudgeModal(m => ({ ...m, email: e.target.value, error: "" }))}
+                    onKeyDown={e => { if (e.key === "Enter" && judgeModal.name.trim()) saveJudgeModal(); if (e.key === "Escape") setJudgeModal(null); }}
+                    style={{ width: "100%" }} />
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, fontFamily: "var(--font-display)" }}>
+                    For your records only — never exported or published.
+                  </div>
+                </div>
               </div>
+              {judgeModal.error && <div className="field-error" style={{ marginTop: 10 }}>{judgeModal.error}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 24, justifyContent: "flex-end" }}>
                 <button className="btn btn-secondary" onClick={() => setJudgeModal(null)}>Cancel</button>
                 <button className="btn btn-primary" onClick={saveJudgeModal} disabled={!judgeModal.name.trim()}>
@@ -782,7 +899,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                           setRoundCount(n);
                           onUpdateCompData(d => {
                             const existing = d.rounds || [];
-                            const rounds = Array.from({ length: n }, (_, i) => existing[i] || { id: generateId(), name: `Round ${i + 1}`, start: "", end: "" });
+                            const rounds = Array.from({ length: n }, (_, i) => existing[i] || newRound(`Round ${i + 1}`));
                             rounds.forEach((r, i) => { r.name = `Round ${i + 1}`; });
                             const newGbr = { ...(d.groupsByRound || {}) };
                             const keepIds = new Set(rounds.map(r => r.id));
@@ -797,7 +914,7 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                           setRoundCount(n);
                           onUpdateCompData(d => {
                             const existing = d.rounds || [];
-                            const rounds = Array.from({ length: n }, (_, i) => existing[i] || { id: generateId(), name: `Round ${i + 1}`, start: "", end: "" });
+                            const rounds = Array.from({ length: n }, (_, i) => existing[i] || newRound(`Round ${i + 1}`));
                             rounds.forEach((r, i) => { r.name = `Round ${i + 1}`; });
                             return { ...d, rounds };
                           });
@@ -807,38 +924,170 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
                 </div>
               )}
 
-              {/* ── Round times ── */}
-              {rgRounds.length > 0 && (
+              {/* ── Agenda items (shared) & round timings ── */}
+              {rgRounds.length > 0 && (() => {
+                const fmt = (t) => { if (!t) return "—"; const [h, m] = t.split(":"); const hour = parseInt(h); return `${hour > 12 ? hour - 12 : hour}:${m} ${hour >= 12 ? "PM" : "AM"}`; };
+                const agendaItems = compData.rounds[0]?.agenda || [];
+                return (
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
-                    {completed ? "Round times" : "Set times for each round"}
-                  </div>
-                  {compData.rounds.map((r, i) => (
-                    <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-                      <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
-                      {completed ? (
-                        <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
-                          {(() => {
-                            const fmt = (t) => { if (!t) return "—"; const [h, m] = t.split(":"); const hour = parseInt(h); return `${hour > 12 ? hour - 12 : hour}:${m} ${hour >= 12 ? "PM" : "AM"}`; };
-                            return r.start || r.end ? `${fmt(r.start)} – ${fmt(r.end)}` : "No times set";
-                          })()}
+                  {/* Shared agenda items — one list, applied to every round */}
+                  {!completed && (
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
+                        Agenda items — applied to every round
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6, marginBottom: 10, fontFamily: "var(--font-display)" }}>
+                        Each round sets its own times per item below — round start and end come from those times.
+                      </div>
+                      {agendaItems.map((item, ei) => (
+                        <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, maxWidth: 420 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
+                            <button className="btn-icon" style={{ fontSize: 10, width: 20, height: 14, lineHeight: 1, opacity: ei === 0 ? 0.3 : 1, cursor: ei === 0 ? "default" : "pointer" }}
+                              disabled={ei === 0} onClick={() => moveSharedAgendaItem(ei, -1)} title="Move up">▲</button>
+                            <button className="btn-icon" style={{ fontSize: 10, width: 20, height: 14, lineHeight: 1, opacity: ei === agendaItems.length - 1 ? 0.3 : 1, cursor: ei === agendaItems.length - 1 ? "default" : "pointer" }}
+                              disabled={ei === agendaItems.length - 1} onClick={() => moveSharedAgendaItem(ei, 1)} title="Move down">▼</button>
+                          </div>
+                          <input className="input" placeholder="e.g. Registration" value={item.label} style={{ flex: 1 }}
+                            onChange={e => renameSharedAgendaItem(ei, e.target.value)} />
+                          <button className="btn-icon" onClick={() => removeSharedAgendaItem(ei)} title="Remove from all rounds">×</button>
                         </div>
-                      ) : (<>
-                        <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                          <label className="label">Start</label>
-                          <input className="input" type="time" value={r.start}
-                            onChange={e => onUpdateCompData(d => ({ ...d, rounds: d.rounds.map(rd => rd.id === r.id ? { ...rd, start: e.target.value } : rd) }))} />
-                        </div>
-                        <div className="field" style={{ margin: 0, flex: "1 1 100px" }}>
-                          <label className="label">End</label>
-                          <input className="input" type="time" value={r.end}
-                            onChange={e => onUpdateCompData(d => ({ ...d, rounds: d.rounds.map(rd => rd.id === r.id ? { ...rd, end: e.target.value } : rd) }))} />
-                        </div>
-                      </>)}
+                      ))}
+                      <button className="btn btn-ghost btn-sm" style={{ marginTop: 2, fontFamily: "var(--font-display)" }}
+                        onClick={addSharedAgendaItem}>
+                        ＋ Add agenda item
+                      </button>
                     </div>
-                  ))}
+                  )}
+
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
+                    {completed ? "Round times" : "Round timings"}
+                  </div>
+                  {compData.rounds.map((r, i) => {
+                    const agenda = r.agenda || [];
+                    return (
+                    <div key={r.id} style={{ marginBottom: 12, padding: "12px 14px", border: "1px solid var(--border)", borderRadius: "var(--radius)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ width: 80, fontWeight: 600, fontSize: 14 }}>Round {i + 1}</div>
+                        <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>
+                          {r.start || r.end ? `${fmt(r.start)} – ${fmt(r.end)}` : "No times set"}
+                        </div>
+                        {!completed && agenda.length === 0 && (
+                          <div style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-display)" }}>
+                            Add agenda items above to set this round's times.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Apparatus order — Rotation 1's sequence; others cascade */}
+                      {(() => {
+                        const cyc = roundCycle(compData, r.id);
+                        if (!cyc.length) return null;
+                        const rests = restCount(compData, r.id);
+                        if (completed) {
+                          return (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}>
+                              <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", fontSize: 10, color: "var(--muted)", marginRight: 8 }}>Apparatus order</span>
+                              {cyc.map(a => a.replace(/\s*\(.*?\)\s*$/, "")).join(" → ")}
+                              {rests > 0 && <span style={{ marginLeft: 8, color: "var(--muted)" }}>· {rests} rest{rests !== 1 ? "s" : ""}</span>}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "var(--muted)", fontFamily: "var(--font-display)" }}>Apparatus order</span>
+                              <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}>
+                                Rotation 1's sequence — other rotations cascade one step behind. Rests can sit anywhere.
+                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", padding: "2px 10px", borderRadius: 56, border: "1px solid var(--border)", fontFamily: "var(--font-display)", flexShrink: 0 }}
+                                title="Rest slots for this round — each adds one rotation beyond the apparatus">
+                                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Rests</span>
+                                <button className="btn-icon" style={{ fontSize: 14, opacity: rests <= 0 ? 0.3 : 1 }} disabled={rests <= 0}
+                                  onClick={() => onUpdateCompData(d => ({ ...d, restsByRound: { ...(d.restsByRound || {}), [r.id]: rests - 1 } }))}>−</button>
+                                <span style={{ fontSize: 12, fontWeight: 700, minWidth: 12, textAlign: "center", color: "var(--accent)" }}>{rests}</span>
+                                <button className="btn-icon" style={{ fontSize: 14, opacity: rests >= 4 ? 0.3 : 1 }} disabled={rests >= 4}
+                                  onClick={() => onUpdateCompData(d => ({ ...d, restsByRound: { ...(d.restsByRound || {}), [r.id]: rests + 1 } }))}>+</button>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              {cyc.map((app, ai) => {
+                                const isRest = app === "Rest";
+                                const atStart = ai === 0;
+                                const atEnd = ai === cyc.length - 1;
+                                const arrowStyle = (dis) => ({
+                                  background: "none", border: "none", padding: "0 3px", fontSize: 13, lineHeight: 1,
+                                  color: dis ? "var(--border)" : "var(--brand-01)", cursor: dis ? "default" : "pointer",
+                                  fontFamily: "var(--font-display)",
+                                });
+                                return (
+                                  <div key={ai}
+                                    draggable
+                                    onDragStart={e => { cycleDragRef.current = { rid: r.id, idx: ai }; e.dataTransfer.effectAllowed = "move"; }}
+                                    onDragOver={e => { if (cycleDragRef.current?.rid === r.id) e.preventDefault(); }}
+                                    onDrop={e => {
+                                      e.preventDefault();
+                                      const d = cycleDragRef.current;
+                                      if (d && d.rid === r.id && d.idx !== ai) moveCycleEntry(r.id, d.idx, ai);
+                                      cycleDragRef.current = null;
+                                    }}
+                                    onDragEnd={() => { cycleDragRef.current = null; }}
+                                    style={{
+                                      display: "flex", alignItems: "center", gap: 4, padding: "4px 8px",
+                                      background: isRest ? "var(--background-neutral)" : "var(--surface)",
+                                      border: "1px solid var(--border)", borderRadius: "var(--radius)",
+                                      fontSize: 12, cursor: "grab", userSelect: "none",
+                                      fontStyle: isRest ? "italic" : "normal",
+                                      color: isRest ? "var(--text-secondary)" : "var(--text-primary)",
+                                      fontFamily: "var(--font-display)",
+                                    }}>
+                                    <span style={{ fontWeight: 700, color: "var(--muted)", fontSize: 10, fontStyle: "normal" }}>{ai + 1}</span>
+                                    <span>{app.replace(/\s*\(.*?\)\s*$/, "")}</span>
+                                    <span style={{ display: "flex", gap: 2, marginLeft: 2 }}>
+                                      <button disabled={atStart} onClick={() => moveCycleEntry(r.id, ai, ai - 1)} style={arrowStyle(atStart)} title="Move earlier">‹</button>
+                                      <button disabled={atEnd} onClick={() => moveCycleEntry(r.id, ai, ai + 1)} style={arrowStyle(atEnd)} title="Move later">›</button>
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Per-round times for the shared items */}
+                      {!completed && agenda.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                          {agenda.map((entry, ei) => (
+                            <div key={entry.id} style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                              <div style={{ flex: "2 1 140px", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", fontFamily: "var(--font-display)", paddingBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {entry.label || <span style={{ color: "var(--muted)", fontWeight: 400 }}>(unnamed item)</span>}
+                              </div>
+                              <div className="field" style={{ margin: 0, flex: "1 1 90px" }}>
+                                {ei === 0 && <label className="label">Time</label>}
+                                <input className="input" type="time" value={entry.start}
+                                  onChange={e => updateAgendaEntry(r.id, entry.id, { start: e.target.value })} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Completed: read-only agenda lines */}
+                      {completed && agenda.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                          {agenda.map(entry => (
+                            <div key={entry.id} style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 4, fontFamily: "var(--font-display)" }}>
+                              {entry.start ? fmt(entry.start) : "—"} · {entry.label || "—"}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })}
                 </div>
-              )}
+                );
+              })()}
 
               {/* ── Assignment status ── */}
               {statusLabel && (

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { generateId } from "../../lib/utils.js";
-import { nextOrderIndex } from "../../lib/rotations.js";
+import { generateId, newRound, agendaWindow } from "../../lib/utils.js";
+import { nextOrderIndex, effectiveRotations, numberByRunningOrder, runningOrderCompare, proposeSchedule, restCount, roundCycle } from "../../lib/rotations.js";
+import { exportScheduleXLSX, parseScheduleXLSX } from "../../lib/scheduleXlsx.js";
 
 const getAppName = (full) => full.replace(/\s*\(.*?\)\s*$/, "");
 
@@ -15,7 +16,7 @@ const gripIcon = (
 
 /* ================================================================ */
 
-function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventStatus, onBack }) {
+function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, scores = {}, eventStatus, onBack }) {
   /* ── State ──────────────────────────────────────────────── */
   const [assignSel, setAssignSel] = useState(new Set());
   const [assignSearch, setAssignSearch] = useState("");
@@ -28,6 +29,11 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   const [dragSource, setDragSource] = useState(null);
   const [dropColumn, setDropColumn] = useState(null);
   const [hoveredCard, setHoveredCard] = useState(null);
+  const [importPlan, setImportPlan] = useState(null); // parsed schedule plan (or { error }) awaiting confirmation
+  const importFileRef = useRef(null);
+  // Auto-populate: { maxPerGroup, proposal|null } — proposal null while the
+  // organiser is still choosing the maximum group size.
+  const [autoPop, setAutoPop] = useState(null);
 
   // Mobile
   const [isMobile, setIsMobile] = useState(false);
@@ -50,6 +56,9 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   const roundIds = rounds.map((r) => r.id);
   const apparatus = (compData.apparatus || []).filter((a) => a !== "Rest");
   const levels = compData.levels || [];
+  // Rest slots for the active round — declared before the auto-sync effect
+  // below, which lists it as a dependency.
+  const restsForActive = activeRound ? restCount(compData, activeRound) : 0;
 
   /* ── Responsive ─────────────────────────────────────────── */
   useEffect(() => {
@@ -65,18 +74,20 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       setActiveRound(roundIds[0]);
   }, [roundIds.join(",")]);
 
-  /* ── Auto-sync groups to match apparatus count ──────────── */
+  /* ── Auto-sync groups to match the rotation cycle (apparatus + rests) ── */
   useEffect(() => {
     if (!activeRound || readOnly || apparatus.length === 0) return;
+    const target = apparatus.length + restCount(compData, activeRound);
     const existing = gbr[activeRound] || [];
-    if (existing.length >= apparatus.length) return;
+    if (existing.length >= target) return;
     setCompData((d) => {
       const newGbr = { ...(d.groupsByRound || {}) };
       const cur = newGbr[activeRound] || [];
-      if (cur.length >= apparatus.length) return d;
+      const freshTarget = ((d.apparatus || []).filter((a) => a !== "Rest").length) + restCount(d, activeRound);
+      if (cur.length >= freshTarget) return d;
       let offset = 0;
       (d.rounds || []).forEach((rd) => {
-        const count = rd.id === activeRound ? apparatus.length : (newGbr[rd.id] || []).length;
+        const count = rd.id === activeRound ? freshTarget : (newGbr[rd.id] || []).length;
         newGbr[rd.id] = Array.from({ length: count }, (_, i) => {
           const ex = rd.id === activeRound ? cur[i] : (newGbr[rd.id] || [])[i];
           return ex || `Rotation ${offset + i + 1}`;
@@ -85,11 +96,26 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       });
       return { ...d, groupsByRound: newGbr };
     });
-  }, [activeRound, apparatus.length]);
+  }, [activeRound, apparatus.length, restsForActive]);
 
   /* ── Gymnast helpers ────────────────────────────────────── */
   const activeGymnasts = gymnasts.filter((g) => !g.dns && !g.withdrawn);
   const groups = activeRound ? gbr[activeRound] || [] : [];
+
+  // Per-group apparatus order for the active round: stored if edited, cascade otherwise.
+  const effRot = useMemo(
+    () => (activeRound ? effectiveRotations(compData, activeRound) : {}),
+    [compData, activeRound]
+  );
+  // The active round's rotation cycle: apparatus + its rest slots. One
+  // column per cycle position (plus any leftover groups from a rest cut).
+  const cycle = activeRound ? roundCycle(compData, activeRound) : apparatus;
+  const colCount = Math.max(cycle.length, groups.length);
+  // Column ci hosts group groups[ci]; the group's first cycle entry is where it starts.
+  const columnApp = (ci) => {
+    const gName = groups[ci];
+    return (gName && effRot[gName]?.[0]) || cycle[ci] || "";
+  };
   const roundGymnasts = activeRound ? activeGymnasts.filter((g) => g.round === activeRound) : [];
   const assignedCount = roundGymnasts.filter((g) => g.group && groups.includes(g.group)).length;
 
@@ -101,15 +127,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   });
 
   function sortGymnasts(list) {
-    return [...list].sort((a, b) => {
-      const aIdx = typeof a.orderIndex === "number" ? a.orderIndex : Number.MAX_SAFE_INTEGER;
-      const bIdx = typeof b.orderIndex === "number" ? b.orderIndex : Number.MAX_SAFE_INTEGER;
-      if (aIdx !== bIdx) return aIdx - bIdx;
-      const aNum = parseInt(a.number) || Number.MAX_SAFE_INTEGER;
-      const bNum = parseInt(b.number) || Number.MAX_SAFE_INTEGER;
-      if (aNum !== bNum) return aNum - bNum;
-      return (a.name || "").localeCompare(b.name || "");
-    });
+    return [...list].sort(runningOrderCompare);
   }
 
   const getColumnGymnasts = (groupName) =>
@@ -287,6 +305,114 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     setGymnasts((prev) => prev.map((g) => updated.find((u) => u.id === g.id) || g));
   };
 
+  /* ── XLSX schedule export / import ──────────────────────── */
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        setImportPlan(parseScheduleXLSX(reader.result, compData, gymnasts, scores));
+      } catch (err) {
+        setImportPlan({ error: `Could not read the file: ${err.message}` });
+      }
+    };
+    reader.onerror = () => setImportPlan({ error: "Could not read the file." });
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Applies the previewed plan per round: agenda, groups + rotations and group
+  // assignments are replaced for rounds with a matching sheet; blocked rounds
+  // and rounds with no sheet are untouched. orderIndex comes from row order —
+  // numbers are then written from the running order on save, exactly as after
+  // a manual reorder.
+  const applyImportPlan = () => {
+    const plan = importPlan;
+    if (!plan || plan.error) return;
+    const applicable = plan.rounds.filter((p) => !p.blocked);
+    setCompData((d) => {
+      const newRounds = (d.rounds || []).map((r) => {
+        const pr = applicable.find((p) => p.roundId === r.id);
+        if (!pr || !pr.agenda) return r;
+        // Agenda items drive the round window when present
+        return { ...r, agenda: pr.agenda, ...(pr.agenda.length ? agendaWindow(pr.agenda) : {}) };
+      });
+      const newGbr = { ...(d.groupsByRound || {}) };
+      const newRot = { ...(d.rotations || {}) };
+      applicable.forEach((pr) => {
+        if (pr.groups) newGbr[pr.roundId] = pr.groups;
+        if (pr.rotations) newRot[pr.roundId] = pr.rotations;
+      });
+      return { ...d, rounds: newRounds, groupsByRound: newGbr, rotations: newRot };
+    });
+    const byId = {};
+    applicable.forEach((pr) => {
+      (pr.assignments || []).forEach((a) => {
+        byId[a.id] = { round: pr.roundId, group: a.group, orderIndex: a.orderIndex };
+      });
+    });
+    if (Object.keys(byId).length) {
+      setGymnasts((prev) => prev.map((g) => (byId[g.id] ? { ...g, ...byId[g.id] } : g)));
+    }
+    setImportPlan(null);
+  };
+
+  /* ── Auto-populate the whole schedule ───────────────────── */
+  // Gymnasts are averaged across the rounds and each round gets one group per
+  // apparatus, so there is no group-count input. Redistribution moves
+  // gymnasts between rounds, so it is unavailable once any score exists.
+  const hasAnyScores = useMemo(
+    () => Object.keys(scores).some((k) => parseFloat(scores[k]) > 0),
+    [scores]
+  );
+  const autoPopDisabled = activeGymnasts.length === 0 || apparatus.length === 0 || hasAnyScores;
+  const autoPopDisabledReason =
+    activeGymnasts.length === 0 ? "Add gymnasts first"
+    : apparatus.length === 0 ? "Set up apparatus first"
+    : hasAnyScores ? "Scores have been submitted — auto-populate would move gymnasts between rounds"
+    : undefined;
+
+  const openAutoPopulate = () => {
+    if (readOnly || autoPopDisabled) return;
+    const groupTotal = Math.max(1, rounds.reduce((s, r) => s + (apparatus.length || 1) + restCount(compData, r.id), 0));
+    setAutoPop({
+      maxPerGroup: Math.max(1, Math.ceil(activeGymnasts.length / groupTotal)),
+      proposal: null,
+    });
+  };
+
+  const previewAutoPopulate = () => {
+    setAutoPop((a) => (a ? { ...a, proposal: proposeSchedule(compData, gymnasts, a.maxPerGroup) } : a));
+  };
+
+  // Replaces round, group and orderIndex for every active gymnast, and each
+  // round's group list. From here the existing drag-to-reorder and save-time
+  // numbering take over unchanged.
+  const applyAutoPopulate = () => {
+    const p = autoPop?.proposal;
+    if (!p) return;
+    setCompData((d) => {
+      const newGbr = { ...(d.groupsByRound || {}) };
+      p.rounds.forEach((rp) => { newGbr[rp.roundId] = rp.groups.map((g) => g.name); });
+      return { ...d, groupsByRound: newGbr };
+    });
+    const byId = {};
+    p.assignments.forEach((a) => { byId[a.id] = { round: a.round, group: a.group, orderIndex: a.orderIndex }; });
+    setGymnasts((prev) => prev.map((g) => (byId[g.id] ? { ...g, ...byId[g.id] } : g)));
+    setAutoPop(null);
+  };
+
+  /* ── Save: write numbers from the running order, then leave ── */
+  // Save is the single point where numbers are written: every gymnast is
+  // numbered sequentially from 1 in competition-wide running order, with
+  // unassigned gymnasts last. Runs on every save, at any competition status.
+  const handleSaveClick = () => {
+    const numbered = numberByRunningOrder(compData, gymnasts);
+    setGymnasts(numbered);
+    onBack(numbered);
+  };
+
   /* ── Drag handlers ──────────────────────────────────────── */
   const handleColumnDrop = (e, groupName) => {
     e.preventDefault();
@@ -320,7 +446,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
     if (readOnly) return;
     setCompData((d) => {
       const newRounds = [...(d.rounds || [])];
-      newRounds.push({ id: generateId(), name: `Round ${newRounds.length + 1}`, start: "", end: "" });
+      newRounds.push(newRound(`Round ${newRounds.length + 1}`));
       return { ...d, rounds: newRounds };
     });
   };
@@ -683,15 +809,15 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
           </div>
         )}
 
-        {apparatus.map((appFull, ci) => {
+        {Array.from({ length: colCount }, (_, ci) => {
           const gName = groups[ci] || null;
           const col = gName ? getColumnGymnasts(gName) : [];
-          const appName = getAppName(appFull);
-          const target = Math.ceil(activeGymnasts.length / (apparatus.length || 1));
+          const appName = getAppName(columnApp(ci));
+          const target = Math.ceil(activeGymnasts.length / (colCount || 1));
 
           return (
             <div
-              key={appFull}
+              key={ci}
               style={{ flex: "1 0 320px", display: "flex", flexDirection: "column", maxHeight: "100%" }}
               onDragOver={(e) => {
                 if (!gName) return;
@@ -924,7 +1050,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
      ================================================================ */
   const renderMobile = () => {
     const activeGroup = groups[mobileColumn] || "";
-    const activeApp = apparatus[mobileColumn];
+    const activeApp = columnApp(mobileColumn);
     const appName = activeApp ? getAppName(activeApp) : activeGroup;
     const col = activeGroup ? getColumnGymnasts(activeGroup) : [];
 
@@ -941,15 +1067,15 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
             flexShrink: 0,
           }}
         >
-          {apparatus.map((appFull, i) => {
+          {Array.from({ length: colCount }, (_, i) => {
             const active = mobileColumn === i;
             const gn = groups[i] || null;
             const cnt = gn ? getColumnGymnasts(gn).length : 0;
-            const an = getAppName(appFull);
+            const an = getAppName(columnApp(i));
 
             return (
               <button
-                key={appFull}
+                key={i}
                 onClick={() => setMobileColumn(i)}
                 style={{
                   display: "flex",
@@ -1125,7 +1251,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
   const renderBottomSheet = () => {
     if (!pickerOpen) return null;
     const activeGroup = groups[mobileColumn] || "";
-    const activeApp = apparatus[mobileColumn];
+    const activeApp = columnApp(mobileColumn);
     const appName = activeApp ? getAppName(activeApp) : activeGroup;
 
     const pickerList = unassigned
@@ -1376,10 +1502,10 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
         <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedInPanel.length} selected</span>
         <span style={{ fontSize: 12, opacity: 0.5 }}>·</span>
         <span style={{ fontSize: 12, opacity: 0.7 }}>Move to:</span>
-        {apparatus.map((appFull, i) => {
+        {Array.from({ length: colCount }, (_, i) => {
           const gn = groups[i] || null;
           const cnt = gn ? getColumnGymnasts(gn).length : 0;
-          const an = getAppName(appFull);
+          const an = getAppName(columnApp(i));
           if (!gn) return null;
           return (
             <button
@@ -1467,6 +1593,41 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {!isMobile && (
+            <button
+              onClick={() => exportScheduleXLSX(compData, gymnasts)}
+              disabled={gymnasts.length === 0}
+              title={gymnasts.length === 0 ? "Upload gymnasts before exporting the schedule" : undefined}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                background: "rgba(255,255,255,0.15)",
+                color: "var(--text-alternate)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                borderRadius: "var(--radius)",
+                cursor: gymnasts.length === 0 ? "not-allowed" : "pointer",
+                opacity: gymnasts.length === 0 ? 0.5 : 1,
+              }}
+            >
+              ⬇ Export XLSX
+            </button>
+          )}
+          {!readOnly && !isMobile && (
+            <button
+              onClick={() => importFileRef.current?.click()}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                background: "rgba(255,255,255,0.15)",
+                color: "var(--text-alternate)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                borderRadius: "var(--radius)",
+                cursor: "pointer",
+              }}
+            >
+              ⬆ Import XLSX
+            </button>
+          )}
           {!readOnly && !isMobile && (
             <button
               onClick={handleResetRound}
@@ -1484,7 +1645,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
             </button>
           )}
           <button
-            onClick={onBack}
+            onClick={handleSaveClick}
             style={{
               padding: "6px 18px",
               fontSize: 13,
@@ -1575,6 +1736,31 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
           </button>
         )}
 
+        {!readOnly && (
+          <button
+            onClick={openAutoPopulate}
+            disabled={autoPopDisabled}
+            title={autoPopDisabledReason}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 56,
+              fontSize: 12,
+              fontWeight: 600,
+              background: "transparent",
+              color: autoPopDisabled ? "var(--muted)" : "var(--brand-01)",
+              border: "1px solid var(--border)",
+              cursor: autoPopDisabled ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "var(--font-display)",
+              opacity: autoPopDisabled ? 0.6 : 1,
+            }}
+          >
+            ✨ Auto-populate
+          </button>
+        )}
+
+
+
         {!isMobile && (
           <div style={{ marginLeft: "auto", fontSize: 13, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
             {assignedCount} gymnasts assigned this round
@@ -1600,6 +1786,204 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, eventS
       {/* ── Overlays ──────────────────────────────────────── */}
       {renderBulkToolbar()}
       {renderBottomSheet()}
+
+      {/* ── XLSX import: hidden file input + preview modal ── */}
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".xlsx"
+        style={{ display: "none" }}
+        onChange={handleImportFile}
+      />
+      {/* ── Auto-populate modal: max size input, then preview ── */}
+      {autoPop && (() => {
+        const p = autoPop.proposal;
+        const totalExtra = p ? p.rounds.reduce((s, rp) => s + rp.extraGroups, 0) : 0;
+        return (
+          <div className="modal-backdrop" onClick={() => setAutoPop(null)}>
+            <div
+              className="modal-box"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: 560, width: "100%", textAlign: "left", fontFamily: "var(--font-display)", maxHeight: "82vh", overflowY: "auto" }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Auto-populate schedule</div>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 14, lineHeight: 1.6 }}>
+                Averages the {activeGymnasts.length} active gymnast{activeGymnasts.length !== 1 ? "s" : ""} across{" "}
+                {rounds.length} round{rounds.length !== 1 ? "s" : ""}, one rotation per apparatus plus each round's rest slots, with balanced
+                rotation sizes (±3 of each round's average). The maximum guides the rotation count and is a soft ceiling, not a hard cut-off.
+                Levels and clubs stay together where sizes allow, and no gymnast is left as the only one from their club <em>and</em> the
+                only one at their level in a rotation. Nothing is changed until you apply.
+              </div>
+
+              {!p && (
+                <div className="field" style={{ margin: "0 0 6px", maxWidth: 240 }}>
+                  <label className="label">Maximum gymnasts per rotation</label>
+                  <input
+                    className="input" type="number" min="1"
+                    value={autoPop.maxPerGroup}
+                    onChange={(e) => setAutoPop((a) => ({ ...a, maxPerGroup: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              )}
+
+              {p && (
+                <>
+                  {p.rounds.map((rp) => (
+                    <div key={rp.roundId} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{rp.roundName}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                          {rp.total} gymnast{rp.total !== 1 ? "s" : ""}
+                        </span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                          · rotation sizes {rp.groups.map((g) => g.count).join(" / ")}
+                        </span>
+                      </div>
+                      {rp.groups.map((g) => (
+                        <div key={g.name} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{g.name}</span>
+                          <span style={{ fontSize: 12, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                            {g.count} gymnast{g.count !== 1 ? "s" : ""}
+                          </span>
+                          <span style={{ fontSize: 11, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {g.levels.join(", ")}
+                          </span>
+                        </div>
+                      ))}
+                      {rp.extraGroups > 0 && (
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 4, display: "flex", gap: 6 }}>
+                          <span aria-hidden="true">⚠</span>
+                          <span>
+                            {rp.extraGroups} rotation{rp.extraGroups !== 1 ? "s" : ""} beyond this round's {rp.baseline} (apparatus + rest slots) —
+                            the maximum of {p.maxPerGroup} per rotation can't hold this round's share otherwise.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {p.overTarget.map((ot, i) => (
+                    <div key={`ot-${i}`} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 6, display: "flex", gap: 6 }}>
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        {ot.name} ({ot.roundName}) has {ot.count} gymnasts — {ot.count - ot.target} over its target of {ot.target}, kept to avoid splitting a club or isolating a gymnast.
+                      </span>
+                    </div>
+                  ))}
+                  {p.clubSplits.map((cs, i) => (
+                    <div key={`cs-${i}`} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 6, display: "flex", gap: 6 }}>
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        Club "{cs.club}" ({cs.level}) is split across rotations — {cs.placed} placed, {cs.remaining} carried into the next rotation.
+                      </span>
+                    </div>
+                  ))}
+                  {p.isolated.map((iso, i) => (
+                    <div key={`iso-${i}`} style={{ fontSize: 12, color: "var(--danger)", lineHeight: 1.6, marginTop: 6, display: "flex", gap: 6 }}>
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        {iso.name} ({iso.club}, {iso.level}) is still the only one from their club and at their level in {iso.group} ({iso.roundName}) — no suitable rotation had room. Consider placing them by hand.
+                      </span>
+                    </div>
+                  ))}
+                  {totalExtra === 0 && p.clubSplits.length === 0 && p.overTarget.length === 0 && p.isolated.length === 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
+                      No club splits, no isolated gymnasts, and every rotation is on its balanced target.
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                {p && (
+                  <button className="btn btn-ghost" onClick={() => setAutoPop((a) => ({ ...a, proposal: null }))} style={{ marginRight: "auto" }}>
+                    ← Adjust
+                  </button>
+                )}
+                <button className="btn btn-secondary" onClick={() => setAutoPop(null)}>Cancel</button>
+                {!p && <button className="btn btn-primary" onClick={previewAutoPopulate}>Preview →</button>}
+                {p && <button className="btn btn-primary" onClick={applyAutoPopulate}>Apply schedule</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {importPlan && (() => {
+        const canApply =
+          !importPlan.error &&
+          (importPlan.rounds || []).some((p) => !p.blocked && (p.agenda || p.groups || p.assignments));
+        return (
+          <div className="modal-backdrop" onClick={() => setImportPlan(null)}>
+            <div
+              className="modal-box"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: 580, width: "100%", textAlign: "left", fontFamily: "var(--font-display)", maxHeight: "82vh", overflowY: "auto" }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Import schedule — preview</div>
+              {importPlan.error ? (
+                <div style={{ fontSize: 13, color: "var(--danger)", lineHeight: 1.6, margin: "8px 0 16px" }}>
+                  {importPlan.error}
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 14, lineHeight: 1.6 }}>
+                    Nothing has been changed yet — review what each sheet will do, then apply.
+                  </div>
+
+                  {importPlan.rounds.length === 0 && (
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
+                      No sheets in this file match a round name. Sheets are matched to rounds by name (case and spacing don't matter).
+                    </div>
+                  )}
+
+                  {importPlan.rounds.map((pr) => (
+                    <div key={pr.roundId} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "10px 12px", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{pr.roundName}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>sheet “{pr.sheetName}”</span>
+                        {pr.blocked && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--danger)" }}>BLOCKED</span>
+                        )}
+                      </div>
+                      {!pr.blocked && (
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+                          <div>Agenda: {pr.agenda ? `replace with ${pr.agenda.length} entr${pr.agenda.length !== 1 ? "ies" : "y"}` : "unchanged"}</div>
+                          <div>Rotations: {pr.groups ? `${pr.groups.length} rotation${pr.groups.length !== 1 ? "s" : ""} with apparatus orders` : "unchanged"}</div>
+                          <div>Gymnasts: {pr.assignments ? `${pr.assignments.length} assignment${pr.assignments.length !== 1 ? "s" : ""} (row order sets running order)` : "unchanged"}</div>
+                        </div>
+                      )}
+                      {pr.warnings.map((w, wi) => (
+                        <div key={wi} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginTop: 6, display: "flex", gap: 6 }}>
+                          <span aria-hidden="true">⚠</span>
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  {importPlan.unmatchedSheets.length > 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 8, display: "flex", gap: 6 }}>
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        Sheet{importPlan.unmatchedSheets.length !== 1 ? "s" : ""} not matching any round (ignored):{" "}
+                        {importPlan.unmatchedSheets.join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+                <button className="btn btn-secondary" onClick={() => setImportPlan(null)}>Cancel</button>
+                <button className="btn btn-primary" disabled={!canApply} onClick={applyImportPlan}>
+                  Apply import
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

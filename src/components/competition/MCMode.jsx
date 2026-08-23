@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { gymnast_key, denseRank } from "../../lib/scoring.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
+import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
 
 function MCMode({ compData, gymnasts, scores }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
@@ -11,29 +12,29 @@ function MCMode({ compData, gymnasts, scores }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);
 
-  const getScore = (gid, app) => {
-    const v = parseFloat(scores[gymnast_key(activeRound, gid, app)]);
+  // Keyed on the gymnast's own round — a level ranked across rounds pools its
+  // gymnasts, each totalled from their own round's scores.
+  const getScore = (g, app) => {
+    const v = parseFloat(scores[gymnast_key(g.round || activeRound, g.id, app)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (gid) => scoringApparatus.reduce((s, a) => s + getScore(gid, a), 0);
+  const getTotal = (g) => scoringApparatus.reduce((s, a) => s + getScore(g, a), 0);
 
-  const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound && !g.dns), [gymnasts, activeRound]);
-
-  const buildRankGroups = () => {
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = compData.levels.find(l => l.id === g.level);
-      const levelName = levelObj?.name || "Unknown";
-      const rankBy = levelObj?.rankBy || "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
+  // Shared implementation. MC Mode's historical behaviour: empty age fallback,
+  // groups announced in alphabetical key order (not configured level order).
+  // A cross-round level is announced once, under its first participating
+  // round — never twice.
+  const buildRankGroups = () =>
+    sharedRankGroups(gymnasts.filter(g => !g.dns), {
+      levels: compData.levels || [],
+      ageFallback: "",
+      sortGroups: "keyAlpha",
+      roundId: activeRound,
+      rounds: compData.rounds,
+      crossRoundPlacement: "first",
     });
-    return Object.entries(map).sort(([a],[b]) => a.localeCompare(b)).map(([key, val]) => ({ key, ...val }));
-  };
 
-  const rankGroups = useMemo(buildRankGroups, [roundGymnasts, compData.levels]);
+  const rankGroups = useMemo(buildRankGroups, [gymnasts, compData, activeRound]);
 
   // Build flat announcement list: for each level group, gymnasts in reverse order (worst first → best last)
   const buildAnnouncementList = () => {
@@ -41,7 +42,7 @@ function MCMode({ compData, gymnasts, scores }) {
     rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
       const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
       if (view === "overall") {
-        const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }))
+        const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }))
           .filter(g => g.total > 0);
         const ranked = denseRank(withTotals, "total", rankingMode);
         // Reverse: announce from last place to first
@@ -59,7 +60,7 @@ function MCMode({ compData, gymnasts, scores }) {
           });
         });
       } else {
-        const withScores = glist.map(g => ({ ...g, score: getScore(g.id, activeApparatus) }))
+        const withScores = glist.map(g => ({ ...g, score: getScore(g, activeApparatus) }))
           .filter(g => g.score > 0);
         const ranked = denseRank(withScores, "score", rankingMode);
         const reversed = [...ranked].sort((a, b) => b.rank - a.rank);

@@ -527,6 +527,13 @@
   </div>
 </main>
 
+<script type="module">
+  // Shared ranking module — module scripts execute during parse, before any
+  // data has been fetched, so the classic script below can safely call these
+  // from its render functions.
+  import * as ranking from "./shared/ranking.js";
+  window.GymCompRanking = ranking;
+</script>
 <script>
   const SUPABASE_URL = "https://xjuwbgitqsvrmoejvzwb.supabase.co";
   const SUPABASE_KEY = "sb_publishable_7jhhejhXAH8hlX-gnsElnA_1ih0G-2f";
@@ -574,8 +581,8 @@
   const params = new URLSearchParams(location.search);
   const compId = params.get("comp");
 
-  // ── Score helpers ──
-  const sk = (rid, gid, app) => `${rid}__${gid}__${app}`;
+  // ── Score helpers (key format from the shared ranking module) ──
+  const sk = (rid, gid, app) => window.GymCompRanking.gymnast_key(rid, gid, app);
   const getScore = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
   const getScoringApparatus = () => (compData?.apparatus || []).filter(a => a !== "Rest");
   const getTotal = (rid, gid) => getScoringApparatus().reduce((s, a) => s + getScore(rid, gid, a), 0);
@@ -605,21 +612,10 @@
     return `<div class="col-score"><span class="score-inner" style="${style}">${v > 0 ? v.toFixed(3) : '<span class="no-score">—</span>'}</span></div>`;
   }
 
-  // ── Competition ranking. Equal scores share a rank. ──
-  // "standard" (default): next rank skips tied places (1, 1, 3)
-  // "dense": next rank does not skip (1, 1, 2)
+  // ── Competition ranking (shared implementation; mode from compData) ──
   function standardRank(items, scoreKey) {
     const mode = (compData && compData.rankingMode) || "standard";
-    // Quantise to 3dp for comparison only, so totals identical on screen tie.
-    const q = (item) => Math.round((Number(item[scoreKey]) || 0) * 1000) / 1000;
-    const sorted = [...items].sort((a, b) => q(b) - q(a));
-    let rank = 1;
-    return sorted.map((item, i) => {
-      if (i > 0 && q(sorted[i]) < q(sorted[i - 1])) {
-        rank = mode === "dense" ? rank + 1 : i + 1;
-      }
-      return { ...item, rank };
-    });
+    return window.GymCompRanking.denseRank(items, scoreKey, mode);
   }
 
   function escHtml(str) {
@@ -648,13 +644,23 @@
     return [...new Set(roundG.filter(g => {
       const lo = (compData.levels || []).find(l => l.id === g.level);
       return (lo ? lo.name : "Unknown") === levelFilter;
-    }).map(g => g.age || "Unknown"))].sort();
+    }).map(g => g.age || "Age not set"))].sort();
   }
 
   function isAgeFilterEnabled() {
     if (levelFilter === "all") return false;
     const lo = (compData.levels || []).find(l => l.name === levelFilter);
     return lo && lo.rankBy === "level+age";
+  }
+
+  // Age pill colours — same pastel scheme as the organiser app, indexed by
+  // first appearance across the whole competition so colours match everywhere
+  const AGE_PILL_COLORS = ["#E8D5F5","#D5E8F5","#D5F5E0","#F5EAD5","#F5D5D5","#D5F5F0","#F5D5EA","#E0F5D5","#D5D5F5","#F5F0D5"];
+  function ageColor(age) {
+    const ages = [];
+    (gymnasts || []).forEach(g => { if (g.age && !ages.includes(g.age)) ages.push(g.age); });
+    const i = ages.indexOf(age);
+    return i >= 0 ? AGE_PILL_COLORS[i % AGE_PILL_COLORS.length] : "var(--surface)";
   }
 
   // Strip "(WAG)" / "(MAG)" suffix from apparatus names
@@ -677,29 +683,13 @@
     renderPage();
   }
 
-  // ── Build level groups ──
+  // ── Build level groups (shared implementation, converged defaults) ──
   function buildRankGroups(rid) {
-    const roundGymnasts = gymnasts.filter(g => g.round === rid);
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = (compData.levels || []).find(l => l.id === g.level);
-      const levelName = levelObj ? levelObj.name : "Unknown";
-      const rankBy = levelObj ? (levelObj.rankBy || "level") : "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "Unknown") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
+    return window.GymCompRanking.buildRankGroups(gymnasts, {
+      levels: (compData.levels || []),
+      roundId: rid,
+      rounds: (compData.rounds || []),
     });
-    const levelOrder = (compData.levels || []).map(l => l.name);
-    return Object.entries(map)
-      .sort(([a], [b]) => {
-        const aLevel = a.split("|||")[0];
-        const bLevel = b.split("|||")[0];
-        const ai = levelOrder.indexOf(aLevel);
-        const bi = levelOrder.indexOf(bLevel);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      })
-      .map(([, val]) => val);
   }
 
   // ── Medal style (matches PDF exactly) ──
@@ -717,11 +707,11 @@
     const badgeBorder = rank > 6 ? `border:1.5px solid ${m.border};` : "";
 
     const scoreCells = apparatus.map(a => {
-      const s = getScore(rid, g.id, a);
+      const s = getScore(g.round, g.id, a);
       const isGroupBest = isOverall && s > 0 && levelMax[a] && s === levelMax[a];
       const hlBg = isGroupBest ? "background:#e3e3e3;" : "";
       const hlFw = isGroupBest ? "font-weight:600;" : "";
-      return `<div class="col-score"><span class="score-inner" style="${hlBg}${hlFw}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span>${s > 0 ? vaultFinalsHtml(rid, g.id, a, s) : ""}</div>`;
+      return `<div class="col-score"><span class="score-inner" style="${hlBg}${hlFw}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span>${s > 0 ? vaultFinalsHtml(g.round, g.id, a, s) : ""}</div>`;
     }).join("");
 
     const totalVal = isOverall
@@ -771,21 +761,25 @@
     const apparatus = getScoringApparatus();
     if (!groups.length) return `<div class="empty-msg">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
+    return groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
+      const crossPill = crossRound
+        ? `<span class="age-pill">Ranked across ${escHtml((roundIds || []).map(r => ((compData.rounds || []).find(x => x.id === r) || {}).name || "").filter(Boolean).join(" & "))}</span>`
+        : "";
       const titleRow = `<div class="level-title-row">
         <span class="level-name">${escHtml(levelName)}</span>
-        ${ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : ""}
+        ${ageLabel ? `<span class="age-pill" style="background:${ageColor(ageLabel)};border-color:transparent">${escHtml(ageLabel)}</span>` : ""}
+        ${crossPill}
       </div>
       <div class="level-divider"></div>`;
 
       const appSections = apparatus.map(app => {
-        const withScores = glist.map(g => ({ ...g, score: getScore(rid, g.id, app) }));
+        const withScores = glist.map(g => ({ ...g, score: getScore(g.round, g.id, app) }));
         const ranked = standardRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score");
         const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
         // Dual-vault section → break the two vault finals out into columns.
-        const showVaultCols = [...ranked, ...dns].some(g => scores[`${sk(rid, g.id, app)}__dualVault`] === "1");
+        const showVaultCols = [...ranked, ...dns].some(g => scores[`${sk(g.round, g.id, app)}__dualVault`] === "1");
         const vaultCols = (g) => showVaultCols
-          ? `${vaultColCellHtml(rid, g.id, app, "v1", g.score)}${vaultColCellHtml(rid, g.id, app, "v2", g.score)}`
+          ? `${vaultColCellHtml(g.round, g.id, app, "v1", g.score)}${vaultColCellHtml(g.round, g.id, app, "v2", g.score)}`
           : "";
         const dnsVaultCols = showVaultCols
           ? `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div><div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`
@@ -845,21 +839,25 @@
     const apparatus = getScoringApparatus();
     if (!groups.length) return `<div class="empty-msg">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, gymnasts: glist }) => {
+    return groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
+      const crossPill = crossRound
+        ? `<span class="age-pill">Ranked across ${escHtml((roundIds || []).map(r => ((compData.rounds || []).find(x => x.id === r) || {}).name || "").filter(Boolean).join(" & "))}</span>`
+        : "";
       const titleRow = `<div class="level-title-row">
         <span class="level-name">${escHtml(levelName)}</span>
-        ${ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : ""}
+        ${ageLabel ? `<span class="age-pill" style="background:${ageColor(ageLabel)};border-color:transparent">${escHtml(ageLabel)}</span>` : ""}
+        ${crossPill}
       </div>
       <div class="level-divider"></div>`;
 
-      const withTotals = glist.map(g => ({ ...g, total: getTotal(rid, g.id) }));
+      const withTotals = glist.map(g => ({ ...g, total: getTotal(g.round, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
       const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
 
       // Per-apparatus max for highlight (Overall view only)
       const levelMax = {};
       apparatus.forEach(a => {
-        const appScores = ranked.map(g => getScore(rid, g.id, a)).filter(s => s > 0);
+        const appScores = ranked.map(g => getScore(g.round, g.id, a)).filter(s => s > 0);
         if (appScores.length) levelMax[a] = Math.max(...appScores);
       });
 

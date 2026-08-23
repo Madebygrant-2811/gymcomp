@@ -37,6 +37,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
     judge: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 14V3a1 1 0 00-1-1H5a1 1 0 00-1 1v11M6 5h4M6 8h4M6 11h2"/></svg>,
     download: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>,
     home: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l6-5.5L14 8M3.5 9v4.5a1 1 0 001 1h7a1 1 0 001-1V9"/></svg>,
+    spanner: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.8 4.2a3.5 3.5 0 01-4.5 4.7l-4.9 4.9a1.55 1.55 0 01-2.2-2.2l4.9-4.9a3.5 3.5 0 014.7-4.5L9.6 4.4l.5 1.5 1.5.5 2.2-2.2z"/></svg>,
   };
 
   const NavItem = ({ icon, label, active, done, onClick, count, title: tip, disabled, badge, primary }) => (
@@ -65,6 +66,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
   const setupAnchors = [
     { id: "setup-basic", label: "Basic Info", icon: icons.info },
+    { id: "setup-config", label: "Configuration", icon: icons.spanner },
     { id: "setup-levels", label: "Levels", icon: icons.layers },
     { id: "setup-apparatus", label: "Apparatus", icon: icons.bars },
     { id: "setup-ages", label: "Age Ranges", icon: icons.users },
@@ -73,8 +75,8 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
   const dashAnchors = [
     { id: "card-overview", label: "Comp Overview", icon: icons.info },
     { id: "card-readiness", label: "Setup Checklist", icon: icons.check },
-    { id: "card-clubs", label: "Manage Clubs", icon: icons.club },
     { id: "card-gymnasts", label: "Manage Gymnasts", icon: icons.users },
+    { id: "card-clubs", label: "Manage Clubs", icon: icons.club },
     { id: "card-judges", label: "Manage Judges", icon: icons.judge },
     { id: "card-rounds-groups", label: "Rounds & Rotations", icon: icons.clock },
     { id: "card-documents", label: "Comp Documents", icon: icons.doc },
@@ -176,6 +178,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
           {screen === "active" && phase === "rounds-groups" && (<>
             <NavItem icon={icons.back} label="Back to Comp" onClick={onDashboard} />
           </>)}
+
 
           {/* ── active / phase 2 (competition) ── */}
           {screen === "active" && phase === 2 && (<>

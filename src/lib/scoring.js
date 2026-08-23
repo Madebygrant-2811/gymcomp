@@ -1,5 +1,18 @@
 import { NGA_COURTESY_SCORE, NGA_FALL_PENALTY } from './constants.js';
 
+// Ranking sort and score-key builder live in the shared module so the
+// standalone public pages use the identical implementation.
+export { denseRank, gymnast_key, quantise3 } from '../../public/shared/ranking.js';
+
+// ── FIG execution baseline ───────────────────────────────────
+// An E score is eScoreStart − the judge's deduction. Configurable per
+// competition (Competition Configuration page); anything unset or invalid
+// falls back to the standard FIG baseline of 10.
+export function getEScoreStart(compData) {
+  const v = parseFloat(compData?.eScoreStart);
+  return isNaN(v) || v <= 0 ? 10 : v;
+}
+
 // ── NGA scoring ──────────────────────────────────────────────
 /**
  * Calculate NGA final score.
@@ -22,29 +35,6 @@ export function calculateNGAScore(sv, judgeDeductions = [], neutralDeductions = 
   const rounded = Math.round(raw * 1000) / 1000;
 
   return Math.max(NGA_COURTESY_SCORE, rounded);
-}
-
-// Competition ranking. Equal scores always share a rank.
-// mode "standard" (default): next rank skips tied places (1, 1, 3)
-// mode "dense": next rank does not skip (1, 1, 2)
-export const denseRank = (items, scoreKey, mode = "standard") => {
-  // Quantise to 3dp (the precision scores are displayed/judged at) for comparison
-  // only, so floating-point sums that are identical on screen share a rank.
-  const q = (item) => Math.round((Number(item[scoreKey]) || 0) * 1000) / 1000;
-  const sorted = [...items].sort((a, b) => q(b) - q(a));
-  const result = [];
-  let rank = 1;
-  for (let i = 0; i < sorted.length; i++) {
-    if (i > 0 && q(sorted[i]) < q(sorted[i - 1])) {
-      rank = mode === "dense" ? rank + 1 : i + 1;
-    }
-    result.push({ ...sorted[i], rank });
-  }
-  return result;
-};
-
-export function gymnast_key(roundId, gymnastId, apparatus) {
-  return `${roundId}__${gymnastId}__${apparatus}`;
 }
 
 // ── Dual vault detection ─────────────────────────────────────────────────

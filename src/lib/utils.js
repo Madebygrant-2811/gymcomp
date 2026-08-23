@@ -1,3 +1,5 @@
+import { DEFAULT_ROUND_AGENDA } from "./constants.js";
+
 // ============================================================
 // PIN HASHING (SHA-256 via Web Crypto API — no dependencies)
 // ============================================================
@@ -30,6 +32,26 @@ export function generateClubCode(existingCodes = []) {
   return code;
 }
 
+// Factory for a new round: seeds the default agenda entries with no times set.
+// Agenda entries are { id, label, start, end } — start required, end optional.
+export const newRound = (name) => ({
+  id: generateId(),
+  name,
+  start: "",
+  end: "",
+  agenda: DEFAULT_ROUND_AGENDA.map(label => ({ id: generateId(), label, start: "", end: "" })),
+});
+
+// Round window derived from its agenda: earliest item start → latest item end
+// (an item with no end contributes its start). When a round has agenda items,
+// its start/end are driven by them rather than set by hand. "HH:MM" strings
+// sort correctly as text.
+export const agendaWindow = (agenda = []) => {
+  const starts = agenda.map(e => e.start).filter(Boolean).sort();
+  const ends = agenda.map(e => e.end || e.start).filter(Boolean).sort();
+  return { start: starts[0] || "", end: ends.length ? ends[ends.length - 1] : "" };
+};
+
 export const todayStr = () => new Date().toISOString().split("T")[0];
 export const isFutureOrToday = (dateStr) => !!dateStr && dateStr >= todayStr();
 
@@ -43,7 +65,8 @@ export const round2dp = (val) => {
 // Collapse multiple spaces and trim
 export const normalizeStr = (s) => (s || "").replace(/\s+/g, " ").trim();
 
-// Auto-rotate apparatus for all groups: group gi starts at offset gi
+// Auto-rotate apparatus for all groups: group gi starts at offset gi.
+// Fallback used when a round has no stored entry in compData.rotations.
 export function buildRotations(groups, apparatus, existingRotations) {
   if (!groups.length || !apparatus.length) return existingRotations;
   // Use Group 1's order as the base; cascade remaining groups by shifting
@@ -106,10 +129,10 @@ export function svgToPng(svgFile, maxWidth = 512) {
 }
 
 export function downloadTemplate() {
-  const headers = ["Name", "Number", "Club", "Level", "Age"];
+  const headers = ["Name", "Club", "Level", "Age"];
   const rows = [
-    ["Jane Smith", "1", "Club Alpha", "Development 1", "9 years"],
-    ["Emily Jones", "2", "Club Beta", "Development 2", "10 years"],
+    ["Jane Smith", "Club Alpha", "Development 1", "9 years"],
+    ["Emily Jones", "Club Beta", "Development 2", "10 years"],
   ];
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });

@@ -51,10 +51,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     return String(n);
   };
 
-  const blankForm = (gymnasts = data) => ({
-    name: "", level: "",
-    number: nextNumber(gymnasts), age: ""
-  });
+  const blankForm = () => ({ name: "", level: "", age: "" });
   const [newG, setNewG] = useState(() => blankForm());
 
 
@@ -80,9 +77,10 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
   };
 
   const commit = () => {
-    const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), club: selectedClub, id: generateId(), round: "", group: "" };
+    // Numbers come from running order — a new gymnast just takes the next unused one.
+    const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), number: nextNumber(data), club: selectedClub, id: generateId(), round: "", group: "" };
     setData(d => [...d, gymnast]);
-    setNewG(blankForm([...data, gymnast]));
+    setNewG(blankForm());
     setFormWarnings([]);
     setFieldErrors({});
   };
@@ -150,12 +148,18 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
       const newLevels = []; // levels from CSV not yet in setup
       const newAges = [];   // age ranges from CSV not yet in setup
 
+      // Numbers come from running order — imported gymnasts take the next unused ones.
+      const usedNumbers = new Set(data.map(g => parseInt(g.number)).filter(n => !isNaN(n)));
+      let numCursor = 1;
+      const takeNextNumber = () => {
+        while (usedNumbers.has(numCursor)) numCursor++;
+        usedNumbers.add(numCursor);
+        return String(numCursor);
+      };
+
       rows.forEach((row, i) => {
         const rowNum = i + 2;
         if (!row.name) { errors.push(`Row ${rowNum}: missing Name — skipped`); return; }
-        if (row.number && data.find(x => x.number === row.number)) {
-          errors.push(`Row ${rowNum}: number #${row.number} already taken — skipped`); return;
-        }
 
         // Auto-add unknown levels
         let levelObj = compData.levels.find(l => l.name.toLowerCase() === (row.level || "").toLowerCase())
@@ -190,7 +194,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
           }
         }
 
-        toAdd.push({ id: generateId(), name: row.name, number: row.number, club: clubName, level: levelObj ? levelObj.id : "", round: "", age: ageName, group: "" });
+        toAdd.push({ id: generateId(), name: row.name, number: takeNextNumber(), club: clubName, level: levelObj ? levelObj.id : "", round: "", age: ageName, group: "" });
       });
 
       setCsvWarnings({ errors, warns });
@@ -332,11 +336,6 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
             <label className="label">Name</label>
             <input className="input" placeholder="Full name" value={newG.name} style={fieldErrors.name ? errBorder : {}}
               onChange={e => { setNewG(g => ({ ...g, name: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.name; return n; }); }} />
-          </div>
-          <div className="field">
-            <label className="label">Number</label>
-            <input className="input" placeholder="e.g. 42" value={newG.number}
-              onChange={e => setNewG(g => ({ ...g, number: e.target.value }))} />
           </div>
           <div className="field">
             <label className="label">Level</label>

@@ -1,17 +1,34 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { denseRank, gymnast_key } from "../../lib/scoring.js";
+import { roundRunningOrderCompare } from "../../lib/rotations.js";
+import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
+import { printDocument, buildOrganiserViewHTML } from "../../lib/pdf.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
+// Organiser-view regrouping dimensions (session-only; never touches compData)
+const ORGANISER_DIMS = [
+  { value: "level", label: "Level (no age split)" },
+  { value: "age", label: "Age" },
+  { value: "level+age", label: "Level + Age" },
+  { value: "club", label: "Club" },
+  { value: "all", label: "Whole competition" },
+];
 
-function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData }) {
+
+function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("apparatus");
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [levelFilter, setLevelFilter] = useState("all");
   const [ageFilter, setAgeFilter] = useState("all");
+  // Organiser view — session state only: never written to compData, never
+  // persisted, reset on reload.
+  const [organiserDim, setOrganiserDim] = useState("level");
+  const [organiserScope, setOrganiserScope] = useState("round"); // "round" | "all"
+  const [cutLine, setCutLine] = useState("");
   const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Ranking mode is configured on the Competition Configuration page
   const rankingMode = compData.rankingMode || "standard";
-  const setRankingMode = (mode) => onUpdateCompData?.(prev => ({ ...prev, rankingMode: mode }));
 
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
 
@@ -35,7 +52,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
     ? [...new Set(roundGymnasts.filter(g => {
         const lo = compData.levels.find(l => l.id === g.level);
         return (lo?.name || "Unknown") === levelFilter;
-      }).map(g => g.age || "Unknown age"))].sort()
+      }).map(g => g.age || "Age not set"))].sort()
     : [], [roundGymnasts, compData.levels, levelFilter, showAgeFilter]);
 
   // Reset age filter when level changes to one without age ranking
@@ -43,21 +60,23 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
     if (!showAgeFilter) setAgeFilter("all");
   }, [showAgeFilter]);
 
-  const getScore = (gid, apparatus) => {
-    const v = parseFloat(scores[gymnast_key(activeRound, gid, apparatus)]);
+  // Score lookups key on the gymnast's OWN round — for a level ranked across
+  // rounds, pooled gymnasts keep their own round's scores.
+  const getScore = (g, apparatus) => {
+    const v = parseFloat(scores[gymnast_key(g.round || activeRound, g.id, apparatus)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (gid) => scoringApparatus.reduce((s, a) => s + getScore(gid, a), 0);
+  const getTotal = (g) => scoringApparatus.reduce((s, a) => s + getScore(g, a), 0);
 
   // ── Dual-vault per-vault finals (display only) ──
   // Flag-driven, never mode-driven: when a row carries the persisted dualVault
   // flag we show both stored vault finals beneath the combined total. The total
   // (final_score) stays the ranked / all-around value, untouched.
-  const subScore = (gid, app, sub) => scores[`${gymnast_key(activeRound, gid, app)}__${sub}`];
-  const renderVaultFinals = (gid, app, total) => {
-    if (subScore(gid, app, "dualVault") !== "1") return null;
-    const v1 = parseFloat(subScore(gid, app, "v1fin")) || 0;
-    const v2 = parseFloat(subScore(gid, app, "v2fin")) || 0;
+  const subScore = (g, app, sub) => scores[`${gymnast_key(g.round || activeRound, g.id, app)}__${sub}`];
+  const renderVaultFinals = (g, app, total) => {
+    if (subScore(g, app, "dualVault") !== "1") return null;
+    const v1 = parseFloat(subScore(g, app, "v1fin")) || 0;
+    const v2 = parseFloat(subScore(g, app, "v2fin")) || 0;
     if (v1 <= 0 && v2 <= 0) return null;
     const counts = (v) => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
     const line = (label, v) => v > 0 ? (
@@ -71,43 +90,71 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
   };
 
   // Per-apparatus dual-vault columns (Vault 1 / Vault 2). Flag-driven.
-  const isDualVaultRow = (gid, app) => subScore(gid, app, "dualVault") === "1";
-  const vaultFinal = (gid, app, prefix) => parseFloat(subScore(gid, app, `${prefix}fin`)) || 0;
+  const isDualVaultRow = (g, app) => subScore(g, app, "dualVault") === "1";
+  const vaultFinal = (g, app, prefix) => parseFloat(subScore(g, app, `${prefix}fin`)) || 0;
   const vaultEqualsTotal = (v, total) => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
-  const vaultColCell = (gid, app, prefix, total) => {
-    if (!isDualVaultRow(gid, app)) return <td style={{ color: "var(--muted)" }}>—</td>;
-    const v = vaultFinal(gid, app, prefix);
+  const vaultColCell = (g, app, prefix, total) => {
+    if (!isDualVaultRow(g, app)) return <td style={{ color: "var(--muted)" }}>—</td>;
+    const v = vaultFinal(g, app, prefix);
     const hot = vaultEqualsTotal(v, total);
     return <td style={{ fontWeight: hot ? 700 : 500, color: hot ? "var(--accent)" : "var(--muted)" }}>{v > 0 ? v.toFixed(3) : "—"}</td>;
   };
 
-  // Build ranking groups respecting level rankBy config
-  const buildRankGroups = () => {
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = compData.levels.find(l => l.id === g.level);
-      const levelName = levelObj?.name || "Unknown";
-      const rankBy = levelObj?.rankBy || "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "Unknown age") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
+  // Build ranking groups respecting level rankBy config (shared implementation;
+  // gymnasts sorted by running order within each group). Passing the full list
+  // with roundId lets a competition-scoped level pool across its rounds — the
+  // combined group shows under every round tab it spans, badged below.
+  const buildRankGroups = () =>
+    sharedRankGroups(gymnasts, {
+      levels: compData.levels || [],
+      roundId: activeRound,
+      rounds: compData.rounds,
+      sortGymnasts: roundRunningOrderCompare(compData, activeRound),
     });
-    // Sort gymnasts by number within each group
-    Object.values(map).forEach(g => g.gymnasts.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
-    const levelOrder = (compData.levels || []).map(l => l.name);
-    return Object.entries(map)
-      .sort(([a], [b]) => {
-        const aLevel = a.split("|||")[0];
-        const bLevel = b.split("|||")[0];
-        const ai = levelOrder.indexOf(aLevel);
-        const bi = levelOrder.indexOf(bLevel);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      })
-      .map(([key, val]) => ({ key, ...val }));
-  };
 
-  const allRankGroups = useMemo(buildRankGroups, [roundGymnasts, compData.levels]);
+  const allRankGroups = useMemo(buildRankGroups, [gymnasts, compData, activeRound]);
+
+  // Organiser regrouping — same scores, organiser-chosen dimension and scope.
+  // "all" pools every gymnast across the rounds, each totalled from their own
+  // round's scores. Awards and every public surface keep using the official
+  // rankBy grouping above.
+  const organiserPool = useMemo(
+    () => (organiserScope === "all" ? gymnasts.filter(g => g.round) : roundGymnasts),
+    [organiserScope, gymnasts, roundGymnasts]
+  );
+  const organiserGroups = useMemo(() => {
+    if (view !== "organiser") return [];
+    return sharedRankGroups(organiserPool, {
+      levels: compData.levels || [],
+      dimension: organiserDim,
+      sortGroups: (organiserDim === "age" || organiserDim === "club") ? "keyAlpha" : "levelOrder",
+    });
+  }, [view, organiserDim, organiserPool, compData]);
+  // Total from the gymnast's OWN round — identical to getTotal in round scope
+  const organiserTotal = (g) => scoringApparatus.reduce((s, a) => {
+    const v = parseFloat(scores[gymnast_key(g.round, g.id, a)]);
+    return s + (isNaN(v) ? 0 : v);
+  }, 0);
+  const cutN = Math.max(0, parseInt(cutLine) || 0);
+  const levelNameOf = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
+  const roundNameOf = (id) => compData.rounds.find(r => r.id === id)?.name || "—";
+  const orgAllRounds = organiserScope === "all";
+  const orgColCount = orgAllRounds ? 8 : 7;
+
+  const exportOrganiserPdf = () => {
+    const dimLabel = ORGANISER_DIMS.find(d => d.value === organiserDim)?.label || organiserDim;
+    printDocument(
+      buildOrganiserViewHTML(compData, gymnasts, scores, {
+        scope: organiserScope,
+        roundId: activeRound,
+        roundName: roundNameOf(activeRound),
+        dimension: organiserDim,
+        dimensionLabel: dimLabel,
+        cutLine: cutN,
+      }),
+      "gymcomp-organiser-view.pdf"
+    );
+  };
   const rankGroups = allRankGroups.filter(rg => {
     if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
     if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
@@ -158,6 +205,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
             onClick={() => setView("apparatus")}>Per Apparatus</button>
           <button className={`btn ${view === "overall" ? "btn-tertiary" : "btn-secondary"}`}
             onClick={() => setView("overall")}>Overall</button>
+          <button className={`btn ${view === "organiser" ? "btn-tertiary" : "btn-secondary"}`}
+            onClick={() => setView("organiser")}>Organiser View</button>
         </div>
         <div className="tabs" style={{ marginBottom: 0 }}>
           {compData.rounds.map(r => (
@@ -165,19 +214,6 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
               onClick={() => { setActiveRound(r.id); setLevelFilter("all"); setAgeFilter("all"); }}>{r.name}</button>
           ))}
         </div>
-        {onUpdateCompData && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginLeft: "auto", fontFamily: "var(--font-display)" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)" }}>Tie ranking</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className={`btn btn-sm ${rankingMode === "standard" ? "btn-tertiary" : "btn-secondary"}`}
-                style={{ fontFamily: "var(--font-display)" }}
-                onClick={() => setRankingMode("standard")}>Standard — ties skip places (1, 1, 3)</button>
-              <button className={`btn btn-sm ${rankingMode === "dense" ? "btn-tertiary" : "btn-secondary"}`}
-                style={{ fontFamily: "var(--font-display)" }}
-                onClick={() => setRankingMode("dense")}>Dense — ties keep places (1, 1, 2)</button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* PER APPARATUS VIEW
@@ -190,6 +226,11 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
+                  {rankGroups.find(r => r.key === key)?.crossRound && (
+                    <span style={{ fontSize: 12, fontWeight: 600, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--text-primary)", padding: "3px 10px", borderRadius: 99 }}>
+                      Ranked across {(rankGroups.find(r => r.key === key)?.roundIds || []).map(roundNameOf).join(" & ")}
+                    </span>
+                  )}
                   {idx === 0 && <>
                     <div style={{ flex: 1 }} />
                     <div className="results-filters">
@@ -212,11 +253,11 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                   </>}
                 </div>
                 {scoringApparatus.map(apparatus => {
-                  const withScores = glist.map(g => ({ ...g, score: getScore(g.id, apparatus) }));
+                  const withScores = glist.map(g => ({ ...g, score: getScore(g, apparatus) }));
                   const ranked = denseRank(withScores.filter(g => g.score > 0 && !g.dns && !g.withdrawn), "score", rankingMode);
                   const dns = withScores.filter(g => g.score === 0 || g.dns || g.withdrawn);
                   // Dual-vault section → break the two vault finals out into columns.
-                  const showVaultCols = [...ranked, ...dns].some(g => isDualVaultRow(g.id, apparatus));
+                  const showVaultCols = [...ranked, ...dns].some(g => isDualVaultRow(g, apparatus));
                   return (
                     <div key={apparatus} style={{ marginBottom: 24 }}>
                       <div className="sub-group-label">{apparatus}</div>
@@ -236,7 +277,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                                {showVaultCols && <>{vaultColCell(g.id, apparatus, "v1", g.score)}{vaultColCell(g.id, apparatus, "v2", g.score)}</>}
+                                {showVaultCols && <>{vaultColCell(g, apparatus, "v1", g.score)}{vaultColCell(g, apparatus, "v2", g.score)}</>}
                                 <td><strong>{g.score.toFixed(3)}</strong></td>
                               </tr>
                             ))}
@@ -268,13 +309,18 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
       {view === "overall" && (
         <div>
           {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
-            const withTotals = glist.map(g => ({ ...g, total: getTotal(g.id) }));
+            const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
             const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
             const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
             return (
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
+                  {rankGroups.find(r => r.key === key)?.crossRound && (
+                    <span style={{ fontSize: 12, fontWeight: 600, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--text-primary)", padding: "3px 10px", borderRadius: 99 }}>
+                      Ranked across {(rankGroups.find(r => r.key === key)?.roundIds || []).map(roundNameOf).join(" & ")}
+                    </span>
+                  )}
                   {idx === 0 && <>
                     <div style={{ flex: 1 }} />
                     <div className="results-filters">
@@ -314,8 +360,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
                           {scoringApparatus.map(a => (
                             <td key={a} style={{ color: "var(--muted)" }}>
-                              {getScore(g.id, a) > 0 ? getScore(g.id, a).toFixed(3) : "—"}
-                              {getScore(g.id, a) > 0 && renderVaultFinals(g.id, a, getScore(g.id, a))}
+                              {getScore(g, a) > 0 ? getScore(g, a).toFixed(3) : "—"}
+                              {getScore(g, a) > 0 && renderVaultFinals(g, a, getScore(g, a))}
                             </td>
                           ))}
                           <td><strong style={{ color: "var(--accent)" }}>{g.total.toFixed(3)}</strong></td>
@@ -338,6 +384,123 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete, onUpdateCompData
             );
           })}
           {rankGroups.length === 0 && <div className="empty">No results to display yet</div>}
+        </div>
+      )}
+
+      {/* ORGANISER VIEW
+          Same scores regrouped on an organiser-chosen dimension — a planning
+          aid (e.g. qualification cuts), never official results. Session state
+          only; awards and public surfaces are untouched. */}
+      {view === "organiser" && (
+        <div>
+          {/* Persistent unofficial banner */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", marginBottom: 16,
+            background: "rgba(245,158,11,0.08)", border: "1px solid var(--warn)", borderRadius: "var(--radius)",
+            fontFamily: "var(--font-display)",
+          }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--warn)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M8 2L1.5 13.5h13L8 2zM8 6.5v3.5M8 12.2v.01" />
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)" }}>
+              Organiser view — regrouped for planning. Not official results; awards and public pages use the competition's configured grouping.
+            </span>
+          </div>
+
+          {/* Controls — session only, reset on reload */}
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 20, fontFamily: "var(--font-display)" }}>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="label">Scope</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className={`btn btn-sm ${organiserScope === "round" ? "btn-tertiary" : "btn-secondary"}`}
+                  style={{ fontFamily: "var(--font-display)" }}
+                  onClick={() => setOrganiserScope("round")}>This round</button>
+                <button className={`btn btn-sm ${organiserScope === "all" ? "btn-tertiary" : "btn-secondary"}`}
+                  style={{ fontFamily: "var(--font-display)" }}
+                  onClick={() => setOrganiserScope("all")}>Whole competition</button>
+              </div>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="label">Group by</label>
+              <select className="select" value={organiserDim}
+                onChange={e => setOrganiserDim(e.target.value)}
+                style={{ width: "auto", minWidth: 180 }}>
+                {ORGANISER_DIMS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label className="label">Cut line (top N per group)</label>
+              <input className="input" type="number" min="1" placeholder="None"
+                value={cutLine} onChange={e => setCutLine(e.target.value)}
+                style={{ width: 140 }} />
+            </div>
+            <button className="btn btn-secondary" onClick={exportOrganiserPdf} style={{ fontFamily: "var(--font-display)" }}>
+              ⬇ Export PDF
+            </button>
+          </div>
+
+          {organiserGroups.map(grp => {
+            const label = [grp.levelName, grp.ageLabel].filter(Boolean).join(" — ") || "Whole competition";
+            const withTotals = grp.gymnasts.map(g => ({ ...g, total: organiserTotal(g) }));
+            const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
+            const rest = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
+            return (
+              <div key={grp.key} className="results-level-card">
+                <div className="results-level-header">{label}</div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rank</th><th>#</th><th>Gymnast</th><th>Club</th><th>Level</th><th>Age</th>
+                        {orgAllRounds && <th>Round</th>}
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ranked.map((g, i) => (
+                        <Fragment key={g.id}>
+                          <tr>
+                            <td>{rankBadge(g.rank)}</td>
+                            <td style={{ color: "var(--muted)" }}>{g.number}</td>
+                            <td style={{ fontWeight: 500 }}>{g.name}</td>
+                            <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>{levelNameOf(g.level)}</td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "—"}</td>
+                            {orgAllRounds && <td style={{ color: "var(--muted)", fontSize: 12 }}>{roundNameOf(g.round)}</td>}
+                            <td><strong>{g.total.toFixed(3)}</strong></td>
+                          </tr>
+                          {cutN > 0 && i === cutN - 1 && i < ranked.length - 1 && (
+                            <tr>
+                              <td colSpan={orgColCount} style={{
+                                borderTop: "3px solid var(--warn)", background: "rgba(245,158,11,0.08)",
+                                color: "var(--warn)", fontWeight: 800, fontSize: 10, letterSpacing: "1px",
+                                textTransform: "uppercase", padding: "4px 12px", fontFamily: "var(--font-display)",
+                              }}>
+                                Cut line — top {cutN}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                      {rest.map(g => (
+                        <tr key={g.id} style={{ opacity: 0.45 }}>
+                          <td>{rankBadge(null, g.withdrawn ? "WD" : g.dns ? "DNS" : "—")}</td>
+                          <td style={{ color: "var(--muted)" }}>{g.number}</td>
+                          <td style={{ fontWeight: 500 }}>{g.name}</td>
+                          <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{levelNameOf(g.level)}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "—"}</td>
+                          {orgAllRounds && <td style={{ color: "var(--muted)", fontSize: 12 }}>{roundNameOf(g.round)}</td>}
+                          <td style={{ color: "var(--muted)" }}>—</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+          {organiserGroups.length === 0 && <div className="empty">No results to display yet</div>}
         </div>
       )}
 

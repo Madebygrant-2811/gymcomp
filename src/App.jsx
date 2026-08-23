@@ -97,7 +97,17 @@ function applyApparatusReorder(prev, next, currentGymnasts) {
   const remappedGymnasts = (currentGymnasts || []).map((g) =>
     g.group && remap.labelMap[String(g.group)] ? { ...g, group: remap.labelMap[String(g.group)] } : g
   );
-  return { next: { ...next, groupsByRound: remap.groupsByRound }, remappedGymnasts };
+  // Stored per-group apparatus orders follow the group relabel unchanged — a
+  // pure apparatus reorder never resets them, it only renames their keys.
+  const newRotations = {};
+  Object.entries(next.rotations || {}).forEach(([rid, byGroup]) => {
+    const remappedGroups = {};
+    Object.entries(byGroup || {}).forEach(([grp, order]) => {
+      remappedGroups[remap.labelMap[grp] || grp] = order;
+    });
+    newRotations[rid] = remappedGroups;
+  });
+  return { next: { ...next, groupsByRound: remap.groupsByRound, rotations: newRotations }, remappedGymnasts };
 }
 
 // ============================================================
@@ -200,7 +210,21 @@ export default function App() {
   // ── Auth initialisation ──────────────────────────────────────────────────
   const loadUserProfile = async (user) => {
     try {
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+      if (error) {
+        // The fetch FAILED (network/RLS) — that is not the same as "no profile
+        // exists". Never route to onboarding here: it would trap the user and,
+        // if they filled it in, overwrite their real profile with blanks. Land
+        // on the dashboard; the account name falls back to their email.
+        console.error("Profile load failed:", error.message);
+        setCurrentProfile(null);
+        setAuthLoading(false);
+        if (!hasAuthed.current) {
+          hasAuthed.current = true;
+          setScreen("org-dashboard");
+        }
+        return;
+      }
       setCurrentProfile(profile || null);
       setAuthLoading(false);
       // Only navigate on initial auth — not on token refreshes that re-trigger loadUserProfile
@@ -802,7 +826,7 @@ export default function App() {
       src.rounds = (src.rounds || []).map(r => {
         const newId = generateId();
         roundMap[r.id] = newId;
-        return { ...r, id: newId };
+        return { ...r, id: newId, agenda: (r.agenda || []).map(e => ({ ...e, id: generateId() })) };
       });
       // Remap groupsByRound keys
       if (src.groupsByRound) {
@@ -812,6 +836,33 @@ export default function App() {
           if (newRid) newGbr[newRid] = groups;
         });
         src.groupsByRound = newGbr;
+      }
+      // Remap per-round cycle orders the same way
+      if (src.cycleByRound) {
+        const newCycles = {};
+        Object.entries(src.cycleByRound).forEach(([oldRid, order]) => {
+          const newRid = roundMap[oldRid];
+          if (newRid) newCycles[newRid] = order;
+        });
+        src.cycleByRound = newCycles;
+      }
+      // Remap per-round rest slots the same way
+      if (src.restsByRound) {
+        const newRests = {};
+        Object.entries(src.restsByRound).forEach(([oldRid, n]) => {
+          const newRid = roundMap[oldRid];
+          if (newRid) newRests[newRid] = n;
+        });
+        src.restsByRound = newRests;
+      }
+      // Remap stored rotation keys the same way
+      if (src.rotations) {
+        const newRot = {};
+        Object.entries(src.rotations).forEach(([oldRid, byGroup]) => {
+          const newRid = roundMap[oldRid];
+          if (newRid) newRot[newRid] = byGroup;
+        });
+        src.rotations = newRot;
       }
       const freshCodes = [];
       if (mode === "full") {
@@ -1005,7 +1056,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
     if (screen !== "active" || phase !== 1) { setActiveSection(""); return; }
-    const ids = ["setup-basic","setup-levels","setup-apparatus","setup-ages"];
+    const ids = ["setup-basic","setup-config","setup-levels","setup-apparatus","setup-ages"];
     const root = appMainRef.current;
     if (!root) return;
     const observer = new IntersectionObserver((entries) => {
@@ -1551,11 +1602,16 @@ export default function App() {
             gymnasts={gymnasts}
             setCompData={setCompData}
             setGymnasts={setGymnastsWithSync}
+            scores={scores}
             eventStatus={eventStatus}
-            onBack={() => {
+            onBack={(nextGymnasts) => {
+              // Save may hand us a list with freshly assigned numbers — the state
+              // update hasn't committed yet, so push that rather than the stale
+              // closure value.
+              const g = Array.isArray(nextGymnasts) ? nextGymnasts : gymnasts;
               if (syncTimer.current) clearTimeout(syncTimer.current);
-              pushToSupabase(compData, gymnasts);
-              if (currentEventId) snapshotWithPin(currentEventId, compData, gymnasts);
+              pushToSupabase(compData, g);
+              if (currentEventId) snapshotWithPin(currentEventId, compData, g);
               setPhase("dashboard");
             }}
           />
@@ -1583,7 +1639,6 @@ export default function App() {
         <ErrorBoundary label="results">
         <div style={{ flex: 1 }}>
           <Phase2_Step2 compData={compData} gymnasts={gymnasts} scores={scores}
-            onUpdateCompData={setCompData}
             onComplete={currentEventId && eventStatus !== "completed" ? handleCompleteComp : undefined} />
         </div>
         </ErrorBoundary>

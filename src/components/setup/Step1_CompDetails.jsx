@@ -1,22 +1,15 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { generateId, isFutureOrToday, todayStr, getContrastTextColor, svgToPng } from "../../lib/utils.js";
-import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, SCORING_MODES } from "../../lib/constants.js";
+import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, sortApparatus } from "../../lib/constants.js";
 import { supabase } from "../../lib/supabase.js";
 
 import AddressLookup from "../shared/AddressLookup.jsx";
+import CompConfigSections from "./CompConfigSections.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser, scores = {} }) {
   const [pendingRemove, setPendingRemove] = useState(null);
-  const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" — awaiting confirmation
-  const [vaultModeWarn, setVaultModeWarn] = useState(false); // shown after changing vaultMode on a comp with scored vaults
-
-  // Any vault with a positive final already entered? (base key = round__gid__apparatus)
-  const hasScoredVault = useMemo(() => Object.keys(scores || {}).some(k => {
-    const parts = k.split("__");
-    return parts.length === 3 && parts[2].toLowerCase().includes("vault") && (parseFloat(scores[k]) || 0) > 0;
-  }), [scores]);
   const [newLevel, setNewLevel] = useState("");
   const [newAgeRange, setNewAgeRange] = useState("");
   const [editingAgeIdx, setEditingAgeIdx] = useState(null);
@@ -24,8 +17,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const [showWarnings, setShowWarnings] = useState(false);
   const [topbarHidden, setTopbarHidden] = useState(false);
   const lastScrollY = useRef(0);
-  const appDragFrom = useRef(null);
-  const appTouchFrom = useRef(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState("");
   const logoInputRef = useRef(null);
@@ -75,11 +66,18 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
     setData(d => ({ ...d, ageRanges: (d.ageRanges || []).filter((_, i) => i !== idx) }));
   };
 
+  // Any round with a saved per-group apparatus order? Membership changes
+  // (add/remove) invalidate those orders; a pure reorder leaves them intact.
+  const hasStoredRotations = Object.values(data.rotations || {}).some(r => r && Object.keys(r).length > 0);
+  const rotationResetNote = " Saved rotation orders will be cleared and rotations will fall back to the automatic cascade.";
+
   const toggleApparatus = (a, currentlyOn) => {
     if (currentlyOn) {
-      setPendingRemove({ type: "apparatus", id: a, msg: `Remove apparatus "${a}"? All judges assigned to it will also be removed.` });
+      setPendingRemove({ type: "apparatus", id: a, msg: `Remove apparatus "${a}"? All judges assigned to it will also be removed.${hasStoredRotations ? rotationResetNote : ""}` });
+    } else if (hasStoredRotations) {
+      setPendingRemove({ type: "apparatus-add", id: a, msg: `Add apparatus "${a}"?${rotationResetNote}` });
     } else {
-      setData(d => ({ ...d, apparatus: [...d.apparatus, a] }));
+      setData(d => ({ ...d, apparatus: sortApparatus([...d.apparatus, a]) }));
     }
   };
 
@@ -101,9 +99,26 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const updateLevelRank = (id, rankBy) =>
     setData(d => ({ ...d, levels: d.levels.map(l => l.id === id ? { ...l, rankBy } : l) }));
 
+  // Ranking scope: "round" (default) ranks within each round; "competition"
+  // pools the level across every round it appears in — for a level split
+  // across rounds that must rank as one group.
+  const updateLevelScope = (id, rankScope) =>
+    setData(d => ({ ...d, levels: d.levels.map(l => l.id === id ? { ...l, rankScope } : l) }));
+
+  const rankScopeSelect = (l) => (
+    <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
+      value={l?.rankScope || "round"}
+      onClick={e => e.stopPropagation()}
+      onChange={e => { e.stopPropagation(); updateLevelScope(l?.id, e.target.value); }}>
+      <option value="round">Within round</option>
+      <option value="competition">Across rounds</option>
+    </select>
+  );
+
   const doRemove = () => {
     const { type, id } = pendingRemove;
-    if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id) }));
+    if (type === "apparatus") setData(d => ({ ...d, apparatus: d.apparatus.filter(a => a !== id), judges: d.judges.filter(j => j.apparatus !== id), rotations: {} }));
+    if (type === "apparatus-add") setData(d => ({ ...d, apparatus: sortApparatus([...d.apparatus, id]), rotations: {} }));
     if (type === "level") setData(d => ({ ...d, levels: d.levels.filter(l => l.id !== id) }));
     setPendingRemove(null);
   };
@@ -258,103 +273,9 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
         </div>
       </div>
 
-      {/* Scoring Mode */}
-      <div className="card" id="setup-scoring">
-        <div className="card-title">Scoring Mode</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {[
-            { value: "fig", label: "FIG Scoring" },
-            { value: "nga", label: "NGA Scoring" },
-            { value: "simple", label: "Simple Scoring" },
-          ].map(m => {
-            const active = (data.scoringMode || "fig") === m.value;
-            const isLocked = eventStatus === "active" || eventStatus === "live" || eventStatus === "completed";
-            return (
-              <button key={m.value} className="btn"
-                disabled={isLocked}
-                onClick={() => {
-                  if (active) return;
-                  // Levels are only wiped crossing the NGA boundary — NGA uses its
-                  // fixed hierarchy, FIG and Simple share custom levels.
-                  const current = data.scoringMode || "fig";
-                  if ((m.value === "nga" || current === "nga") && data.levels.length > 0) {
-                    setPendingScoringSwitch(m.value);
-                    return;
-                  }
-                  setData(d => ({ ...d, scoringMode: m.value }));
-                }}
-                style={{
-                  borderRadius: 72, padding: "10px 22px", fontSize: 14, fontWeight: 600,
-                  fontFamily: "var(--font-display)",
-                  background: active ? "var(--brand-01)" : "var(--background-neutral)",
-                  color: active ? "#fff" : "var(--text-secondary)",
-                  border: "none", cursor: isLocked ? "not-allowed" : "pointer",
-                  opacity: isLocked && !active ? 0.4 : 1,
-                }}>
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-        {(eventStatus === "active" || eventStatus === "live" || eventStatus === "completed") && (
-          <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>
-            Scoring mode is locked once the competition is started.
-          </div>
-        )}
-        {(data.scoringMode || "fig") === "nga" && (
-          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8 }}>
-            NGA uses a Perfect 10 system. Start values are capped at 10.0, execution deductions are subtracted from the start value, and the lowest possible score is 5.0 (courtesy). Use this mode for NGA UK sanctioned events.
-          </div>
-        )}
-        {(data.scoringMode || "fig") === "simple" && (
-          <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8, fontFamily: "var(--font-display)" }}>
-            Simple mode records a single final score per routine — no D score, E score, bonus or penalty breakdown. Every apparatus (including vault) takes one score entry.
-          </div>
-        )}
-
-        {/* Vault scoring — FIG only. Stays editable while live. */}
-        {(data.scoringMode || "fig") === "fig" && (
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display)", color: "var(--text)", marginBottom: 10 }}>Vault Scoring</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[
-                { value: "single", label: "Single Vault" },
-                { value: "average", label: "Average" },
-                { value: "highest", label: "Highest (Best Counts)" },
-              ].map(m => {
-                const active = (data.vaultMode || "single") === m.value;
-                return (
-                  <button key={m.value} className="btn"
-                    onClick={() => {
-                      if (active) return;
-                      if (hasScoredVault) setVaultModeWarn(true);
-                      setData(d => ({ ...d, vaultMode: m.value }));
-                    }}
-                    style={{
-                      borderRadius: 72, padding: "10px 22px", fontSize: 14, fontWeight: 600,
-                      fontFamily: "var(--font-display)",
-                      background: active ? "var(--brand-01)" : "var(--background-neutral)",
-                      color: active ? "#fff" : "var(--text-secondary)",
-                      border: "none", cursor: "pointer",
-                    }}>
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 8, fontFamily: "var(--font-display)" }}>
-              {(data.vaultMode || "single") === "single" && "One vault score per gymnast."}
-              {(data.vaultMode || "single") === "average" && "Gymnasts perform two vaults; the average of the two finals counts."}
-              {(data.vaultMode || "single") === "highest" && "Gymnasts perform two vaults; the higher final counts. Coaches and results show both vaults, the public view shows only the counting score."}
-            </div>
-            {vaultModeWarn && (
-              <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: "var(--radius)", background: "var(--background-neutral)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, fontFamily: "var(--font-display)" }}>
-                ⚠️ This competition already has scored vaults. Changing the vault mode only applies to vaults scored from now on — already-entered vault finals are frozen and will not be recalculated, so results may contain a mix of averaged and highest scores.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Competition configuration — foundational scoring settings, ahead of
+          the level list they shape */}
+      <CompConfigSections data={data} setData={setData} scores={scores} eventStatus={eventStatus} />
 
       {/* Skill Levels */}
       <div className="card" id="setup-levels">
@@ -397,6 +318,8 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                         <option value="level">Level only</option>
                         <option value="level+age">Level + Age</option>
                       </select>
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>Ranks:</span>
+                      {rankScopeSelect(data.levels.find(l => l.name === name))}
                     </div>
                   )}
                 </label>
@@ -441,6 +364,8 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                   <option value="level">Level only</option>
                   <option value="level+age">Level + Age</option>
                 </select>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Ranks:</span>
+                {rankScopeSelect(l)}
               </div>
               <button className="btn-icon" onClick={() => setPendingRemove({ type: "level", id: l.id, msg: `Remove level "${l.name}"? Gymnasts assigned will lose their level.` })}>×</button>
             </div>
@@ -481,80 +406,14 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
           })}
         </div>
         {data.apparatus.length >= 2 && (
-          <>
-            <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Apparatus Order</div>
-            <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Drag to reorder. Groups will cascade automatically from this sequence.</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {data.apparatus.map((a, i) => {
-                const isRest = a === "Rest";
-                return (
-                <div key={a} draggable
-                  onDragStart={e => { appDragFrom.current = i; e.dataTransfer.effectAllowed = "move"; e.currentTarget.style.opacity = "0.5"; }}
-                  onDragEnd={e => { e.currentTarget.style.opacity = "1"; }}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); const from = appDragFrom.current; if (from !== i) setData(d => { const arr = [...d.apparatus]; const [item] = arr.splice(from, 1); arr.splice(i, 0, item); return { ...d, apparatus: arr }; }); }}
-                  onTouchStart={e => { appTouchFrom.current = i; e.currentTarget.style.opacity = "0.5"; }}
-                  onTouchMove={e => e.preventDefault()}
-                  onTouchEnd={e => {
-                    e.currentTarget.style.opacity = "1";
-                    const touch = e.changedTouches[0];
-                    const el = document.elementFromPoint(touch.clientX, touch.clientY);
-                    const row = el?.closest("[data-app-idx]");
-                    if (row) { const from = appTouchFrom.current; const to = parseInt(row.dataset.appIdx); if (from !== to) setData(d => { const arr = [...d.apparatus]; const [item] = arr.splice(from, 1); arr.splice(to, 0, item); return { ...d, apparatus: arr }; }); }
-                  }}
-                  data-app-idx={i}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
-                    background: isRest ? "var(--surface2)" : "var(--bg)",
-                    border: `1px solid ${isRest ? "var(--border)" : "var(--border)"}`,
-                    borderRadius: "var(--radius)", fontSize: 13, cursor: "grab", userSelect: "none", touchAction: "none"
-                  }}>
-                  <span style={{ color: "var(--muted)", fontSize: 14 }}>⠿</span>
-                  <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: 12, minWidth: 20 }}>{i + 1}</span>
-                  <span style={{ flex: 1, color: isRest ? "var(--muted)" : undefined, fontStyle: isRest ? "italic" : undefined }}>{a}</span>
-                </div>
-                );
-              })}
-            </div>
-          </>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 0", fontFamily: "var(--font-display)" }}>
+            Each rotation's apparatus order is set on the Rounds &amp; Rotations page.
+          </p>
         )}
         {realApparatus.length > 0 && (
-          <>
-            <div style={{ borderTop: "1px solid var(--border)", margin: "16px 0" }} />
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16
-            }}>
-              <div>
-                <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 14, color: "var(--text-primary)", marginBottom: 2 }}>Include Rest in rotation</div>
-                <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, fontFamily: "var(--font-display)" }}>
-                  Adds a Rest slot to the rotation order. Rest does not add an apparatus, does not affect scoring, results, judges or exports — it only appears in the schedule.
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  const hasRest = data.apparatus.includes("Rest");
-                  if (hasRest) {
-                    setData(d => ({ ...d, includeRest: false, apparatus: d.apparatus.filter(a => a !== "Rest") }));
-                  } else {
-                    setData(d => ({ ...d, includeRest: true, apparatus: [...d.apparatus, "Rest"] }));
-                  }
-                }}
-                style={{
-                  position: "relative", width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", flexShrink: 0,
-                  background: data.apparatus.includes("Rest") ? "var(--accent)" : "var(--border)",
-                  transition: "background 0.2s"
-                }}
-              >
-                <div style={{
-                  position: "absolute", top: 2, left: data.apparatus.includes("Rest") ? 22 : 2,
-                  width: 20, height: 20, borderRadius: 10,
-                  background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                  transition: "left 0.2s"
-                }} />
-              </button>
-            </div>
-          </>
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "12px 0 0", fontFamily: "var(--font-display)" }}>
+            Rest slots are set per round on the Rounds &amp; Rotations page — each rest adds one rotation beyond the apparatus.
+          </p>
         )}
       </div>
 
@@ -750,18 +609,6 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 
       {pendingRemove && (
         <ConfirmModal message={pendingRemove.msg} onConfirm={doRemove} onCancel={() => setPendingRemove(null)} />
-      )}
-      {pendingScoringSwitch && (
-        <ConfirmModal
-          message={pendingScoringSwitch === "nga"
-            ? "Switching to NGA mode will replace your custom levels with the NGA level hierarchy. Your current levels will be lost. Continue?"
-            : "Switching from NGA mode will clear your NGA levels. You will need to add levels manually. Continue?"}
-          onConfirm={() => {
-            setData(d => ({ ...d, scoringMode: pendingScoringSwitch, levels: [] }));
-            setPendingScoringSwitch(null);
-          }}
-          onCancel={() => setPendingScoringSwitch(null)}
-        />
       )}
       </div>
     </div>

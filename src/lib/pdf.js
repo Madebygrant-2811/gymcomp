@@ -1,9 +1,11 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
-import { gymnast_key, denseRank } from "./scoring.js";
+import { gymnast_key, denseRank, getEScoreStart } from "./scoring.js";
 import { NGA_FALL_PENALTY } from "./constants.js";
 import { getContrastTextColor } from "./utils.js";
+import { roundGroups, roundRunningOrderCompare, runningOrderCompare } from "./rotations.js";
+import { buildRankGroups as sharedRankGroups } from "../../public/shared/ranking.js";
 
 const escHtml = (s) => {
   if (s == null) return "";
@@ -209,12 +211,19 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
     byRound[g.round][g.group].push(g);
   });
 
-  // Sort groups numerically (matching Manage Gymnasts order)
-  const sortGroupNames = (names) => [...names].sort((a, b) => {
-    const na = parseInt(String(a).replace(/\D/g, "")) || 0;
-    const nb = parseInt(String(b).replace(/\D/g, "")) || 0;
-    return na - nb;
-  });
+  // Groups in the round's configured rotation order (numeric fallback for
+  // names outside the configuration).
+  const sortGroupNames = (roundId, names) => {
+    const groupOrder = roundGroups(compData, roundId);
+    return [...names].sort((a, b) => {
+      const ai = groupOrder.indexOf(a);
+      const bi = groupOrder.indexOf(b);
+      if (ai !== bi) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      const na = parseInt(String(a).replace(/\D/g, "")) || 0;
+      const nb = parseInt(String(b).replace(/\D/g, "")) || 0;
+      return na - nb;
+    });
+  };
 
   const compName = escHtml(compData.name) || "Competition";
 
@@ -260,15 +269,38 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
       <span class="round-time">${formatTime(round.start)} – ${formatTime(round.end)}</span>
     </div>`;
 
+    // Round agenda — omitted entirely when the round has no entries, so
+    // competitions from before agendas existed render unchanged.
+    const agenda = round.agenda || [];
+    if (agenda.length) {
+      html += `<div class="group-block">
+        <div class="group-name">Agenda</div>
+        <table>
+          <colgroup>
+            <col style="width:130px;" />
+            <col style="width:auto;" />
+          </colgroup>
+          <thead><tr><th>Time</th><th>Item</th></tr></thead>
+          <tbody>`;
+      agenda.forEach(entry => {
+        html += `<tr>
+          <td>${formatTime(entry.start)}</td>
+          <td>${escHtml(entry.label) || "—"}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+    }
+
     const groups = byRound[round.id] || {};
-    const groupNames = sortGroupNames(Object.keys(groups));
+    const groupNames = sortGroupNames(round.id, Object.keys(groups));
 
     if (!groupNames.length) {
       html += `<p style="color:#999;font-size:10px;padding:8px 0;">No gymnasts assigned to this round.</p>`;
     } else {
-      // Gymnast lists per group
+      // Gymnast lists per group, in running order (numbers are only rewritten
+      // on save, so they can lag the current order)
       groupNames.forEach(grp => {
-        const gList = (groups[grp] || []).sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0));
+        const gList = (groups[grp] || []).sort(runningOrderCompare);
         html += `<div class="group-block">
           <div class="group-name">${escHtml(grp)} — ${gList.length} gymnast${gList.length !== 1 ? "s" : ""}</div>
           <table>
@@ -345,7 +377,7 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
     rounds.forEach((round, rIdx) => {
       const roundGymnasts = gymnasts
         .filter(g => g.round === round.id)
-        .sort((a, b) => parseInt(a.number || 0) - parseInt(b.number || 0));
+        .sort(roundRunningOrderCompare(compData, round.id));
 
       if (appIdx > 0 || rIdx > 0) html += `<div class="page-break"></div>`;
 
@@ -359,9 +391,10 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
       // Judge assignment info
       const assignedJudges = (compData.judges || []).filter(j => j.apparatus === app);
       if (assignedJudges.length) {
+        // Name, club and level only — judge email is never exported
         html += `<div style="background:${colour}18;border:1px solid ${colour}44;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:10px;">
           <strong>Assigned judge${assignedJudges.length !== 1 ? "s" : ""}:</strong>
-          ${assignedJudges.map(j => `<strong>${escHtml(j.name)}</strong>${j.club ? ` · ${escHtml(j.club)}` : ""}`).join("&ensp;|&ensp;")}
+          ${assignedJudges.map(j => `<strong>${escHtml(j.name)}</strong>${[j.club, j.level].filter(Boolean).map(x => ` · ${escHtml(x)}`).join("")}`).join("&ensp;|&ensp;")}
         </div>`;
       }
 
@@ -384,7 +417,7 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
               <th style="min-width:130px;">Gymnast Name</th>
               <th style="min-width:100px;">Club</th>
               <th style="width:70px;">Level</th>
-              <th style="width:48px;text-align:center;">Group</th>
+              <th style="width:48px;text-align:center;">Rotation</th>
               <th style="width:68px;text-align:center;">D Score</th>
               <th style="width:68px;text-align:center;">E Score</th>
               <th style="width:58px;text-align:center;">Penalty</th>
@@ -416,7 +449,7 @@ export function buildJudgeSheetsHTML(compData, gymnasts) {
               <th style="min-width:130px;">Gymnast Name</th>
               <th style="min-width:100px;">Club</th>
               <th style="width:70px;">Level</th>
-              <th style="width:48px;text-align:center;">Group</th>
+              <th style="width:48px;text-align:center;">Rotation</th>
               <th style="width:100px;text-align:center;">Score</th>
             </tr>
           </thead>
@@ -484,7 +517,7 @@ export function buildAttendanceHTML(compData, gymnasts) {
 
   // One page per round
   rounds.forEach((round, ri) => {
-    const roundGymnasts = [...gymnasts.filter(g => g.round === round.id)].sort((a, b) => (a.number || 0) - (b.number || 0));
+    const roundGymnasts = [...gymnasts.filter(g => g.round === round.id)].sort(roundRunningOrderCompare(compData, round.id));
     if (!roundGymnasts.length) return;
 
     // Each round on its own page
@@ -543,6 +576,98 @@ export function buildAttendanceHTML(compData, gymnasts) {
   return html;
 }
 
+// ── Organiser view (regrouped results) ─────────────────────────────────────
+// A planning aid, never official results: the same round's scores regrouped
+// along an organiser-chosen dimension, ranked with the competition's ranking
+// mode, with an optional per-group cut line. Reads state only; the unofficial
+// banner is part of the document.
+export function buildOrganiserViewHTML(compData, gymnasts, scores, { scope = "round", roundId, roundName, dimension, dimensionLabel, cutLine }) {
+  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  const rankingMode = compData.rankingMode || "standard";
+  const allRounds = scope === "all";
+  // Total from the gymnast's OWN round — in round scope every pooled gymnast
+  // is in roundId, so this is identical to the previous per-round total.
+  const getTotal = (g) => apparatus.reduce((sum, a) => {
+    const v = parseFloat(scores[gymnast_key(g.round, g.id, a)]);
+    return sum + (isNaN(v) ? 0 : v);
+  }, 0);
+  const levelNameOf = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
+  const roundNameOf = (id) => (compData.rounds || []).find(r => r.id === id)?.name || "—";
+  const colCount = allRounds ? 8 : 7;
+
+  const pool = allRounds ? gymnasts.filter(g => g.round) : gymnasts.filter(g => g.round === roundId);
+  const groups = sharedRankGroups(pool, {
+    levels: compData.levels || [],
+    dimension,
+    sortGroups: (dimension === "age" || dimension === "club") ? "keyAlpha" : "levelOrder",
+  });
+
+  let html = getPrintHeader(compData, "Organiser View");
+
+  html += `<div style="border:2px dashed #b45309;background:#fff7ed;color:#b45309;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">
+    Organiser view — regrouped for planning. Not official results.
+  </div>`;
+
+  html += `<div style="display:flex;gap:16px;margin-bottom:14px;font-size:9px;color:#555;flex-wrap:wrap;">
+    <span><strong>Scope:</strong> ${allRounds ? "Whole competition (each gymnast totalled from their own round)" : `Round: ${escHtml(roundName) || "—"}`}</span>
+    <span><strong>Grouped by:</strong> ${escHtml(dimensionLabel)}</span>
+    <span><strong>Cut line:</strong> ${cutLine > 0 ? `top ${cutLine} per group` : "none"}</span>
+    <span><strong>Ranking mode:</strong> ${rankingMode === "dense" ? "Dense (1, 1, 2)" : "Standard (1, 1, 3)"}</span>
+  </div>`;
+
+  groups.forEach(grp => {
+    const label = [grp.levelName, grp.ageLabel].filter(Boolean).join(" — ") || "Whole competition";
+    const withTotals = grp.gymnasts.map(g => ({ ...g, total: getTotal(g) }));
+    const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
+    const rest = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
+    const roundCell = (g) => allRounds ? `<td style="font-size:9px;color:#666;">${escHtml(roundNameOf(g.round))}</td>` : "";
+
+    html += `<div class="group-block">
+      <div class="group-name">${escHtml(label)} — ${withTotals.length} gymnast${withTotals.length !== 1 ? "s" : ""}</div>
+      <table>
+        <thead><tr>
+          <th style="width:44px;">Rank</th><th style="width:36px;">#</th><th>Gymnast</th><th>Club</th><th>Level</th><th style="width:70px;">Age</th>${allRounds ? "<th style=\"width:80px;\">Round</th>" : ""}<th style="width:70px;">Total</th>
+        </tr></thead>
+        <tbody>`;
+    ranked.forEach((g, i) => {
+      html += `<tr>
+        <td style="font-weight:700;">${g.rank}</td>
+        <td>${escHtml(String(g.number || ""))}</td>
+        <td><strong>${escHtml(g.name) || "—"}</strong></td>
+        <td>${escHtml(g.club) || "—"}</td>
+        <td style="font-size:9px;color:#666;">${escHtml(levelNameOf(g.level))}</td>
+        <td>${escHtml(g.age) || "—"}</td>
+        ${roundCell(g)}
+        <td style="font-weight:700;">${g.total.toFixed(3)}</td>
+      </tr>`;
+      if (cutLine > 0 && i === cutLine - 1 && i < ranked.length - 1) {
+        html += `<tr><td colspan="${colCount}" style="border-top:3px solid #b45309;background:#fff7ed;color:#b45309;font-weight:800;font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;">Cut line — top ${cutLine}</td></tr>`;
+      }
+    });
+    rest.forEach(g => {
+      const tag = g.dns ? "DNS" : g.withdrawn ? "WD" : "—";
+      html += `<tr style="opacity:0.5;">
+        <td>${tag}</td>
+        <td>${escHtml(String(g.number || ""))}</td>
+        <td>${escHtml(g.name) || "—"}</td>
+        <td>${escHtml(g.club) || "—"}</td>
+        <td style="font-size:9px;color:#666;">${escHtml(levelNameOf(g.level))}</td>
+        <td>${escHtml(g.age) || "—"}</td>
+        ${roundCell(g)}
+        <td>—</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  });
+
+  html += `<div class="print-footer">
+    <span>Organiser view — not official results · Generated ${new Date().toLocaleDateString("en-GB")}</span>
+    <span>${escHtml(compData.name) || ""}</span>
+  </div>`;
+
+  return html;
+}
+
 export function buildResultsHTML(compData, gymnasts, scores) {
   const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const rounds = compData.rounds || [];
@@ -556,40 +681,26 @@ export function buildResultsHTML(compData, gymnasts, scores) {
   const brandLogo = compData.brandLogoUrl || "";
   const defaultLogo = isLightBrand ? "./logo.svg" : "./Logo-mono-white.svg";
 
-  // ── Scoring helpers ──
-  const getScore = (roundId, gid, app) => {
-    const v = parseFloat(scores[gymnast_key(roundId, gid, app)]);
+  // ── Scoring helpers — keyed on the gymnast's OWN round, so a level ranked
+  // across rounds totals each pooled gymnast from their own round ──
+  const getScore = (g, app) => {
+    const v = parseFloat(scores[gymnast_key(g.round, g.id, app)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const getTotal = (g) => apparatus.reduce((s, a) => s + getScore(g, a), 0);
 
   const shortApp = a => a.replace(/\s*\([A-Z]+\)\s*$/, "");
 
   // ── Rank groups (mirrors Phase2_Step2.jsx exactly) ──
-  const buildRankGroups = (roundId) => {
-    const roundGymnasts = gymnasts.filter(g => g.round === roundId);
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = compData.levels.find(l => l.id === g.level);
-      const levelName = levelObj?.name || "Unknown";
-      const rankBy = levelObj?.rankBy || "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "Unknown age") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
+  // Cross-round levels appear once, under their first participating round
+  const buildRankGroups = (roundId) =>
+    sharedRankGroups(gymnasts, {
+      levels: compData.levels || [],
+      roundId,
+      rounds: compData.rounds,
+      crossRoundPlacement: "first",
+      sortGymnasts: roundRunningOrderCompare(compData, roundId),
     });
-    Object.values(map).forEach(g => g.gymnasts.sort((a, b) => (parseInt(a.number) || 0) - (parseInt(b.number) || 0)));
-    const levelOrder = (compData.levels || []).map(l => l.name);
-    return Object.entries(map)
-      .sort(([a], [b]) => {
-        const aLevel = a.split("|||")[0];
-        const bLevel = b.split("|||")[0];
-        const ai = levelOrder.indexOf(aLevel);
-        const bi = levelOrder.indexOf(bLevel);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      })
-      .map(([key, val]) => ({ key, ...val }));
-  };
 
   // ── Medal styles (fixed design — never reference brand) ──
   const medalStyle = (rank) => {
@@ -634,7 +745,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
       body += `<div class="empty-msg">No gymnasts in this round.</div>`;
     } else {
       rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
-        const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
+        const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
         const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
         const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
 
@@ -642,13 +753,18 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         body += `<div class="level-title-row">`;
         body += `<span class="level-name">${escHtml(levelName)}</span>`;
         if (ageLabel) body += `<span class="age-pill">${escHtml(ageLabel)}</span>`;
+        const grpMeta = rankGroups.find(r => r.levelName === levelName && r.ageLabel === ageLabel);
+        if (grpMeta?.crossRound) {
+          const names = (grpMeta.roundIds || []).map(rid => rounds.find(r => r.id === rid)?.name || "").filter(Boolean).join(" & ");
+          body += `<span class="age-pill">Ranked across ${escHtml(names)}</span>`;
+        }
         body += `</div>`;
         body += `<div class="level-divider"></div>`;
 
         // Compute per-apparatus max score across this level group (for highlight)
         const levelMax = {};
         apparatus.forEach(a => {
-          const scores_for_app = ranked.map(g => getScore(round.id, g.id, a)).filter(s => s > 0);
+          const scores_for_app = ranked.map(g => getScore(g, a)).filter(s => s > 0);
           if (scores_for_app.length) levelMax[a] = Math.max(...scores_for_app);
         });
 
@@ -666,7 +782,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
             <div class="col-badge"><div class="rank-badge" style="background:${m.badgeBg};color:${m.badgeText};${badgeBorder}">${g.rank}</div></div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club) || ""}</span></div>
             ${apparatus.map(a => {
-              const s = getScore(round.id, g.id, a);
+              const s = getScore(g, a);
               const isGroupBest = s > 0 && levelMax[a] && s === levelMax[a];
               const hlBg = isGroupBest ? "background:#e3e3e3;" : "";
               const hlFw = isGroupBest ? "font-weight:600;" : "";
@@ -767,30 +883,20 @@ ${body}
 
 export function exportResultsXLSX(compData, gymnasts, scores) {
   const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
-  const getScore = (roundId, gid, app) => {
-    const v = parseFloat(scores[`${roundId}__${gid}__${app}`]);
+  // Keyed on the gymnast's own round (identical for per-round groups; correct
+  // for levels ranked across rounds)
+  const getScore = (g, app) => {
+    const v = parseFloat(scores[gymnast_key(g.round, g.id, app)]);
     return isNaN(v) ? 0 : v;
   };
-  const getTotal = (roundId, gid) => apparatus.reduce((s, a) => s + getScore(roundId, gid, a), 0);
+  const getTotal = (g) => apparatus.reduce((s, a) => s + getScore(g, a), 0);
   const rankingMode = compData.rankingMode || "standard";
-  const denseRankLocal = (items, key) => {
-    // Quantise to 3dp for comparison only (see denseRank in scoring.js).
-    const q = (item) => Math.round((Number(item[key]) || 0) * 1000) / 1000;
-    const sorted = [...items].sort((a, b) => q(b) - q(a));
-    const result = [];
-    let rank = 1;
-    for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && q(sorted[i]) < q(sorted[i - 1])) {
-        rank = rankingMode === "dense" ? rank + 1 : i + 1;
-      }
-      result.push({ ...sorted[i], rank });
-    }
-    return result;
-  };
+  const denseRankLocal = (items, key) => denseRank(items, key, rankingMode);
 
   const isNGA = compData.scoringMode === "nga";
   const isSimple = compData.scoringMode === "simple";
   const fig = !isNGA && !isSimple;
+  const eStart = getEScoreStart(compData);
   const judgeCount = (app) => (compData.judges || []).filter(j => j.apparatus === app).length;
 
   // ── Sheet 1: Results ──
@@ -803,16 +909,11 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
   resultsRows.push([]);
 
   compData.rounds.forEach(round => {
-    const roundGymnasts = gymnasts.filter(g => g.round === round.id);
-    const map = {};
-    roundGymnasts.forEach(g => {
-      const levelObj = compData.levels.find(l => l.id === g.level);
-      const levelName = levelObj?.name || "Unknown";
-      const rankBy = levelObj?.rankBy || "level";
-      const ageLabel = rankBy === "level+age" ? (g.age || "") : "";
-      const key = `${levelName}|||${ageLabel}`;
-      if (!map[key]) map[key] = { levelName, ageLabel, gymnasts: [] };
-      map[key].gymnasts.push(g);
+    const rankGroups = sharedRankGroups(gymnasts, {
+      levels: compData.levels || [],
+      roundId: round.id,
+      rounds: compData.rounds,
+      crossRoundPlacement: "first",
     });
 
     resultsRows.push([`${round.name}  ·  ${round.start} – ${round.end}`]);
@@ -820,17 +921,21 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
     const header = ["Position", "#", "Gymnast", "Club", "Age Category", ...appHeaders, "Total"];
     resultsRows.push(header);
 
-    Object.values(map).sort((a, b) => (a.levelName + a.ageLabel).localeCompare(b.levelName + b.ageLabel)).forEach(({ levelName, ageLabel, gymnasts: glist }) => {
-      const label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+    rankGroups.forEach(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
+      let label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+      if (crossRound) {
+        const names = (roundIds || []).map(rid => (compData.rounds || []).find(r => r.id === rid)?.name || "").filter(Boolean).join(" & ");
+        label += ` (ranked across ${names})`;
+      }
       resultsRows.push([label]);
 
-      const withTotals = glist.map(g => ({ ...g, total: getTotal(round.id, g.id) }));
+      const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
       const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
       const dns = withTotals.filter(g => g.total === 0);
 
       [...ranked, ...dns.map(g => ({ ...g, rank: null }))].forEach(g => {
         const appScores = apparatus.map(a => {
-          const s = getScore(round.id, g.id, a);
+          const s = getScore(g, a);
           return s > 0 ? parseFloat(s.toFixed(3)) : "";
         });
         resultsRows.push([
@@ -865,12 +970,12 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
 
   compData.rounds.forEach(round => {
     const roundGymnasts = gymnasts.filter(g => g.round === round.id);
-    roundGymnasts.sort((a, b) => (a.number || "").localeCompare(b.number || "", undefined, { numeric: true }));
+    roundGymnasts.sort(roundRunningOrderCompare(compData, round.id));
     roundGymnasts.forEach(g => {
       apparatus.forEach(app => {
-        const finalScore = getScore(round.id, g.id, app);
+        const finalScore = getScore(g, app);
         if (finalScore === 0 && !fig && !isNGA) return;
-        const bk = `${round.id}__${g.id}__${app}`;
+        const bk = gymnast_key(round.id, g.id, app);
         const isDual = scores[`${bk}__dualVault`] === "1";
         const row = [g.number || "", g.name, round.name, app];
         if (isNGA) {
@@ -910,7 +1015,7 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
             for (let i = 1; i <= maxJudges; i++) {
               if (i <= Math.max(n, 1)) {
                 const v = parseFloat(scores[`${bk}__e${i}`]);
-                if (!isNaN(v)) { eSum += (10 - v); eCount++; row.push(v); }
+                if (!isNaN(v)) { eSum += (eStart - v); eCount++; row.push(v); }
                 else row.push("");
               } else {
                 row.push("");
