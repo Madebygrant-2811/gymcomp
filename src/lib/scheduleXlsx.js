@@ -98,14 +98,14 @@ export function exportScheduleXLSX(compData, gymnasts) {
 
   // Gymnasts Details — every uploaded gymnast, matching the columns collected
   // at upload. Reference only: the importer ignores this sheet.
-  const detailRows = [["GYMNASTS DETAILS"], ["Name", "Club", "Level", "Age"]];
+  const detailRows = [["GYMNASTS DETAILS"], ["Name", "Club", "Level", "Age", "BG Number"]];
   [...gymnasts]
     .sort((a, b) => (a.club || "").localeCompare(b.club || "") || (a.name || "").localeCompare(b.name || ""))
-    .forEach((g) => detailRows.push([g.name || "", g.club || "", levelName(g.level), g.age || ""]));
+    .forEach((g) => detailRows.push([g.name || "", g.club || "", levelName(g.level), g.age || "", g.bgNumber || ""]));
   const detailsWs = XLSX.utils.aoa_to_sheet(detailRows);
-  detailsWs["!cols"] = [{ wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 14 }];
+  detailsWs["!cols"] = [{ wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 14 }];
   // Filter dropdowns on the header row (row 2), spanning all data rows
-  detailsWs["!autofilter"] = { ref: `A2:D${detailRows.length}` };
+  detailsWs["!autofilter"] = { ref: `A2:E${detailRows.length}` };
   XLSX.utils.book_append_sheet(wb, detailsWs, DETAILS_SHEET);
 
   const fname = `${(compData.name || "competition").replace(/[^a-zA-Z0-9]/g, "_")}_schedule.xlsx`;

@@ -129,10 +129,10 @@ export function svgToPng(svgFile, maxWidth = 512) {
 }
 
 export function downloadTemplate() {
-  const headers = ["Name", "Club", "Level", "Age"];
+  const headers = ["Name", "Club", "Level", "Age", "BG Number"];
   const rows = [
-    ["Jane Smith", "Club Alpha", "Development 1", "9 years"],
-    ["Emily Jones", "Club Beta", "Development 2", "10 years"],
+    ["Jane Smith", "Club Alpha", "Development 1", "9 years", "1234567"],
+    ["Emily Jones", "Club Beta", "Development 2", "10 years", ""],
   ];
   const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });

@@ -51,7 +51,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     return String(n);
   };
 
-  const blankForm = () => ({ name: "", level: "", age: "" });
+  const blankForm = () => ({ name: "", level: "", age: "", bgNumber: "" });
   const [newG, setNewG] = useState(() => blankForm());
 
 
@@ -78,7 +78,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
 
   const commit = () => {
     // Numbers come from running order — a new gymnast just takes the next unused one.
-    const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), number: nextNumber(data), club: selectedClub, id: generateId(), round: "", group: "" };
+    const gymnast = { ...newG, name: normalizeStr(newG.name), age: normalizeStr(newG.age), bgNumber: normalizeStr(newG.bgNumber), number: nextNumber(data), club: selectedClub, id: generateId(), round: "", group: "" };
     setData(d => [...d, gymnast]);
     setNewG(blankForm());
     setFormWarnings([]);
@@ -86,7 +86,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
   };
 
   const startEdit = (g) => {
-    setEditModal({ id: g.id, name: g.name, level: g.level, number: g.number, age: g.age, club: g.club });
+    setEditModal({ id: g.id, name: g.name, level: g.level, number: g.number, age: g.age, club: g.club, bgNumber: g.bgNumber || "" });
     setEditModalErrors({});
     setEditModalWarnings([]);
   };
@@ -96,7 +96,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     setEditModalErrors({});
     const warns = validateGymnast(em, em.id);
     if (warns.length && editModalWarnings.length === 0) { setEditModalWarnings(warns); return; }
-    const normalized = { ...em, name: normalizeStr(em.name), age: normalizeStr(em.age) };
+    const normalized = { ...em, name: normalizeStr(em.name), age: normalizeStr(em.age), bgNumber: normalizeStr(em.bgNumber || "") };
     setData(d => d.map(g => g.id === em.id ? { ...g, ...normalized } : g));
     setEditModal(null);
     setEditModalWarnings([]);
@@ -194,7 +194,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
           }
         }
 
-        toAdd.push({ id: generateId(), name: row.name, number: takeNextNumber(), club: clubName, level: levelObj ? levelObj.id : "", round: "", age: ageName, group: "" });
+        toAdd.push({ id: generateId(), name: row.name, number: takeNextNumber(), club: clubName, level: levelObj ? levelObj.id : "", round: "", age: ageName, group: "", bgNumber: normalizeStr(row["bg number"] || "") });
       });
 
       setCsvWarnings({ errors, warns });
@@ -352,6 +352,11 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
               <option value="">Select…</option>
               {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
             </select>
+          </div>
+          <div className="field">
+            <label className="label">BG Number (optional)</label>
+            <input className="input" placeholder="e.g. 1234567" value={newG.bgNumber}
+              onChange={e => setNewG(g => ({ ...g, bgNumber: e.target.value }))} />
           </div>
         </div>
 
@@ -547,6 +552,11 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
                   <option value="">Select…</option>
                   {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
+              </div>
+              <div className="field">
+                <label className="label">BG Number (optional)</label>
+                <input className="input" placeholder="e.g. 1234567" value={editModal.bgNumber || ""}
+                  onChange={e => setEditModal(m => ({ ...m, bgNumber: e.target.value }))} />
               </div>
             </div>
             {editModalWarnings.length > 0 && (
