@@ -1144,7 +1144,7 @@
         }),
         ...dns.map(g => {
           const isMyClub = authedClubName && (g.club || "") === authedClubName;
-          const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+          const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">0.000</td>`).join("");
           return `
             <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
               <td>${rankBadge(null)}</td>
@@ -1152,7 +1152,7 @@
               <td>${escHtml(g.name)}</td>
               <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
               ${appCells}
-              <td class="score-total-cell" style="color:var(--muted)">—</td>
+              <td class="score-total-cell" style="color:var(--muted)">0.000</td>
             </tr>
           `;
         })
@@ -1182,15 +1182,15 @@
           }),
           ...dnsOnly.map(g => {
             const isMyClub = authedClubName && (g.club || "") === authedClubName;
-            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
+            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">0.000</td>`).join("");
             return `
               <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
                 <td>${rankBadge(null)}</td>
-  
+
                 <td>${escHtml(g.name)}</td>
                 <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
                 ${appCells}
-                <td class="score-total-cell" style="color:var(--muted)">—</td>
+                <td class="score-total-cell" style="color:var(--muted)">0.000</td>
               </tr>
             `;
           })
@@ -1292,9 +1292,10 @@
   }
 
   // ── Render helpers ──
-  function renderApparatusBlock(rid, gid, app) {
+  function renderApparatusBlock(rid, gid, app, isDns = false) {
     const fig = (compData && compData.scoringMode) !== "simple";
-    const total = getTotal(rid, gid, app);
+    // DNS gymnasts read as 0.000 rather than "not yet scored"
+    const total = isDns ? 0 : getTotal(rid, gid, app);
     const isQueried = !!scores[subKey(rid, gid, app, "query")];
     const isResolved = !!scores[subKey(rid, gid, app, "queryResolved")];
     const queryNote = scores[subKey(rid, gid, app, "queryNote")] || "";
@@ -1312,7 +1313,7 @@
     if (isQueried && !isResolved) scoreClass += " queried-val";
     const displayVal = (isQueried && !isResolved)
       ? "Under Review"
-      : (total > 0 ? total.toFixed(3) : "—");
+      : (total > 0 ? total.toFixed(3) : isDns ? "0.000" : "—");
 
     // Breakdown cells
     let breakdownHtml = "";
@@ -1419,11 +1420,11 @@
 
   function renderGymnastCard(rid, g) {
     const gr = g.round || rid; // gymnast's own round (cross-round levels pool rounds)
-    const overall = getOverall(gr, g.id);
+    const overall = g.dns ? 0 : getOverall(gr, g.id);
     const apparatus = getScoringApparatus();
 
     const appBlocksHtml = apparatus
-      .map(app => renderApparatusBlock(gr, g.id, app))
+      .map(app => renderApparatusBlock(gr, g.id, app, !!g.dns))
       .join("");
 
     return `
@@ -1434,7 +1435,7 @@
           ${g.club ? `<div class="gymnast-club" style="background:${clubColour(g.club)}">${escHtml(g.club)}</div>` : ""}
           <div class="gymnast-overall">
             <div class="gymnast-overall-label">Overall</div>
-            <div class="gymnast-overall-val">${overall > 0 ? overall.toFixed(3) : "—"}</div>
+            <div class="gymnast-overall-val">${overall > 0 ? overall.toFixed(3) : g.dns ? "0.000" : "—"}</div>
           </div>
         </div>
         <div class="apparatus-grid">${appBlocksHtml}</div>

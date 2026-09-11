@@ -287,8 +287,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                                {showVaultCols && <><td style={{ color: "var(--muted)" }}>—</td><td style={{ color: "var(--muted)" }}>—</td></>}
-                                <td style={{ color: "var(--muted)" }}>—</td>
+                                {showVaultCols && <><td style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td><td style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td></>}
+                                <td style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -373,8 +373,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
-                          {scoringApparatus.map(a => <td key={a} style={{ color: "var(--muted)" }}>—</td>)}
-                          <td style={{ color: "var(--muted)" }}>—</td>
+                          {scoringApparatus.map(a => <td key={a} style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td>)}
+                          <td style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -491,7 +491,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                           <td style={{ color: "var(--muted)", fontSize: 12 }}>{levelNameOf(g.level)}</td>
                           <td style={{ color: "var(--muted)", fontSize: 12 }}>{g.age || "—"}</td>
                           {orgAllRounds && <td style={{ color: "var(--muted)", fontSize: 12 }}>{roundNameOf(g.round)}</td>}
-                          <td style={{ color: "var(--muted)" }}>—</td>
+                          <td style={{ color: "var(--muted)" }}>{g.dns ? "0.000" : "—"}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -654,7 +654,7 @@ export function buildOrganiserViewHTML(compData, gymnasts, scores, { scope = "ro
         <td style="font-size:9px;color:#666;">${escHtml(levelNameOf(g.level))}</td>
         <td>${escHtml(g.age) || "—"}</td>
         ${roundCell(g)}
-        <td>—</td>
+        <td>${g.dns ? "0.000" : "—"}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -797,8 +797,8 @@ export function buildResultsHTML(compData, gymnasts, scores) {
           body += `<div class="pill-row dns-row pdf-row-boundary">
             <div class="col-badge"><div class="rank-badge dns-badge">${label}</div></div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club) || ""}</span></div>
-            ${apparatus.map(() => `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`).join("")}
-            <div class="col-total"><span class="no-score">—</span></div>
+            ${apparatus.map(() => `<div class="col-score"><span class="score-inner"><span class="no-score">${g.dns ? "0.000" : "—"}</span></span></div>`).join("")}
+            <div class="col-total"><span class="no-score">${g.dns ? "0.000" : "—"}</span></div>
           </div>`;
         });
 
@@ -930,22 +930,22 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
       resultsRows.push([label]);
 
       const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
-      const ranked = denseRankLocal(withTotals.filter(g => g.total > 0), "total");
-      const dns = withTotals.filter(g => g.total === 0);
+      const ranked = denseRankLocal(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+      const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
 
       [...ranked, ...dns.map(g => ({ ...g, rank: null }))].forEach(g => {
         const appScores = apparatus.map(a => {
           const s = getScore(g, a);
-          return s > 0 ? parseFloat(s.toFixed(3)) : "";
+          return g.dns ? 0 : s > 0 ? parseFloat(s.toFixed(3)) : "";
         });
         resultsRows.push([
-          g.rank === null ? "DNS" : g.rank,
+          g.rank === null ? (g.withdrawn && !g.dns ? "WD" : "DNS") : g.rank,
           g.number || "",
           g.name,
           g.club || "",
           ageLabel || "",
           ...appScores,
-          g.total > 0 ? parseFloat(g.total.toFixed(3)) : ""
+          g.dns ? 0 : g.total > 0 ? parseFloat(g.total.toFixed(3)) : ""
         ]);
       });
       resultsRows.push([]);

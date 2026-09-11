@@ -728,14 +728,15 @@
 
   function dnsRow(g, apparatus, isOverall) {
     const label = g.dns ? "DNS" : (g.withdrawn ? "WD" : "DNS");
+    const empty = g.dns ? "0.000" : "—";
     const scoreCells = apparatus.map(() =>
-      `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`
+      `<div class="col-score"><span class="score-inner"><span class="no-score">${empty}</span></span></div>`
     ).join("");
     return `<div class="pill-row dns-row">
       <div class="col-badge"><div class="rank-badge dns-badge">${label}</div></div>
       <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
       ${scoreCells}
-      <div class="col-total"><span class="no-score">—</span></div>
+      <div class="col-total"><span class="no-score">${empty}</span></div>
     </div>`;
   }
 
@@ -781,8 +782,8 @@
         const vaultCols = (g) => showVaultCols
           ? `${vaultColCellHtml(g.round, g.id, app, "v1", g.score)}${vaultColCellHtml(g.round, g.id, app, "v2", g.score)}`
           : "";
-        const dnsVaultCols = showVaultCols
-          ? `<div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div><div class="col-score"><span class="score-inner"><span class="no-score">—</span></span></div>`
+        const dnsVaultCols = (g) => showVaultCols
+          ? `<div class="col-score"><span class="score-inner"><span class="no-score">${g.dns ? "0.000" : "—"}</span></span></div><div class="col-score"><span class="score-inner"><span class="no-score">${g.dns ? "0.000" : "—"}</span></span></div>`
           : "";
 
         const rows = ranked.map(g => {
@@ -800,8 +801,8 @@
           return `<div class="pill-row dns-row">
             <div class="col-badge">${(g.dns || g.withdrawn) ? `<div class="rank-badge dns-badge">${g.dns ? "DNS" : "WD"}</div>` : ""}</div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
-            ${dnsVaultCols}
-            <div class="col-total"><span class="no-score">—</span></div>
+            ${dnsVaultCols(g)}
+            <div class="col-total"><span class="no-score">${g.dns ? "0.000" : "—"}</span></div>
           </div>`;
         }).join("");
 
