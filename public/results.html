@@ -527,12 +527,16 @@
   </div>
 </main>
 
+<script>
+  // Module scripts are deferred and fetched asynchronously, so on a cold load
+  // the shared ranking module can arrive AFTER the first Supabase response.
+  // init() awaits this promise before the first render.
+  window.GymCompRankingReady = new Promise(resolve => { window.__resolveGymCompRanking = resolve; });
+</script>
 <script type="module">
-  // Shared ranking module — module scripts execute during parse, before any
-  // data has been fetched, so the classic script below can safely call these
-  // from its render functions.
   import * as ranking from "./shared/ranking.js";
   window.GymCompRanking = ranking;
+  window.__resolveGymCompRanking(ranking);
 </script>
 <script>
   const SUPABASE_URL = "https://xjuwbgitqsvrmoejvzwb.supabase.co";
@@ -1080,7 +1084,7 @@
       return;
     }
 
-    const [row, tableRows] = await Promise.all([fetchData(), fetchTableScores()]);
+    const [row, tableRows] = await Promise.all([fetchData(), fetchTableScores(), window.GymCompRankingReady]);
     if (!row || !row.data) {
       document.getElementById("main").innerHTML = `
         <div class="state-full">
@@ -1103,7 +1107,15 @@
     setInterval(poll, POLL_MS);
   }
 
-  init();
+  init().catch(err => {
+    console.error("Results page failed to load", err);
+    document.getElementById("main").innerHTML = `
+      <div class="state-full">
+        <div class="state-icon">⚠️</div>
+        <div class="state-title">Couldn't load results</div>
+        <div class="state-sub">Please refresh the page. If the problem persists, contact the event organiser.</div>
+      </div>`;
+  });
 </script>
 </body>
 </html>
