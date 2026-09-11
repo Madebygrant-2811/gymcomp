@@ -545,67 +545,114 @@
       color: var(--accent);
     }
 
-    /* ── Overall table styles ──────────────────────────────── */
-    .table-wrap { overflow-x: auto; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    /* ── Column widths (mobile) ── */
-    @media (max-width: 767px) {
-      td.gymnast-name, th:nth-child(2) { white-space: nowrap; }
-      .gymnast-club-cell { white-space: nowrap; }
-    }
-    th {
-      padding: 8px 12px;
-      text-align: left;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
-    tr:last-child td { border-bottom: none; }
-    tr.dns-row td { opacity: 0.45; }
-
-    .badge {
-      display: inline-flex;
+    /* ── Overall view: pill rows (mirrors results.html) ────── */
+    .level-card-body { padding: 16px 20px; }
+    .col-header {
+      display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 9px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
+      padding: 6px 16px;
+      margin-bottom: 4px;
     }
-    .badge-gold { background: rgba(245, 158, 11, 0.12); color: #d97706; }
-    .badge-silver { background: rgba(148, 163, 184, 0.12); color: #64748b; }
-    .badge-bronze { background: rgba(180, 83, 9, 0.12); color: #b45309; }
-    .badge-medal { background: rgba(0, 13, 255, 0.07); color: #4a50c7; }
-    .badge-rank { background: var(--surface2); color: var(--muted); }
-    .badge-dns { background: rgba(144,144,144,0.1); color: var(--muted); }
-
-    .score-total {
-      font-weight: 800;
-      font-size: 16px;
-      color: var(--accent);
-    }
-    .app-score {
+    .col-header span {
+      font-size: 12px;
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
       color: var(--muted);
-      font-size: 13px;
     }
-    .gymnast-club-cell { font-weight: 500; color: var(--muted); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    td.gymnast-name { font-size: 13px; font-weight: 500; }
-    td.app-score, td.score-total-cell { text-align: center; }
-    th.col-score { text-align: center; }
+    .ch-badge { width: 54px; flex-shrink: 0; }
+    .ch-name { flex: 1; min-width: 0; }
+    .ch-score { width: 80px; text-align: center; flex-shrink: 0; }
+    .ch-total { width: 115px; text-align: center; flex-shrink: 0; }
+
+    .pill-row {
+      display: flex;
+      align-items: center;
+      border: 1.5px solid var(--border);
+      border-radius: 54px;
+      padding: 8px 16px;
+      margin-bottom: 4px;
+      background: #fff;
+      min-height: 48px;
+    }
+    .pill-row.dns-row { opacity: 0.45; }
+    /* Coach's own club — keep the row easy to spot without breaking the medal tints */
+    .pill-row.my-club-row { box-shadow: inset 0 0 0 1.5px var(--accent); }
+
+    .col-badge {
+      width: 54px;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .rank-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #000;
+    }
+    .dns-badge {
+      border: 1.5px solid #aaa;
+      color: #aaa;
+      background: #fff;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .col-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      padding-right: 8px;
+    }
+    .g-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #111;
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .g-club {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .col-score {
+      width: 80px;
+      text-align: center;
+      font-size: 14px;
+      color: #555;
+      flex-shrink: 0;
+    }
+    .score-inner {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin: 0 2px;
+    }
+    .col-total {
+      width: 115px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: #111;
+      flex-shrink: 0;
+    }
+    .no-score { color: #ccc; }
+    .pill-row-scroll-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
 
     /* ── Empty / loading / error states ─────────────────────── */
     .state-full {
@@ -708,8 +755,6 @@
       80% { transform: translateX(6px); }
     }
 
-    tr.my-club-row td { background: rgba(0,13,255,0.04); }
-
     @media (max-width: 600px) {
       .comp-title { font-size: 26px; }
       td, th { padding: 8px; font-size: 12px; }
@@ -749,6 +794,21 @@
 
       .level-card { border-radius: 12px; }
       .level-card-header { padding: 14px 16px; font-size: 18px; }
+      .level-card-body { padding: 12px; }
+
+      /* Pill rows on mobile — mirrors results.html */
+      .ch-score { width: 64px; }
+      .col-score { width: 64px; font-size: 12px; }
+      .ch-total { width: 80px; }
+      .col-total { width: 80px; font-size: 14px; }
+      .rank-badge { width: 28px; height: 28px; font-size: 12px; }
+      .col-badge { width: 40px; }
+      .ch-badge { width: 40px; }
+      .g-name { font-size: 13px; }
+      .g-club { font-size: 12px; }
+      .col-name { min-width: 120px; flex-shrink: 0; }
+      .pill-row { padding: 6px 10px; min-height: 40px; border-radius: 32px; }
+      .pill-row-scroll-inner { display: inline-flex; flex-direction: column; min-width: 100%; }
 
       .footer-band { border-radius: 12px; padding: 16px; min-height: 60px; }
     }
@@ -1071,13 +1131,73 @@
     return window.GymCompRanking.denseRank(items, scoreKey, mode);
   }
 
-  function rankBadge(rank) {
-    if (rank === null) return `<span class="badge badge-dns">DNS</span>`;
-    if (rank === 1) return `<span class="badge badge-gold">🥇 1st</span>`;
-    if (rank === 2) return `<span class="badge badge-silver">🥈 2nd</span>`;
-    if (rank === 3) return `<span class="badge badge-bronze">🥉 3rd</span>`;
-    if (rank <= 6) return `<span class="badge badge-medal">🎖️ ${rank}th</span>`;
-    return `<span class="badge badge-rank">${rank}th</span>`;
+  // ── Overall view (pill rows, mirrors results.html) ──
+  const shortApp = a => a.replace(/\s*\([A-Z]+\)\s*$/, "");
+
+  function medalStyle(rank) {
+    if (rank === 1) return { bg: "rgba(244,196,40,0.1)",  border: "transparent", badgeBg: "#ffc300", badgeText: "#000" };
+    if (rank === 2) return { bg: "rgba(171,171,171,0.1)", border: "transparent", badgeBg: "#c4c4c4", badgeText: "#000" };
+    if (rank === 3) return { bg: "rgba(203,138,85,0.1)",  border: "transparent", badgeBg: "#eba569", badgeText: "#000" };
+    if (rank <= 6)  return { bg: "#fff",                  border: "#efefef", badgeBg: "#f1eded", badgeText: "#000" };
+    return              { bg: "#fff",                  border: "#efefef", badgeBg: "#fff",    badgeText: "#000" };
+  }
+
+  function colHeaderHtml(apparatus) {
+    const appCols = apparatus.map(a => `<span class="ch-score">${escHtml(shortApp(a))}</span>`).join("");
+    return `<div class="col-header">
+      <span class="ch-badge"></span>
+      <span class="ch-name">Gymnast</span>
+      ${appCols}
+      <span class="ch-total">Total</span>
+    </div>`;
+  }
+
+  // Vault 1 / Vault 2 finals under a dual-vault score
+  function vaultFinalsHtml(rid, gid, app, total) {
+    if (!scores[subKey(rid, gid, app, "dualVault")]) return "";
+    const v1 = sv(rid, gid, app, "v1fin");
+    const v2 = sv(rid, gid, app, "v2fin");
+    if (v1 <= 0 && v2 <= 0) return "";
+    const counts = v => v > 0 && Math.round(v * 1000) === Math.round((total || 0) * 1000);
+    const line = (label, v) => v > 0
+      ? `<div style="font-weight:${counts(v) ? 700 : 500};color:${counts(v) ? "var(--accent)" : "var(--muted)"}">${label} ${v.toFixed(3)}</div>`
+      : "";
+    return `<div style="font-size:9px;margin-top:2px;line-height:1.3;color:var(--muted);font-family:var(--font)">${line("V1", v1)}${line("V2", v2)}</div>`;
+  }
+
+  const myClubClass = g => (authedClubName && (g.club || "") === authedClubName) ? " my-club-row" : "";
+
+  function rankedPillRow(g, apparatus, levelMax) {
+    const m = medalStyle(g.rank);
+    const badgeBorder = g.rank > 6 ? `border:1.5px solid ${m.border};` : "";
+    const scoreCells = apparatus.map(a => {
+      const s = getTotal(g.round, g.id, a);
+      const isGroupBest = s > 0 && levelMax[a] && s === levelMax[a];
+      const hl = isGroupBest ? "background:#e3e3e3;font-weight:600;" : "";
+      return `<div class="col-score"><span class="score-inner" style="${hl}">${s > 0 ? s.toFixed(3) : '<span class="no-score">—</span>'}</span>${s > 0 ? vaultFinalsHtml(g.round, g.id, a, s) : ""}</div>`;
+    }).join("");
+    return `<div class="pill-row${myClubClass(g)}" style="background:${m.bg};border-color:${m.border};">
+      <div class="col-badge"><div class="rank-badge" style="background:${m.badgeBg};color:${m.badgeText};${badgeBorder}">${g.rank}</div></div>
+      <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
+      ${scoreCells}
+      <div class="col-total">${g.total.toFixed(3)}</div>
+    </div>`;
+  }
+
+  // Unranked row: badge only for an explicit DNS / withdrawal; DNS reads 0.000
+  function unrankedPillRow(g, apparatus) {
+    const label = g.dns ? "DNS" : g.withdrawn ? "WD" : "";
+    const empty = g.dns ? "0.000" : "—";
+    const scoreCells = apparatus.map(a => {
+      const s = g.dns ? 0 : getTotal(g.round, g.id, a);
+      return `<div class="col-score"><span class="score-inner">${s > 0 ? s.toFixed(3) : `<span class="no-score">${empty}</span>`}</span></div>`;
+    }).join("");
+    return `<div class="pill-row dns-row${myClubClass(g)}">
+      <div class="col-badge">${label ? `<div class="rank-badge dns-badge">${label}</div>` : ""}</div>
+      <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club || "")}</span></div>
+      ${scoreCells}
+      <div class="col-total"><span class="no-score">${empty}</span></div>
+    </div>`;
   }
 
   function renderOverallView(round) {
@@ -1093,128 +1213,30 @@
     if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
 
     return buildFilterHtml() + groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
-      const agePill = ageLabel ? `<span class="age-pill">${escHtml(ageLabel)}</span>` : "";
       const withTotals = glist.map(g => ({ ...g, total: getOverall(g.round, g.id) }));
-      const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns), "total");
-      const unscored = withTotals.filter(g => g.total === 0 && !g.dns);
-      const dns = withTotals.filter(g => !!g.dns);
+      const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
+      // Unscored gymnasts in running order, then explicit DNS / WD
+      const unscored = withTotals.filter(g => g.total === 0 && !g.dns && !g.withdrawn).sort(byRunningOrder(rid));
+      const flagged = withTotals.filter(g => g.dns || g.withdrawn);
 
-      // Find top score per apparatus for highlighting
-      const topScores = {};
+      // Per-apparatus best among ranked gymnasts, for the highlight
+      const levelMax = {};
       apparatus.forEach(a => {
-        let best = 0;
-        glist.forEach(g => { if (!g.dns) { const s = getTotal(g.round, g.id, a); if (s > best) best = s; } });
-        if (best > 0) topScores[a] = best;
+        const appScores = ranked.map(g => getTotal(g.round, g.id, a)).filter(s => s > 0);
+        if (appScores.length) levelMax[a] = Math.max(...appScores);
       });
 
-      const appHeaders = apparatus.map(a => `<th class="col-score">${escHtml(a)}</th>`).join("");
-
-      const rows = [
-        ...ranked.map(g => {
-          const isMyClub = authedClubName && (g.club || "") === authedClubName;
-          const appCells = apparatus.map(a => {
-            const s = getTotal(g.round, g.id, a);
-            const isTop = s > 0 && topScores[a] && s === topScores[a];
-            return `<td class="app-score"${isTop ? ' style="background:rgba(0,13,255,0.08);color:var(--accent);font-weight:700"' : ''}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
-          }).join("");
-          return `
-            <tr${isMyClub ? ' class="my-club-row"' : ''}>
-              <td>${rankBadge(g.rank)}</td>
-
-              <td class="gymnast-name">${escHtml(g.name)}</td>
-              <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
-              ${appCells}
-              <td class="score-total-cell"><span class="score-total">${g.total.toFixed(3)}</span></td>
-            </tr>
-          `;
-        }),
-        ...unscored.sort(byRunningOrder(rid)).map(g => {
-          const isMyClub = authedClubName && (g.club || "") === authedClubName;
-          const appCells = apparatus.map(a => {
-            const s = getTotal(g.round, g.id, a);
-            return `<td class="app-score"${s > 0 ? '' : ' style="color:var(--muted)"'}>${s > 0 ? s.toFixed(3) : "—"}</td>`;
-          }).join("");
-          return `
-            <tr${isMyClub ? ' class="my-club-row"' : ''}>
-              <td></td>
-
-              <td class="gymnast-name">${escHtml(g.name)}</td>
-              <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
-              ${appCells}
-              <td class="score-total-cell" style="color:var(--muted)">—</td>
-            </tr>
-          `;
-        }),
-        ...dns.map(g => {
-          const isMyClub = authedClubName && (g.club || "") === authedClubName;
-          const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">0.000</td>`).join("");
-          return `
-            <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
-              <td>${rankBadge(null)}</td>
-
-              <td>${escHtml(g.name)}</td>
-              <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
-              ${appCells}
-              <td class="score-total-cell" style="color:var(--muted)">0.000</td>
-            </tr>
-          `;
-        })
-      ].join("");
-
-      const hasAnyScore = withTotals.some(g => g.total > 0);
-
-      // If no scores yet, show all gymnasts in running order without ranks
-      let finalRows = rows;
-      if (!hasAnyScore) {
-        const sorted = [...withTotals].filter(g => !g.dns).sort(byRunningOrder(rid));
-        const dnsOnly = withTotals.filter(g => !!g.dns);
-        finalRows = [
-          ...sorted.map(g => {
-            const isMyClub = authedClubName && (g.club || "") === authedClubName;
-            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">—</td>`).join("");
-            return `
-              <tr${isMyClub ? ' class="my-club-row"' : ''}>
-                <td></td>
-  
-                <td class="gymnast-name">${escHtml(g.name)}</td>
-                <td class="gymnast-club-cell">${escHtml(g.club || "")}</td>
-                ${appCells}
-                <td class="score-total-cell" style="color:var(--muted)">—</td>
-              </tr>
-            `;
-          }),
-          ...dnsOnly.map(g => {
-            const isMyClub = authedClubName && (g.club || "") === authedClubName;
-            const appCells = apparatus.map(() => `<td class="app-score" style="color:var(--muted)">0.000</td>`).join("");
-            return `
-              <tr class="${isMyClub ? 'my-club-row ' : ''}dns-row">
-                <td>${rankBadge(null)}</td>
-
-                <td>${escHtml(g.name)}</td>
-                <td style="color:var(--muted)">${escHtml(g.club || "")}</td>
-                ${appCells}
-                <td class="score-total-cell" style="color:var(--muted)">0.000</td>
-              </tr>
-            `;
-          })
-        ].join("");
-      }
+      const rows = ranked.map(g => rankedPillRow(g, apparatus, levelMax)).join("")
+        + [...unscored, ...flagged].map(g => unrankedPillRow(g, apparatus)).join("");
 
       return `
         <div class="level-card">
-          <div class="level-card-header">${escHtml(levelName)}${agePill ? ` <span style="font-size:14px;font-weight:600;color:var(--text);background:${ageColor(ageLabel)};padding:4px 12px;border-radius:99px">${escHtml(ageLabel)}</span>` : ""}${crossRoundPill(crossRound, roundIds)}</div>
-          <div style="padding:16px 20px">
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rank</th><th>Gymnast</th><th>Club</th>
-                    ${appHeaders}
-                    <th class="col-score">Total</th>
-                  </tr>
-                </thead>
-                <tbody>${finalRows}</tbody>
-              </table>
+          <div class="level-card-header">${escHtml(levelName)}${ageLabel ? ` <span style="font-size:14px;font-weight:600;color:var(--text);background:${ageColor(ageLabel)};padding:4px 12px;border-radius:99px">${escHtml(ageLabel)}</span>` : ""}${crossRoundPill(crossRound, roundIds)}</div>
+          <div class="level-card-body">
+            <div class="pill-row-scroll-wrapper">
+              <div class="pill-row-scroll-inner">
+                ${colHeaderHtml(apparatus)}${rows}
+              </div>
             </div>
           </div>
         </div>
