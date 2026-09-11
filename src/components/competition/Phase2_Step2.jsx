@@ -173,7 +173,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   }, []);
 
   const rankBadge = (rank, label) => {
-    if (rank === null) return <span className="badge" style={{ background: label === "WD" ? "rgba(217,119,6,0.15)" : "rgba(107,107,133,0.15)", color: label === "WD" ? "#d97706" : "var(--muted)" }}>{label || "DNS"}</span>;
+    // Unranked: badge only for an explicit DNS / WD label — unscored rows get nothing
+    if (rank === null) return label ? <span className="badge" style={{ background: label === "WD" ? "rgba(217,119,6,0.15)" : "rgba(107,107,133,0.15)", color: label === "WD" ? "#d97706" : "var(--muted)" }}>{label}</span> : null;
     if (rank === 1) return <span className="badge badge-gold">🥇 1st</span>;
     if (rank === 2) return <span className="badge badge-silver">🥈 2nd</span>;
     if (rank === 3) return <span className="badge badge-bronze">🥉 3rd</span>;
@@ -283,7 +284,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                             ))}
                             {dns.map(g => (
                               <tr key={g.id} style={{ opacity: 0.45 }}>
-                                <td>{rankBadge(null, g.withdrawn ? "WD" : "DNS")}</td>
+                                <td>{rankBadge(null, g.dns ? "DNS" : g.withdrawn ? "WD" : "")}</td>
                                 <td style={{ color: "var(--muted)" }}>{g.number}</td>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
@@ -369,7 +370,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                       ))}
                       {dns.map(g => (
                         <tr key={g.id} style={{ opacity: 0.45 }}>
-                          <td>{rankBadge(null, g.withdrawn ? "WD" : "DNS")}</td>
+                          <td>{rankBadge(null, g.dns ? "DNS" : g.withdrawn ? "WD" : "")}</td>
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>
@@ -484,7 +485,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
                       ))}
                       {rest.map(g => (
                         <tr key={g.id} style={{ opacity: 0.45 }}>
-                          <td>{rankBadge(null, g.withdrawn ? "WD" : g.dns ? "DNS" : "—")}</td>
+                          <td>{rankBadge(null, g.dns ? "DNS" : g.withdrawn ? "WD" : "")}</td>
                           <td style={{ color: "var(--muted)" }}>{g.number}</td>
                           <td style={{ fontWeight: 500 }}>{g.name}</td>
                           <td style={{ fontWeight: 500, color: "var(--muted)" }}>{g.club}</td>

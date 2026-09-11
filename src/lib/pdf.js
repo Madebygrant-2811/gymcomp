@@ -793,9 +793,9 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         });
 
         dns.forEach(g => {
-          const label = g.withdrawn ? "WD" : "DNS";
+          const label = g.dns ? "DNS" : g.withdrawn ? "WD" : "";
           body += `<div class="pill-row dns-row pdf-row-boundary">
-            <div class="col-badge"><div class="rank-badge dns-badge">${label}</div></div>
+            <div class="col-badge">${label ? `<div class="rank-badge dns-badge">${label}</div>` : ""}</div>
             <div class="col-name"><span class="g-name">${escHtml(g.name)}</span><span class="g-club">${escHtml(g.club) || ""}</span></div>
             ${apparatus.map(() => `<div class="col-score"><span class="score-inner"><span class="no-score">${g.dns ? "0.000" : "—"}</span></span></div>`).join("")}
             <div class="col-total"><span class="no-score">${g.dns ? "0.000" : "—"}</span></div>
