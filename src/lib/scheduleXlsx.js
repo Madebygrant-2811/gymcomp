@@ -69,11 +69,13 @@ export function exportScheduleXLSX(compData, gymnasts) {
     // One block per rotation: the rotation name as a banner, its starting
     // apparatus on its own "Starts on:" line, then a header and the running
     // order. The block a row sits under drives the gymnast's group — there is
-    // no Group column, and no Number column either: numbers are allocated
-    // from the running order (row order) on save. Banners, "Starts on:" lines
-    // and repeated headers are recognised by the parser and never read as
-    // gymnast data.
-    const gymnastHeader = ["Name", "Club", "Level", "Age"];
+    // no Group column. The Number column carries each gymnast's current
+    // number; on import it is applied only when the competition's
+    // numberingMode is 'imported' (in 'auto' mode numbers are allocated from
+    // the running order (row order) on save, so the column is ignored).
+    // Banners, "Starts on:" lines and repeated headers are recognised by the
+    // parser and never read as gymnast data.
+    const gymnastHeader = ["Number", "Name", "Club", "Level", "Age"];
     const roundGymnasts = gymnasts
       .filter((g) => g.round === round.id)
       .sort(roundRunningOrderCompare(compData, round.id));
@@ -83,7 +85,7 @@ export function exportScheduleXLSX(compData, gymnasts) {
       rows.push([banner]);
       if (startApp) rows.push([`Starts on: ${startApp}`]);
       rows.push(gymnastHeader);
-      members.forEach((g) => rows.push([g.name || "", g.club || "", levelName(g.level), g.age || ""]));
+      members.forEach((g) => rows.push([g.number || "", g.name || "", g.club || "", levelName(g.level), g.age || ""]));
     };
     groups.forEach((g) => {
       pushBlock(g, (eff[g] || [])[0], roundGymnasts.filter((x) => x.group === g));
@@ -92,7 +94,7 @@ export function exportScheduleXLSX(compData, gymnasts) {
     if (stray.length) pushBlock("Unassigned", null, stray);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{ wch: 26 }, { wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
+    ws["!cols"] = [{ wch: 16 }, { wch: 26 }, { wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, uniqueSheetName(round.name || `Round ${ri + 1}`, used));
   });
 
@@ -287,11 +289,13 @@ export function parseScheduleXLSX(data, compData, gymnasts, scores) {
 
     // GYMNASTS — one block per rotation: the block's banner row names the
     // group, an optional "Starts on:" line notes its first apparatus, then a
-    // header and data rows (name, club, level, age). The block a row sits
-    // under drives its group; a legacy Group column, when present, still
+    // header and data rows (number, name, club, level, age). The block a row
+    // sits under drives its group; a legacy Group column, when present, still
     // takes precedence so older files import unchanged. Row order in a group
-    // is the running order — numbers are allocated from it on save, so a
-    // legacy Number column is simply ignored.
+    // is the running order in both numbering modes. The Number column rides
+    // along on each assignment — the apply step uses it only when the
+    // competition's numberingMode is 'imported'; in 'auto' mode it is ignored
+    // since save-time numbering from running order would overwrite it anyway.
     if (sections.GYMNASTS) {
       const finalGroups = entry.groups || existingGroups;
       const assignments = [];
@@ -312,6 +316,7 @@ export function parseScheduleXLSX(data, compData, gymnasts, scores) {
         club: colIdx(h, ["club"], 1),
       };
       const groupCol = colIdx(h, ["group", "rotation"], -1);
+      const numberCol = colIdx(h, ["number", "no", "no.", "#"], -1);
       let currentGroup = "";
       sections.GYMNASTS.rows.forEach((row) => {
         if (isHeaderRow(row)) return;
@@ -355,7 +360,7 @@ export function parseScheduleXLSX(data, compData, gymnasts, scores) {
         claimedGymnasts.set(g.id, sheetNm);
         const idx = perGroupCount[group] || 0;
         perGroupCount[group] = idx + 1;
-        assignments.push({ id: g.id, group, orderIndex: idx });
+        assignments.push({ id: g.id, group, orderIndex: idx, number: numberCol !== -1 ? cells[numberCol] : "" });
       });
       entry.assignments = assignments;
     }

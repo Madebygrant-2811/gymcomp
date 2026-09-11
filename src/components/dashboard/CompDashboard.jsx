@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "../../lib/supabase.js";
-import { generateId, generateClubCode, newRound, agendaWindow } from "../../lib/utils.js";
+import { generateId, generateClubCode, newRound, agendaWindow, hashPin } from "../../lib/utils.js";
 import { roundCycle, restCount } from "../../lib/rotations.js";
 import { JUDGE_LEVELS } from "../../lib/constants.js";
 import { getApparatusIcon, printDocument, buildAgendaHTML, buildJudgeSheetsHTML, buildAttendanceHTML, buildPublicQRPdf, buildCoachQRPdf } from "../../lib/pdf.js";
@@ -9,7 +9,7 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 import SubmissionsReviewPanel from "../public/SubmissionsReviewPanel.jsx";
 
-function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onManageRoundsGroups, onSetPin, eventStatus, onUpdateCompData, onUpdateGymnasts }) {
+function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEditSetup, onAcceptSubmissions, onManageGymnasts, onManageRoundsGroups, onSetPin, eventStatus, onUpdateCompData, onUpdateGymnasts, canManagePins = true }) {
   const [showId, setShowId] = useState(false);
   const [submLinkCopied, setSubmLinkCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(null);
@@ -22,6 +22,27 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
   const [judgeRemoveConfirm, setJudgeRemoveConfirm] = useState(null);
   const [roundCount, setRoundCount] = useState(compData.rounds?.length || 1);
   const [collapsed, setCollapsed] = useState(new Set());
+  // Collaborator PIN — full shared access to this competition; organiser-only
+  const [collabPinModal, setCollabPinModal] = useState(null); // { value, confirm, error }
+  const [collabClearConfirm, setCollabClearConfirm] = useState(false);
+
+  const saveCollabPin = async () => {
+    if (!canManagePins || !collabPinModal) return;
+    const val = (collabPinModal.value || "").trim();
+    if (!/^\d{4,8}$/.test(val)) { setCollabPinModal(m => ({ ...m, error: "The collaborator PIN must be 4–8 digits." })); return; }
+    if (val !== (collabPinModal.confirm || "").trim()) { setCollabPinModal(m => ({ ...m, error: "The PINs don't match." })); return; }
+    const hashed = await hashPin(val);
+    if (compPin && hashed === compPin) { setCollabPinModal(m => ({ ...m, error: "The collaborator PIN must be different from the judge PIN." })); return; }
+    if (compData.scoreEditPin && hashed === compData.scoreEditPin) { setCollabPinModal(m => ({ ...m, error: "The collaborator PIN must be different from the score edit PIN." })); return; }
+    onUpdateCompData(d => ({ ...d, collabPin: hashed }));
+    setCollabPinModal(null);
+  };
+
+  const clearCollabPin = () => {
+    if (!canManagePins) return;
+    onUpdateCompData(d => ({ ...d, collabPin: null }));
+    setCollabClearConfirm(false);
+  };
 
   // Seed Round 1 on first load if rounds array is empty
   useEffect(() => {
@@ -1293,16 +1314,86 @@ function CompDashboard({ compData, gymnasts, compId, compPin, onStartComp, onEdi
               <div style={{ fontSize: 13, color: compPin ? "var(--success)" : "var(--muted)", marginBottom: 6 }}>
                 {compPin ? "🔒 PIN set" : "🔓 No PIN"}
               </div>
-              {onSetPin && !completed && (
+              {canManagePins && onSetPin && !completed && (
                 <button className="btn btn-ghost btn-sm" style={{ fontSize: 10 }} onClick={onSetPin}>
                   {compPin ? "Change PIN" : "Set PIN"}
                 </button>
               )}
             </div>
-            <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", width: "100%" }}>
-              Save your Competition ID to resume this session from any device
+            <div style={{ width: 1, background: "var(--border)", alignSelf: "stretch" }} />
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>Collaborator Access</div>
+              <div style={{ fontSize: 13, color: compData.collabPin ? "var(--success)" : "var(--muted)", marginBottom: 6 }}>
+                {compData.collabPin ? "🔑 PIN set" : "— Not set"}
+              </div>
+              {canManagePins && !completed && (
+                <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 10 }}
+                    onClick={() => setCollabPinModal({ value: "", confirm: "", error: "" })}>
+                    {compData.collabPin ? "Change PIN" : "Set PIN"}
+                  </button>
+                  {compData.collabPin && (
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, color: "var(--danger)" }}
+                      onClick={() => setCollabClearConfirm(true)}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", width: "100%", fontFamily: "var(--font-display)" }}>
+              Save your Competition ID to resume this session from any device.
+              {canManagePins && <> A collaborator PIN gives a trusted colleague full working access to this competition (no account needed) — share it with the Competition ID. Clearing it revokes their access immediately.</>}
             </div>
           </div>
+        )}
+
+        {/* ── Collaborator PIN modal ── */}
+        {collabPinModal && (
+          <div className="modal-backdrop" onClick={() => setCollabPinModal(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, fontFamily: "var(--font-display)" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                {compData.collabPin ? "Change collaborator PIN" : "Set a collaborator PIN"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
+                Anyone with this PIN and the Competition ID gets full working access to this competition — setup, scoring and results. They can't delete the competition, change any PINs or touch your account.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>PIN (4–8 digits)</label>
+                  <input className="input" type="password" inputMode="numeric" maxLength={8} placeholder="e.g. 246810" autoFocus
+                    value={collabPinModal.value} style={{ width: "100%" }}
+                    onChange={e => setCollabPinModal(m => ({ ...m, value: e.target.value.replace(/\D/g, ""), error: "" }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", display: "block", marginBottom: 6 }}>Confirm PIN</label>
+                  <input className="input" type="password" inputMode="numeric" maxLength={8} placeholder="Repeat PIN"
+                    value={collabPinModal.confirm} style={{ width: "100%" }}
+                    onChange={e => setCollabPinModal(m => ({ ...m, confirm: e.target.value.replace(/\D/g, ""), error: "" }))}
+                    onKeyDown={e => e.key === "Enter" && saveCollabPin()} />
+                </div>
+              </div>
+              {collabPinModal.error && <div className="field-error" style={{ marginTop: 10 }}>{collabPinModal.error}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 24, justifyContent: "flex-end" }}>
+                <button className="btn btn-secondary" onClick={() => setCollabPinModal(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveCollabPin} disabled={!collabPinModal.value.trim()}>
+                  Save PIN
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Collaborator PIN clear confirmation ── */}
+        {collabClearConfirm && (
+          <ConfirmModal
+            icon="🔑"
+            isDanger={true}
+            message="Clear the collaborator PIN? Anyone currently using shared collaborator access will lose access immediately, and the PIN will stop working."
+            confirmLabel="Clear PIN"
+            onConfirm={clearCollabPin}
+            onCancel={() => setCollabClearConfirm(false)}
+          />
         )}
 
       </div>

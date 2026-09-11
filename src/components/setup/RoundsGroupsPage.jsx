@@ -324,12 +324,15 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, scores
 
   // Applies the previewed plan per round: agenda, groups + rotations and group
   // assignments are replaced for rounds with a matching sheet; blocked rounds
-  // and rounds with no sheet are untouched. orderIndex comes from row order —
-  // numbers are then written from the running order on save, exactly as after
-  // a manual reorder.
+  // and rounds with no sheet are untouched. orderIndex comes from row order in
+  // both numbering modes. In 'auto' mode numbers are then written from the
+  // running order on save, exactly as after a manual reorder, so the sheet's
+  // Number column is ignored; in 'imported' mode the Number column is applied
+  // to each matched gymnast and never rewritten afterwards.
   const applyImportPlan = () => {
     const plan = importPlan;
     if (!plan || plan.error) return;
+    const importedNumbers = (compData.numberingMode || "auto") === "imported";
     const applicable = plan.rounds.filter((p) => !p.blocked);
     setCompData((d) => {
       const newRounds = (d.rounds || []).map((r) => {
@@ -349,7 +352,12 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, scores
     const byId = {};
     applicable.forEach((pr) => {
       (pr.assignments || []).forEach((a) => {
-        byId[a.id] = { round: pr.roundId, group: a.group, orderIndex: a.orderIndex };
+        byId[a.id] = {
+          round: pr.roundId,
+          group: a.group,
+          orderIndex: a.orderIndex,
+          ...(importedNumbers && a.number ? { number: a.number } : {}),
+        };
       });
     });
     if (Object.keys(byId).length) {
@@ -407,6 +415,8 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, scores
   // Save is the single point where numbers are written: every gymnast is
   // numbered sequentially from 1 in competition-wide running order, with
   // unassigned gymnasts last. Runs on every save, at any competition status.
+  // In 'imported' numbering mode numberByRunningOrder is a no-op, so
+  // club-supplied numbers survive every save untouched.
   const handleSaveClick = () => {
     const numbered = numberByRunningOrder(compData, gymnasts);
     setGymnasts(numbered);
@@ -1950,7 +1960,7 @@ function RoundsGroupsPage({ compData, gymnasts, setCompData, setGymnasts, scores
                         <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
                           <div>Agenda: {pr.agenda ? `replace with ${pr.agenda.length} entr${pr.agenda.length !== 1 ? "ies" : "y"}` : "unchanged"}</div>
                           <div>Rotations: {pr.groups ? `${pr.groups.length} rotation${pr.groups.length !== 1 ? "s" : ""} with apparatus orders` : "unchanged"}</div>
-                          <div>Gymnasts: {pr.assignments ? `${pr.assignments.length} assignment${pr.assignments.length !== 1 ? "s" : ""} (row order sets running order)` : "unchanged"}</div>
+                          <div>Gymnasts: {pr.assignments ? `${pr.assignments.length} assignment${pr.assignments.length !== 1 ? "s" : ""} (row order sets running order${(compData.numberingMode || "auto") === "imported" ? "; the Number column will be applied" : "; numbers renumber from running order on save"})` : "unchanged"}</div>
                         </div>
                       )}
                       {pr.warnings.map((w, wi) => (

@@ -13,6 +13,10 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
   const [csvWarnings, setCsvWarnings] = useState({ errors: [], warns: [] });
   const [fieldErrors, setFieldErrors] = useState({});
   const [selected, setSelected] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterClub, setFilterClub] = useState("");
+  const [filterLevel, setFilterLevel] = useState("");
+  const [filterAge, setFilterAge] = useState(""); // only offered when the filtered level has ages
   const fileRef = useRef(null);
 
   const gymnastsWithScores = useMemo(() => {
@@ -53,6 +57,18 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
 
   const blankForm = () => ({ name: "", level: "", age: "", bgNumber: "" });
   const [newG, setNewG] = useState(() => blankForm());
+  // Manual add lives in a modal; it stays open after each add so a run of
+  // gymnasts can be entered back-to-back.
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [lastAdded, setLastAdded] = useState(null);
+
+  const openAddModal = () => {
+    setNewG(blankForm());
+    setFormWarnings([]);
+    setFieldErrors({});
+    setLastAdded(null);
+    setShowAddModal(true);
+  };
 
 
   const validateGymnast = (g, excludeId = null) => {
@@ -83,6 +99,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     setNewG(blankForm());
     setFormWarnings([]);
     setFieldErrors({});
+    setLastAdded(gymnast.name);
   };
 
   const startEdit = (g) => {
@@ -130,6 +147,13 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     const wdSet = new Set(pendingWithdraw.ids);
     setData(d => d.map(g => wdSet.has(g.id) ? { ...g, withdrawn: true } : g));
     setPendingWithdraw(null);
+  };
+
+  // DNS (Did Not Start) — gymnast stays in the list and keeps any scores,
+  // but is dimmed in score entry, excluded from rankings and rotation groups.
+  const setDns = (ids, dns) => {
+    const set = new Set(ids);
+    setData(d => d.map(g => set.has(g.id) ? { ...g, dns } : g));
   };
 
   // CSV
@@ -235,7 +259,49 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
     data.forEach(g => { if (g.age && !seen.includes(g.age)) seen.push(g.age); });
     return seen;
   }, [data]);
-  const allGymnasts = data;
+  // Search (name only) + club/level filters, with an age filter that appears
+  // only when the chosen level actually has ages attached to its gymnasts.
+  // Filters are faceted: each dropdown only offers values present in the rows
+  // matching every OTHER active criterion, so a search for "Maddie" narrows
+  // the club list to just her clubs. A selected value always stays listed so
+  // it can be deselected.
+  const search = normalizeStr(searchQuery).toLowerCase();
+  const hasFilter = !!(search || filterClub || filterLevel || filterAge);
+  const { clubOptions, levelOptions, ageOptions, allGymnasts } = useMemo(() => {
+    const matchesExcept = (g, except) =>
+      (except === "search" || !search || (g.name || "").toLowerCase().includes(search)) &&
+      (except === "club" || !filterClub || g.club === filterClub) &&
+      (except === "level" || !filterLevel || g.level === filterLevel) &&
+      (except === "age" || !filterAge || g.age === filterAge);
+
+    const countBy = (except, keyFn) => {
+      const counts = new Map();
+      data.forEach(g => {
+        if (!matchesExcept(g, except)) return;
+        const k = keyFn(g);
+        if (k) counts.set(k, (counts.get(k) || 0) + 1);
+      });
+      return counts;
+    };
+
+    const clubCounts = countBy("club", g => g.club);
+    const levelCounts = countBy("level", g => g.level);
+    const ageCounts = countBy("age", g => (g.level === filterLevel ? g.age : ""));
+
+    return {
+      clubOptions: compData.clubs
+        .filter(c => c.name === filterClub || clubCounts.has(c.name))
+        .map(c => ({ value: c.name, label: c.name, count: clubCounts.get(c.name) || 0 })),
+      levelOptions: compData.levels
+        .filter(l => l.id === filterLevel || levelCounts.has(l.id))
+        .map(l => ({ value: l.id, label: l.name, count: levelCounts.get(l.id) || 0 })),
+      ageOptions: filterLevel
+        ? [...new Set([...ageCounts.keys(), ...(filterAge ? [filterAge] : [])])]
+            .map(a => ({ value: a, label: a, count: ageCounts.get(a) || 0 }))
+        : [],
+      allGymnasts: hasFilter ? data.filter(g => matchesExcept(g, null)) : data,
+    };
+  }, [data, compData.clubs, compData.levels, search, filterClub, filterLevel, filterAge, hasFilter]);
 
   const grouped = {};
   allGymnasts.forEach(g => {
@@ -257,7 +323,9 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
 
   const toggleSelect = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = (ids) => setSelected(s => { const allSelected = ids.every(id => s.has(id)); const n = new Set(s); ids.forEach(id => allSelected ? n.delete(id) : n.add(id)); return n; });
-  const selectedVisible = allGymnasts.filter(g => selected.has(g.id)).length;
+  // Selection is counted against the full list, not the search-filtered view —
+  // bulk actions always act on everything selected, even rows a search hides.
+  const selectedVisible = data.filter(g => selected.has(g.id)).length;
 
   const errBorder = { borderColor: "#e53e3e", boxShadow: "0 0 0 1px #e53e3e" };
 
@@ -284,18 +352,35 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
         <div className="page-sub">Add gymnasts club by club, or upload via CSV</div>
       </div>
 
-      {/* CSV Upload */}
+      {/* Add Gymnasts — bulk + manual, two routes to the same action */}
       <div className="card">
-        <div className="card-title">CSV Upload</div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: (csvWarnings.errors.length || csvWarnings.warns.length) ? 12 : 0 }}>
-          <div className="csv-zone" style={{ flex: 1 }} onClick={() => fileRef.current.click()}>
-            📂 Click to upload CSV file
+        <div className="card-title">Add Gymnasts</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Bulk upload</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, fontFamily: "var(--font-display)" }}>
+              Import a whole list at once from a CSV file — clubs, levels and age ranges are added automatically.
+            </div>
+            <div className="csv-zone" onClick={() => fileRef.current.click()}>
+              📂 Click to upload CSV file
+            </div>
+            <div style={{ marginTop: "auto" }}>
+              <button className="btn btn-secondary btn-sm" onClick={downloadTemplate}>⬇ Download Template</button>
+            </div>
           </div>
-          <button className="btn btn-secondary" onClick={downloadTemplate}>⬇ Download Template</button>
+          <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Add manually</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, fontFamily: "var(--font-display)" }}>
+              Add gymnasts one at a time — pick a club and enter their details. Handy for late entries on the day.
+            </div>
+            <div style={{ marginTop: "auto" }}>
+              <button className="btn btn-primary" onClick={openAddModal}>＋ Add Gymnast</button>
+            </div>
+          </div>
         </div>
         <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleCSV} />
         {csvWarnings.errors.length > 0 && (
-          <div className="error-box" style={{ marginBottom: 8 }}>
+          <div className="error-box" style={{ marginTop: 12, marginBottom: 8 }}>
             <strong>⚠ {csvWarnings.errors.length} row{csvWarnings.errors.length > 1 ? "s" : ""} skipped:</strong>
             <ul style={{ marginTop: 6, paddingLeft: 18 }}>
               {csvWarnings.errors.map((e, i) => <li key={i}>{e}</li>)}
@@ -303,7 +388,7 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
           </div>
         )}
         {csvWarnings.warns.length > 0 && (
-          <div className="warn-box">
+          <div className="warn-box" style={{ marginTop: 12 }}>
             <strong>ℹ Notices:</strong>
             <ul style={{ marginTop: 6, paddingLeft: 18 }}>
               {csvWarnings.warns.map((w, i) => <li key={i}>{w}</li>)}
@@ -312,74 +397,59 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
         )}
       </div>
 
-      {/* Manual Add */}
-      <div className="card">
-        <div className="card-title">Add Gymnast Manually</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Club</div>
-        <div style={{ marginBottom: 16 }}>
-          {compData.clubs.length > 0 ? (
-            <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", ...(fieldErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
-              {compData.clubs.map(c => (
-                <button key={c.id} className={`btn btn-sm ${selectedClub === c.name ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => { setSelectedClub(c.name); setFieldErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>No clubs added yet — add clubs from the dashboard first.</div>
-          )}
-          {fieldErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
-        </div>
-        <div style={{ borderTop: "1px solid var(--border)", margin: "0 0 16px" }} />
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Gymnast Details</div>
-        <div className="grid-3" style={{ marginBottom: 8 }}>
-          <div className="field">
-            <label className="label">Name</label>
-            <input className="input" placeholder="Full name" value={newG.name} style={fieldErrors.name ? errBorder : {}}
-              onChange={e => { setNewG(g => ({ ...g, name: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.name; return n; }); }} />
-          </div>
-          <div className="field">
-            <label className="label">Level</label>
-            <select className="select" value={newG.level} style={fieldErrors.level ? errBorder : {}}
-              onChange={e => { setNewG(g => ({ ...g, level: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.level; return n; }); }}>
-              <option value="">Select…</option>
-              {compData.levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label className="label">Age</label>
-            <select className="select" value={newG.age} style={fieldErrors.age ? errBorder : {}}
-              onChange={e => { setNewG(g => ({ ...g, age: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }}>
-              <option value="">Select…</option>
-              {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label className="label">BG Number (optional)</label>
-            <input className="input" placeholder="e.g. 1234567" value={newG.bgNumber}
-              onChange={e => setNewG(g => ({ ...g, bgNumber: e.target.value }))} />
-          </div>
-        </div>
-
-        {formWarnings.length > 0 && (
-          <div className="warn-box">
-            {formWarnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
-            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-              <button className="btn btn-warn btn-sm" onClick={commit}>Add anyway</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setFormWarnings([])}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {formWarnings.length === 0 && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" onClick={attemptAdd}>Add Gymnast</button>
-          </div>
-        )}
-      </div>
-
       {/* Gymnast List */}
       <div className="card">
         <div className="card-title">Gymnast List — {data.length} total</div>
+        {data.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 340 }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round"
+                style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>
+              </svg>
+              <input className="input" placeholder="Search by name…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ width: "100%", paddingLeft: 34, paddingRight: searchQuery ? 34 : undefined }} />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} title="Clear search"
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "var(--muted)", padding: 4, lineHeight: 1, fontFamily: "var(--font-display)" }}>
+                  ×
+                </button>
+              )}
+            </div>
+            {(clubOptions.length > 0 || filterClub) && (
+              <select className="select" style={{ width: "auto", minWidth: 130, fontSize: 13 }}
+                value={filterClub} onChange={e => setFilterClub(e.target.value)}>
+                <option value="">All clubs ({clubOptions.length})</option>
+                {clubOptions.map(o => <option key={o.value} value={o.value}>{o.label} ({o.count})</option>)}
+              </select>
+            )}
+            {(levelOptions.length > 0 || filterLevel) && (
+              <select className="select" style={{ width: "auto", minWidth: 130, fontSize: 13 }}
+                value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setFilterAge(""); }}>
+                <option value="">All levels ({levelOptions.length})</option>
+                {levelOptions.map(o => <option key={o.value} value={o.value}>{o.label} ({o.count})</option>)}
+              </select>
+            )}
+            {filterLevel && ageOptions.length > 0 && (
+              <select className="select" style={{ width: "auto", minWidth: 110, fontSize: 13 }}
+                value={filterAge} onChange={e => setFilterAge(e.target.value)}>
+                <option value="">All ages ({ageOptions.length})</option>
+                {ageOptions.map(o => <option key={o.value} value={o.value}>{o.label} ({o.count})</option>)}
+              </select>
+            )}
+            {hasFilter && (<>
+              <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+                {allGymnasts.length} of {data.length} match{allGymnasts.length === 1 ? "es" : ""}
+              </span>
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, whiteSpace: "nowrap" }}
+                onClick={() => { setSearchQuery(""); setFilterClub(""); setFilterLevel(""); setFilterAge(""); }}>
+                Clear all
+              </button>
+            </>)}
+          </div>
+        )}
         {selectedVisible > 0 && (
           <div style={{ padding: "10px 12px", background: "var(--surface2)", borderRadius: 8, marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -405,6 +475,16 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
                 </select>
               )}
               <div style={{ flex: 1 }} />
+              {(() => {
+                const allDns = data.filter(g => selected.has(g.id)).every(g => g.dns);
+                return (
+                  <button className="btn btn-sm" title={allDns ? "Clear Did Not Start" : "Mark as Did Not Start"}
+                    style={{ fontSize: 11, padding: "4px 12px", background: allDns ? "var(--danger)" : "transparent", color: allDns ? "#fff" : "var(--danger)", border: "1px solid var(--danger)" }}
+                    onClick={() => setDns([...selected], !allDns)}>
+                    {allDns ? "Clear DNS" : "Mark DNS"}
+                  </button>
+                );
+              })()}
               <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: "4px 12px" }}
                 onClick={() => tryRemove({ ids: [...selected], msg: `Remove ${selectedVisible} selected gymnast${selectedVisible > 1 ? "s" : ""}?` })}>
                 Delete Selected
@@ -416,7 +496,11 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
             </div>
           </div>
         )}
-        {sortedGroupKeys.length === 0 && <div className="empty">No gymnasts added yet</div>}
+        {sortedGroupKeys.length === 0 && (
+          <div className="empty">
+            {hasFilter ? "No gymnasts match the current search and filters" : "No gymnasts added yet"}
+          </div>
+        )}
         {sortedGroupKeys.map(key => {
           const { levelName, age, gymnasts } = grouped[key];
           const label = age ? `${levelName} — ${age}` : levelName;
@@ -442,10 +526,10 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
                   <colgroup>
                     <col style={{ width: "5%" }} />
                     <col style={{ width: "8%" }} />
-                    <col style={{ width: "30%" }} />
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "27%" }} />
+                    <col style={{ width: "23%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "26%" }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -477,6 +561,9 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
                         <td style={{ textAlign: "right" }}>
                           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                             <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => startEdit(g)}>Edit</button>
+                            <button className="btn btn-sm" title={g.dns ? "Clear Did Not Start" : "Mark as Did Not Start"}
+                              style={{ fontSize: 11, padding: "4px 10px", background: g.dns ? "var(--danger)" : "transparent", color: g.dns ? "#fff" : "var(--danger)", border: "1px solid var(--danger)" }}
+                              onClick={() => setDns([g.id], !g.dns)}>{g.dns ? "Clear DNS" : "DNS"}</button>
                             {g.withdrawn ? (
                               <button className="btn btn-sm" style={{ fontSize: 11, padding: "4px 10px", background: "#d97706", color: "#fff", border: "none" }}
                                 onClick={() => setData(d => d.map(x => x.id === g.id ? { ...x, withdrawn: false } : x))}>Reinstate</button>
@@ -503,6 +590,79 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
         </button>
       </div>
 
+      {/* Add Gymnast Modal */}
+      {showAddModal && (
+        <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false); }}>
+          <div className="modal-box" style={{ maxWidth: 520, width: "100%", padding: 28 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Add Gymnast</div>
+              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", padding: 4 }}>×</button>
+            </div>
+            <div className="field" style={{ marginBottom: 12 }}>
+              <label className="label">Club</label>
+              {compData.clubs.length > 0 ? (
+                <select className="select" value={selectedClub} style={{ width: "100%", ...(fieldErrors.club ? errBorder : {}) }}
+                  onChange={e => { setSelectedClub(e.target.value); setFieldErrors(fe => { const n = { ...fe }; delete n.club; return n; }); }}>
+                  <option value="">Select…</option>
+                  {compData.clubs.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              ) : (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>No clubs added yet — add clubs from the dashboard first.</div>
+              )}
+              {fieldErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
+            </div>
+            <div className="grid-3" style={{ marginBottom: 8 }}>
+              <div className="field">
+                <label className="label">Name</label>
+                <input className="input" placeholder="Full name" value={newG.name} style={fieldErrors.name ? errBorder : {}}
+                  onChange={e => { setNewG(g => ({ ...g, name: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.name; return n; }); }} autoFocus />
+              </div>
+              <div className="field">
+                <label className="label">Level</label>
+                <select className="select" value={newG.level} style={fieldErrors.level ? errBorder : {}}
+                  onChange={e => { setNewG(g => ({ ...g, level: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.level; return n; }); }}>
+                  <option value="">Select…</option>
+                  {compData.levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">Age</label>
+                <select className="select" value={newG.age} style={fieldErrors.age ? errBorder : {}}
+                  onChange={e => { setNewG(g => ({ ...g, age: e.target.value })); setFieldErrors(fe => { const n = { ...fe }; delete n.age; return n; }); }}>
+                  <option value="">Select…</option>
+                  {(compData.ageRanges || []).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">BG Number (optional)</label>
+                <input className="input" placeholder="e.g. 1234567" value={newG.bgNumber}
+                  onChange={e => setNewG(g => ({ ...g, bgNumber: e.target.value }))} />
+              </div>
+            </div>
+            {lastAdded && formWarnings.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--success)", fontFamily: "var(--font-display)", fontWeight: 600, marginBottom: 12 }}>
+                ✓ Added {lastAdded} — add another or close
+              </div>
+            )}
+            {formWarnings.length > 0 && (
+              <div className="warn-box" style={{ marginBottom: 12 }}>
+                {formWarnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                  <button className="btn btn-warn btn-sm" onClick={commit}>Add anyway</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setFormWarnings([])}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {formWarnings.length === 0 && (
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost" onClick={() => setShowAddModal(false)}>Done</button>
+                <button className="btn btn-primary" onClick={attemptAdd}>Add Gymnast</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Edit Gymnast Modal */}
       {editModal && (
         <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setEditModal(null); }}>
@@ -511,23 +671,24 @@ function Step2_Gymnasts({ compData, setCompDataFn, data, setData, scores = {}, o
               <div style={{ fontSize: 18, fontWeight: 700 }}>Edit Gymnast</div>
               <button onClick={() => setEditModal(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--muted)", padding: 4 }}>×</button>
             </div>
-            <div style={{ marginBottom: 12 }}>
+            <div className="field" style={{ marginBottom: 12 }}>
               <label className="label">Club</label>
-              {compData.clubs.length > 0 && (
-                <div className="club-pills-row" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, ...(editModalErrors.club ? { padding: 4, borderRadius: 8, outline: "2px solid #e53e3e" } : {}) }}>
-                  {compData.clubs.map(c => (
-                    <button key={c.id} className={`btn btn-sm ${editModal.club === c.name ? "btn-primary" : "btn-secondary"}`}
-                      onClick={() => { setEditModal(m => ({ ...m, club: c.name })); setEditModalErrors(e => { const n = { ...e }; delete n.club; return n; }); }}>{c.name}</button>
-                  ))}
-                </div>
-              )}
-              {compData.clubs.length === 0 && (
+              {compData.clubs.length > 0 ? (
+                <select className="select" value={editModal.club || ""} style={{ width: "100%", ...(editModalErrors.club ? errBorder : {}) }}
+                  onChange={e => { setEditModal(m => ({ ...m, club: e.target.value })); setEditModalErrors(er => { const n = { ...er }; delete n.club; return n; }); }}>
+                  <option value="">Select…</option>
+                  {compData.clubs.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  {editModal.club && !compData.clubs.some(c => c.name === editModal.club) && (
+                    <option value={editModal.club}>{editModal.club} (not in club list)</option>
+                  )}
+                </select>
+              ) : (
                 <div style={{ fontSize: 13, color: "var(--muted)" }}>No clubs added yet — add clubs from the dashboard first.</div>
               )}
               {editModalErrors.club && <div style={{ fontSize: 11, color: "#e53e3e", marginTop: 4 }}>Please select a club</div>}
             </div>
-            <div className="grid-3" style={{ marginBottom: 8 }}>
-              <div className="field">
+            <div className="grid-2" style={{ marginBottom: 8 }}>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <label className="label">Name</label>
                 <input className="input" value={editModal.name} style={editModalErrors.name ? errBorder : {}}
                   onChange={e => { setEditModal(m => ({ ...m, name: e.target.value })); setEditModalErrors(fe => { const n = { ...fe }; delete n.name; return n; }); }} autoFocus />

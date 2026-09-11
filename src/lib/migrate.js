@@ -77,6 +77,10 @@ export function migrateCompData(cd) {
   }
   // Default allowSubmissions to true for existing comps
   if (migrated.allowSubmissions === undefined) migrated.allowSubmissions = true;
+  // Gymnast numbering: 'auto' (numbers derived from running order, the
+  // long-standing behaviour) or 'imported' (numbers are club-supplied data
+  // GymComp never rewrites). Every existing comp defaults to 'auto'.
+  if (!migrated.numberingMode) migrated.numberingMode = "auto";
   // Default groupsByRound for existing comps
   if (!migrated.groupsByRound) migrated.groupsByRound = {};
   // Per-group apparatus orders, keyed by round id then group name. Absent for

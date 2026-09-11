@@ -5,9 +5,12 @@ import GymCompLogomark from "../../assets/Logomark.svg";
 // ============================================================
 // APP SIDEBAR (persistent, context-aware)
 // ============================================================
-function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit, onExportXLSX, onExportPDF, subscriptionStatus, onManageSubscription }) {
+function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account, statusFilter, setStatusFilter, filterCounts, activeSection, onNew, onMyEvents, onEditSetup, onManageGymnasts, onStartComp, onDashboard, onSettings, onLogout, gymnastsCount, judgesCount, eventStatus, allGymnastsComplete, isAdmin, onAdmin, pinRole, lockedApparatus, rounds, activeRound, setActiveRound, onExit, onExportXLSX, onExportPDF, subscriptionStatus, onManageSubscription, collabMode, compName }) {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const [exportOpen, setExportOpen] = useState(false);
+  // Collaborator sessions have no "My Events" — the equivalent action returns
+  // to this competition's dashboard instead.
+  const backLabel = collabMode ? "Comp Dashboard" : "My Events";
 
   // SVG icon helpers (16x16)
   const icons = {
@@ -134,7 +137,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
           {/* ── active / phase 1 (edit setup) ── */}
           {screen === "active" && phase === 1 && (<>
-            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            <NavItem icon={icons.back} label={backLabel} onClick={onMyEvents} />
             <div className="as-divider" />
             <div className="as-section-title">Setup Sections</div>
             {setupAnchors.map(a => (
@@ -144,8 +147,10 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
           {/* ── active / dashboard ── */}
           {screen === "active" && phase === "dashboard" && (<>
-            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
-            <div className="as-divider" />
+            {!collabMode && (<>
+              <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+              <div className="as-divider" />
+            </>)}
             {eventStatus !== "completed" && (<>
               <NavItem icon={icons.edit} label="Edit Comp Setup" onClick={onEditSetup} />
               <div className="as-divider" />
@@ -182,7 +187,7 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
 
           {/* ── active / phase 2 (competition) ── */}
           {screen === "active" && phase === 2 && (<>
-            <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />
+            {!collabMode && <NavItem icon={icons.back} label="My Events" onClick={onMyEvents} />}
             <NavItem icon={icons.home} label="Dashboard" onClick={onDashboard} />
             <div className="as-divider" />
             <div className="as-section-title">Competition</div>
@@ -232,6 +237,19 @@ function AppSidebar({ screen, phase, step, setStep, collapsed, onToggle, account
               </span>
             </button>
           </>)}
+          <button className="as-signout" onClick={onExit}>
+            {icons.logout}
+            <span className="as-label">Exit</span>
+          </button>
+        </>) : collabMode ? (<>
+          {/* Shared collaborator access — persistent identity, no account/subscription */}
+          <div className="as-account" style={{ cursor: "default" }} title={`Shared collaborator access — ${compName || "Competition"}`}>
+            <div className="as-account-avatar" style={{ background: "var(--brand-01)", color: "var(--text-alternate)" }}>{icons.users}</div>
+            <span className="as-account-label" style={{ display: "flex", flexDirection: "column", lineHeight: 1.3, minWidth: 0 }}>
+              <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{compName || "Competition"}</span>
+              <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>Collaborator access</span>
+            </span>
+          </div>
           <button className="as-signout" onClick={onExit}>
             {icons.logout}
             <span className="as-label">Exit</span>

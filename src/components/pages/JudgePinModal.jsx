@@ -5,6 +5,7 @@ import { getApparatusIcon } from "../../lib/pdf.js";
 
 // ============================================================
 // JUDGE PIN MODAL — competition ID + PIN + role + apparatus
+// (also the entry point for shared collaborator access)
 // ============================================================
 function JudgePinModal({ onResume, onClose }) {
   const [resumeId, setResumeId] = useState("");
@@ -14,15 +15,21 @@ function JudgePinModal({ onResume, onClose }) {
   const [compChecked, setCompChecked] = useState(false);
   const [compHasPin, setCompHasPin] = useState(false);
   const [fetchedData, setFetchedData] = useState(null);
+  const [fetchedRow, setFetchedRow] = useState(null); // full competitions row — status + owner for collaborator sessions
+  const [collabPinInput, setCollabPinInput] = useState("");
 
   // Post-PIN steps
-  const [modalStep, setModalStep] = useState("pin"); // "pin" | "role" | "apparatus"
+  const [modalStep, setModalStep] = useState("pin"); // "pin" | "role" | "apparatus" | "collab-pin"
   const [validatedId, setValidatedId] = useState("");
+
+  // Owner + status travel with a collaborator session so the app can check the
+  // owner's subscription and preserve the row's status on writes.
+  const rowMeta = () => ({ status: fetchedRow?.status, ownerId: fetchedRow?.user_id });
 
   // Reset to step 1 if ID changes after check
   const handleIdChange = (e) => {
     setResumeId(e.target.value);
-    if (compChecked) { setCompChecked(false); setCompHasPin(false); setFetchedData(null); setResumePin(""); setResumeError(""); }
+    if (compChecked) { setCompChecked(false); setCompHasPin(false); setFetchedData(null); setFetchedRow(null); setResumePin(""); setResumeError(""); }
   };
 
   // After PIN validated (or no PIN), go to role selection
@@ -43,6 +50,7 @@ function JudgePinModal({ onResume, onClose }) {
     if (error || !data) { setResumeError("Competition not found. Check the ID and try again."); return; }
     const pin = data.data?.pin;
     setFetchedData(data.data);
+    setFetchedRow(data);
     if (pin) {
       setCompHasPin(true);
       setCompChecked(true);
@@ -51,15 +59,32 @@ function JudgePinModal({ onResume, onClose }) {
     }
   };
 
-  // Step 2: verify PIN
+  // Step 2: verify PIN — the judge PIN opens role selection; the collaborator
+  // PIN (when set) goes straight into a shared collaborator session.
   const handlePinSubmit = async () => {
     if (!fetchedData) return;
     const storedPin = fetchedData.pin;
-    const match = isHashed(storedPin)
-      ? storedPin === await hashPin(resumePin)
+    const hashedInput = await hashPin(resumePin);
+    const judgeMatch = isHashed(storedPin)
+      ? storedPin === hashedInput
       : storedPin === resumePin;
-    if (!match) { setResumeError("Incorrect PIN."); return; }
-    proceedToRole(resumeId.trim(), fetchedData);
+    if (judgeMatch) { proceedToRole(resumeId.trim(), fetchedData); return; }
+    const collabPin = fetchedData.compData?.collabPin;
+    if (collabPin && collabPin === hashedInput) {
+      onResume(resumeId.trim(), fetchedData, "collaborator", null, rowMeta());
+      return;
+    }
+    setResumeError("Incorrect PIN.");
+  };
+
+  // Collaborator PIN step (reached from role selection when the comp has no
+  // judge PIN, or when a judge-PIN holder picks the collaborator role).
+  const handleCollabPinSubmit = async () => {
+    if (!fetchedData) return;
+    const collabPin = fetchedData.compData?.collabPin;
+    const match = collabPin && collabPin === await hashPin(collabPinInput);
+    if (!match) { setResumeError("Incorrect collaborator PIN."); return; }
+    onResume(validatedId || resumeId.trim(), fetchedData, "collaborator", null, rowMeta());
   };
 
   // Role selection
@@ -133,7 +158,7 @@ function JudgePinModal({ onResume, onClose }) {
                   className="input"
                   placeholder="Enter PIN"
                   type="password"
-                  maxLength={4}
+                  maxLength={8}
                   value={resumePin}
                   onChange={e => { setResumePin(e.target.value); setResumeError(""); }}
                   onKeyDown={e => e.key === "Enter" && handlePinSubmit()}
@@ -187,7 +212,50 @@ function JudgePinModal({ onResume, onClose }) {
               </button>
             </div>
 
+            {fetchedData?.compData?.collabPin && (
+              <button className="jpm-app-btn" style={{ marginTop: 10 }}
+                onClick={() => { setResumeError(""); setCollabPinInput(""); setModalStep("collab-pin"); }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 14c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M12 9.5c1.5.3 2.5 1.5 2.5 3"/></svg>
+                Collaborator — full shared access
+              </button>
+            )}
+
             <button className="jpm-back" onClick={() => { setModalStep("pin"); setCompChecked(false); setCompHasPin(false); setResumePin(""); }}>
+              ← Back
+            </button>
+          </>)}
+
+          {/* ── Collaborator PIN step ── */}
+          {modalStep === "collab-pin" && (<>
+            <div className="jpm-header">Collaborator access</div>
+            <div className="jpm-sub">Enter the collaborator PIN provided by the organiser. This gives shared working access to the whole competition.</div>
+
+            <div className="field">
+              <label className="label">Collaborator PIN</label>
+              <input
+                className="input"
+                placeholder="Enter collaborator PIN"
+                type="password"
+                maxLength={8}
+                value={collabPinInput}
+                onChange={e => { setCollabPinInput(e.target.value); setResumeError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleCollabPinSubmit()}
+                autoFocus
+              />
+            </div>
+
+            {resumeError && <div className="jpm-error">{resumeError}</div>}
+
+            <button
+              className="btn btn-primary"
+              onClick={handleCollabPinSubmit}
+              disabled={!collabPinInput.trim()}
+              style={{ width: "100%", justifyContent: "center" }}
+            >
+              Enter Competition
+            </button>
+
+            <button className="jpm-back" onClick={() => { setResumeError(""); setModalStep("role"); }}>
               ← Back
             </button>
           </>)}

@@ -8,7 +8,7 @@ import CompConfigSections from "./CompConfigSections.jsx";
 import ClubPicker from "../shared/ClubPicker.jsx";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
-function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser, scores = {} }) {
+function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSave, isExisting, eventStatus, compId, currentUser, scores = {}, restrictPins = false, gymnasts = [], setGymnasts }) {
   const [pendingRemove, setPendingRemove] = useState(null);
   const [newLevel, setNewLevel] = useState("");
   const [newAgeRange, setNewAgeRange] = useState("");
@@ -275,7 +275,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
 
       {/* Competition configuration — foundational scoring settings, ahead of
           the level list they shape */}
-      <CompConfigSections data={data} setData={setData} scores={scores} eventStatus={eventStatus} />
+      <CompConfigSections data={data} setData={setData} scores={scores} eventStatus={eventStatus} restrictPins={restrictPins} gymnasts={gymnasts} setGymnasts={setGymnasts} />
 
       {/* Skill Levels */}
       <div className="card" id="setup-levels">

@@ -129,10 +129,17 @@ export default function App() {
   const [filterCounts, setFilterCounts] = useState({ draft: 0, active: 0, completed: 0, archived: 0 });
   // Current event record (from events store) — links comp to account
   const [currentEventId, setCurrentEventId] = useState(null);
-  // PIN role state (judge / scorekeeper — PIN-only sessions)
-  const [pinRole, setPinRole] = useState(null);           // "judge" | "scorekeeper" | null
+  // PIN role state (judge / scorekeeper / collaborator — PIN-only sessions)
+  const [pinRole, setPinRole] = useState(null);           // "judge" | "scorekeeper" | "collaborator" | null
   const [lockedApparatus, setLockedApparatus] = useState(null); // string | null
   const [activeRound, setActiveRound] = useState(null);  // lifted for PIN sidebar
+  // Shared collaborator session — { authHash, status, ownerId, ownerSub, pinFields }.
+  // authHash is the collaborator PIN hash the session entered with; pinFields
+  // mirrors the server-held score-lock fields so collaborator writes can never
+  // change them; ownerSub is the competition owner's subscription state.
+  const [collabSession, setCollabSession] = useState(null);
+  const [collabNotice, setCollabNotice] = useState(null);
+  const isCollaborator = pinRole === "collaborator";
 
   // Derived account shape — keeps all downstream component code unchanged
   const currentAccount = currentUser ? {
@@ -141,6 +148,8 @@ export default function App() {
     name:     currentProfile?.full_name || currentUser.email?.split("@")[0] || "",
     clubName: currentProfile?.club_name || "",
   } : null;
+  // Organiser-level UI/capabilities: a signed-in organiser or a collaborator session
+  const canOrganise = !!currentAccount || isCollaborator;
 
   // Derived subscription status for UI
   const subscriptionStatus = useMemo(() => {
@@ -192,7 +201,8 @@ export default function App() {
 
   // Derived values — avoid redundant events.getAll().find() in render path
   const currentEvent = currentEventId ? events.getAll().find(e => e.id === currentEventId) : null;
-  const eventStatus = currentEvent?.status;
+  // Collaborator sessions have no local event record — the row status stands in
+  const eventStatus = currentEvent?.status ?? (isCollaborator ? collabSession?.status : undefined);
   const allGymnastsComplete = useMemo(() => {
     const rf = ["name","club","level","round","age"];
     return gymnasts.length === 0 || gymnasts.every(g => rf.every(f => g[f] && g[f].toString().trim()));
@@ -287,7 +297,36 @@ export default function App() {
   // ---- Supabase sync (with offline queue) ----
   const pushToSupabase = useCallback(async (nextCompData, nextGymnasts, pin, status, extraFields) => {
     if (inSandbox) { setSyncStatus("sandbox"); return; }
-    if (!currentUser) { return; } // Judge/scorer mode — no Supabase auth, skip silently
+    if (!currentUser) {
+      if (pinRole !== "collaborator") return; // Judge/scorer mode — no Supabase auth, skip silently
+      // Collaborator session: update the owner's existing row via the anon key
+      // (same trust model as judge score writes). The competition's PINs and
+      // score-lock fields are pinned to the server-held values from entry, so
+      // nothing in a collaborator session can change or clear them.
+      setSyncStatus("saving");
+      const resolvedCollabPin = pin ?? compPin;
+      const guardedCompData = {
+        ...nextCompData,
+        pin: resolvedCollabPin,
+        collabPin: collabSession?.authHash || null,
+        scoreEditPin: collabSession?.pinFields?.scoreEditPin ?? null,
+        scoreLockEnabled: !!collabSession?.pinFields?.scoreLockEnabled,
+      };
+      const patch = {
+        data: { compData: guardedCompData, gymnasts: nextGymnasts, pin: resolvedCollabPin },
+        status: status || collabSession?.status || "active",
+        ...(extraFields || {}),
+      };
+      try {
+        const { error } = await supabase.from("competitions").update(patch).eq("id", compId);
+        if (error) throw new Error(error.message);
+        setSyncStatus("saved");
+      } catch (e) {
+        console.error("Collaborator sync failed:", e.message);
+        setSyncStatus("error");
+      }
+      return;
+    }
     setSyncStatus("saving");
     const resolvedPin = pin ?? compPin;
     const payload = { compData: { ...nextCompData, pin: resolvedPin }, gymnasts: nextGymnasts, pin: resolvedPin };
@@ -311,7 +350,7 @@ export default function App() {
       setPendingSyncCount(syncQueue.size());
       setSyncStatus("pending");
     }
-  }, [compId, compPin, inSandbox, currentUser]);
+  }, [compId, compPin, inSandbox, currentUser, pinRole, collabSession]);
 
   // Flush all queued syncs — called when back online
   const flushSyncQueue = useCallback(async () => {
@@ -474,14 +513,17 @@ export default function App() {
   const pushScoreToTable = useCallback(async (roundId, gymnastId, apparatus, flatSubset) => {
     if (inSandbox) return;
     try {
-      const rows = flatToScoreRows(flatSubset, compId, currentUser ? `organiser:${currentUser.id}` : "judge");
+      const submittedBy = currentUser
+        ? `organiser:${currentUser.id}`
+        : pinRole === "collaborator" ? "collaborator" : "judge";
+      const rows = flatToScoreRows(flatSubset, compId, submittedBy);
       if (!rows.length) return;
       const { error } = await supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" });
       if (error) console.error("[pushScoreToTable]", error.message);
     } catch (e) {
       console.error("[pushScoreToTable]", e.message);
     }
-  }, [compId, currentUser, inSandbox]);
+  }, [compId, currentUser, inSandbox, pinRole]);
 
   const deleteScoreFromTable = useCallback(async (roundId, gymnastId, apparatus) => {
     if (inSandbox) return;
@@ -878,6 +920,7 @@ export default function App() {
       src.date = "";
       src.dataConsentConfirmed = false;
       src.judges = [];
+      src.collabPin = null; // shared access never carries over to a copy
       baseData = src;
 
       // Full mode: duplicate gymnasts with new IDs + remapped level/round
@@ -912,6 +955,8 @@ export default function App() {
   };
 
   const handlePinSet = (pin) => {
+    // Collaborator sessions can never change a competition PIN
+    if (isCollaborator) { setShowPinModal(false); return; }
     setCompPin(pin); setShowPinModal(false);
     // Sync PIN to Supabase + local snapshot
     pushToSupabase(compData, gymnasts, pin);
@@ -971,7 +1016,7 @@ export default function App() {
         snapshotWithPin(currentEventId, cd, g);
         if (isDraft) events.update(currentEventId, { status: "active" });
       }
-      if (!compPin) {
+      if (!compPin && !isCollaborator) {
         pinModalCallback.current = () => setPhase("dashboard");
         setShowPinModal(true);
       } else {
@@ -988,6 +1033,24 @@ export default function App() {
   };
 
   const handleStartComp = () => {
+    if (isCollaborator) {
+      // Entitlement follows the competition OWNER's subscription, never the
+      // collaborator session — and a collaborator is never shown the plan
+      // picker (subscriptions are excluded from shared access).
+      const ownerSub = collabSession?.ownerSub;
+      if (collabSession?.status !== "live" && !ownerSub?.isActive && !ownerSub?.isPastDue) {
+        setCollabNotice("This competition can't be started from shared access: the organiser's subscription isn't active. Ask the competition owner to update their plan, then try again.");
+        return;
+      }
+      setPhase(2); setStep(1);
+      if (collabSession?.status !== "live") {
+        const nowIso = new Date().toISOString();
+        const autoCompleteIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        setCollabSession(s => (s ? { ...s, status: "live" } : s));
+        pushToSupabase(compData, gymnasts, undefined, "live", { started_at: nowIso, auto_complete_at: autoCompleteIso });
+      }
+      return;
+    }
     // Paywall gate — only on fresh start (not resume of already-live comp)
     if (eventStatus !== "live" && !subscriptionStatus?.isActive && !subscriptionStatus?.isPastDue) {
       setShowPlanPicker(true);
@@ -1094,13 +1157,42 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
-  // ---- Resume competition (PIN-only path for judges / no-account users) ----
-  const handleResume = async (id, savedData, role, apparatus) => {
+  // ---- Resume competition (PIN-only path for judges / collaborators / no-account users) ----
+  const handleResume = async (id, savedData, role, apparatus, rowMeta) => {
     setCompId(id);
     const rawPin = savedData.pin || null;
     setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-    setCompDataRaw(savedData.compData || {});
-    setGymnasts(savedData.gymnasts || []);
+    if (role === "collaborator") {
+      // Collaborators do organiser-level work — run the same migrations an
+      // organiser open would, and mirror its consent handling.
+      const cd = structuredClone(savedData.compData || {});
+      const rowStatus = rowMeta?.status || "active";
+      setCompDataRaw(migrateCompData({ ...cd, dataConsentConfirmed: rowStatus !== "draft" ? true : !!cd.dataConsentConfirmed }));
+      setGymnasts(migrateGymnasts(structuredClone(savedData.gymnasts || [])));
+      let ownerSub = null;
+      if (rowMeta?.ownerId) {
+        try {
+          const { data: ownerProfile } = await supabase.from("profiles").select("*").eq("id", rowMeta.ownerId).maybeSingle();
+          if (ownerProfile) ownerSub = getSubscriptionStatus(ownerProfile);
+        } catch (e) {
+          console.warn("[collab] owner profile fetch failed:", e.message);
+        }
+      }
+      setCollabSession({
+        authHash: savedData.compData?.collabPin || null,
+        status: rowStatus,
+        ownerId: rowMeta?.ownerId || null,
+        ownerSub,
+        pinFields: {
+          scoreEditPin: savedData.compData?.scoreEditPin || null,
+          scoreLockEnabled: !!savedData.compData?.scoreLockEnabled,
+        },
+      });
+    } else {
+      setCompDataRaw(savedData.compData || {});
+      setGymnasts(savedData.gymnasts || []);
+      setCollabSession(null);
+    }
     // Set PIN role state
     setPinRole(role || null);
     setLockedApparatus(apparatus || null);
@@ -1121,12 +1213,54 @@ export default function App() {
         setScores({});
       }
     }
-    // Judges land directly on scoring view, not dashboard
-    setPhase(2); setStep(1);
+    // Judges land directly on scoring view; collaborators get the full dashboard
+    if (role === "collaborator") { setPhase("dashboard"); setStep(1); }
+    else { setPhase(2); setStep(1); }
     setSyncStatus("saved");
     setCurrentEventId(null);
     setScreen("active");
   };
+
+  // ---- Collaborator session exit + live revocation ----
+  const exitCollabSession = useCallback((message) => {
+    setPinRole(null);
+    setLockedApparatus(null);
+    setCollabSession(null);
+    if (message) setCollabNotice(message);
+    setScreen("auth-login");
+  }, []);
+
+  // Clearing the collaborator PIN on the competition revokes any shared
+  // session: re-check the server-held PIN every 30s and on tab focus, and
+  // refresh the protected score-lock fields + row status while we're there.
+  useEffect(() => {
+    if (!isCollaborator || !compId || inSandbox) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const { data } = await supabase.from("competitions").select("*").eq("id", compId).maybeSingle();
+        if (cancelled || !data) return;
+        const cd = data.data?.compData || {};
+        if ((cd.collabPin || null) !== (collabSession?.authHash || null) || !cd.collabPin) {
+          exitCollabSession("Shared collaborator access to this competition has been revoked by the organiser.");
+          return;
+        }
+        setCollabSession(s => {
+          if (!s) return s;
+          const nextStatus = data.status || s.status;
+          const nextPinFields = { scoreEditPin: cd.scoreEditPin || null, scoreLockEnabled: !!cd.scoreLockEnabled };
+          if (s.status === nextStatus &&
+              s.pinFields?.scoreEditPin === nextPinFields.scoreEditPin &&
+              s.pinFields?.scoreLockEnabled === nextPinFields.scoreLockEnabled) return s;
+          return { ...s, status: nextStatus, pinFields: nextPinFields };
+        });
+      } catch {}
+    };
+    const iv = setInterval(check, 30000);
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { cancelled = true; clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, [isCollaborator, compId, inSandbox, collabSession?.authHash, exitCollabSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Share links ----
   const copyOrShare = async (url, title) => {
@@ -1223,6 +1357,18 @@ export default function App() {
   const syncDot = { idle:null, saving:"🟡", saved:"🟢", error:"🔴", pending:"🟠", sandbox:"⚪" }[syncStatus];
   const syncLabel = { idle:"", saving:"Saving…", saved:"Saved ✓", error:"Sync error", pending:`${pendingSyncCount} pending`, sandbox:"Preview mode" }[syncStatus];
 
+  // Collaborator notices (blocked start, revoked access) — also shown over the
+  // auth screen, where a revoked session lands.
+  const collabNoticeModal = collabNotice ? (
+    <div className="modal-backdrop" onClick={() => setCollabNotice(null)}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, fontFamily: "var(--font-display)" }}>
+        <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6, marginBottom: 20 }}>{collabNotice}</div>
+        <button className="btn btn-primary" onClick={() => setCollabNotice(null)} style={{ width: "100%", justifyContent: "center" }}>OK</button>
+      </div>
+    </div>
+  ) : null;
+
   // ---- PUBLIC LEGAL PAGES — no auth required ----
   if (window.location.pathname === "/privacy") {
     return (
@@ -1282,6 +1428,7 @@ export default function App() {
         <ErrorBoundary label="auth">
         <AuthScreen onResume={handleResume} />
         </ErrorBoundary>
+        {collabNoticeModal}
       </>
     );
   }
@@ -1432,6 +1579,25 @@ export default function App() {
   // Organisers get app-shell with sidebar; judges (no account) get minimal nav
   const activeContent = (
     <>
+      {/* Persistent shared-access indicator — names the comp and the fact this
+          is collaborator access, on every collaborator screen */}
+      {isCollaborator && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 130, display: "flex", alignItems: "center", justifyContent: "center",
+          gap: 10, padding: "8px 16px", flexWrap: "wrap",
+          background: "var(--brand-01)", color: "var(--text-alternate)",
+          fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600
+        }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 14c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M12 9.5c1.5.3 2.5 1.5 2.5 3"/></svg>
+          <span>Shared collaborator access — <strong>{compData.name || "Competition"}</strong></span>
+          <button onClick={() => exitCollabSession()} style={{
+            background: "none", border: "1px solid var(--text-alternate)", borderRadius: 48,
+            padding: "3px 12px", color: "var(--text-alternate)", fontFamily: "var(--font-display)",
+            fontSize: 11, fontWeight: 600, cursor: "pointer"
+          }}>Exit</button>
+        </div>
+      )}
+
       {/* SHARE TOAST */}
       {showShareToast && (
         <div style={{
@@ -1468,8 +1634,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Nav bar — hidden during setup, dashboard, gymnast management, and phase 2 for ALL users */}
-      {phase !== 2 && !(currentAccount && (phase === 1 || phase === "dashboard" || phase === "gymnasts" || phase === "rounds-groups")) && (
+      {/* Nav bar — hidden during setup, dashboard, gymnast management, and phase 2 for ALL users.
+          Collaborators count as organiser UI here: the shared-access banner replaces the nav. */}
+      {phase !== 2 && !(canOrganise && (phase === 1 || phase === "dashboard" || phase === "gymnasts" || phase === "rounds-groups")) && (
         <nav className="nav">
           {!currentAccount && (
             <div className="nav-logo" style={{ cursor: "pointer" }} onClick={() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }}>GYMCOMP<span>.</span></div>
@@ -1524,7 +1691,8 @@ export default function App() {
           onManageRoundsGroups={handleManageRoundsGroups}
           onUpdateCompData={setCompData}
           onUpdateGymnasts={setGymnastsWithSync}
-          onSetPin={() => {
+          canManagePins={!isCollaborator}
+          onSetPin={isCollaborator ? undefined : () => {
             pinModalCallback.current = null;
             setShowPinModal(true);
           }}
@@ -1539,7 +1707,8 @@ export default function App() {
       {phase === 1 && (
         <ErrorBoundary label="competition setup">
         <div style={{ flex: 1 }}>
-          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!(currentEventId && eventStatus !== "draft")} eventStatus={eventStatus} compId={compId} currentUser={currentUser} scores={scores}
+          <Step1_CompDetails data={draftCompData || compData} setData={draftCompData !== null ? setDraftCompDataLocal : setCompDataLocal} syncStatus={syncStatus} onSave={handleSaveSetup} isExisting={!!((currentEventId || isCollaborator) && eventStatus !== "draft")} eventStatus={eventStatus} compId={compId} currentUser={currentUser} scores={scores} restrictPins={isCollaborator}
+            gymnasts={draftGymnasts || gymnasts} setGymnasts={draftGymnasts !== null ? setDraftGymnastsLocal : setGymnastsWithSync}
             onSaveExit={async () => {
               // Partial save — commit draft, persist and go back
               const { compData: cd, gymnasts: g } = commitDraft();
@@ -1559,7 +1728,7 @@ export default function App() {
                 if (isDraft) events.update(currentEventId, { status: "active" });
               }
               await pushToSupabase(cd, g, undefined, isDraft ? "active" : undefined);
-              if (!compPin) {
+              if (!compPin && !isCollaborator) {
                 pinModalCallback.current = () => setPhase("dashboard");
                 setShowPinModal(true);
               } else {
@@ -1627,12 +1796,12 @@ export default function App() {
             onSharePublic={handleSharePublic} onShareCoach={handleShareCoach}
             isOnline={isOnline} pendingSyncCount={pendingSyncCount} syncStatus={syncStatus} onRetrySync={flushSyncQueue}
             onScoreCommit={pushScoreToTable} onScoreDelete={deleteScoreFromTable} newScoreKeys={newScoreKeys}
-            setGymnasts={currentAccount ? setGymnastsWithSync : undefined}
-            onMoveScoreCleanup={currentAccount ? clearRoundScoresForGymnast : undefined}
+            setGymnasts={canOrganise ? setGymnastsWithSync : undefined}
+            onMoveScoreCleanup={canOrganise ? clearRoundScoresForGymnast : undefined}
             pinRole={pinRole} lockedApparatus={lockedApparatus}
-            activeRound={!currentAccount ? effectiveActiveRound : undefined}
-            setActiveRound={!currentAccount ? setActiveRound : undefined}
-            onExit={!currentAccount ? () => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); } : undefined} />
+            activeRound={!canOrganise ? effectiveActiveRound : undefined}
+            setActiveRound={!canOrganise ? setActiveRound : undefined}
+            onExit={!canOrganise ? () => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); } : undefined} />
         </div>
         </ErrorBoundary>
       ) : step === 2 ? (
@@ -1656,21 +1825,27 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
-      {currentAccount ? (
+      {canOrganise ? (
         <div className="app-shell">
           <AppSidebar screen="active" phase={phase} step={step} setStep={setStep}
             collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(c => !c)}
             account={currentAccount} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             filterCounts={filterCounts} activeSection={activeSection}
-            onNew={handleNew} onMyEvents={goBackToDashboard} onEditSetup={handleEditSetup}
+            collabMode={isCollaborator} compName={compData.name}
+            onNew={isCollaborator ? undefined : handleNew}
+            onMyEvents={isCollaborator ? handleGoToDashboard : goBackToDashboard}
+            onEditSetup={handleEditSetup}
             onManageGymnasts={handleManageGymnasts} onStartComp={handleStartComp}
             onDashboard={handleGoToDashboard}
-            onSettings={() => setShowAccountSettings(true)} onLogout={handleLogout}
+            onSettings={isCollaborator ? undefined : () => setShowAccountSettings(true)}
+            onLogout={isCollaborator ? undefined : handleLogout}
+            onExit={isCollaborator ? () => exitCollabSession() : undefined}
             gymnastsCount={gymnasts.length}
             judgesCount={(compData.judges || []).length}
             eventStatus={eventStatus}
             allGymnastsComplete={allGymnastsComplete}
-            subscriptionStatus={subscriptionStatus} onManageSubscription={handleManageSubscription} />
+            subscriptionStatus={isCollaborator ? null : subscriptionStatus}
+            onManageSubscription={isCollaborator ? undefined : handleManageSubscription} />
           <div className="app-main" ref={appMainRef}>
             {activeContent}
           </div>
@@ -1713,6 +1888,11 @@ export default function App() {
           saveLabel={phase === 1 ? (setupCanProceed ? "Continue" : "Save & Exit") : "Save"}
           eventStatus={eventStatus} />
       </>)}
+
+      {/* Collaborator mobile nav — phase 2 step tabs only (no account actions) */}
+      {isCollaborator && phase === 2 && (
+        <MobileTabBar screen="active" phase={2} step={step} setStep={setStep} />
+      )}
 
       {showAccountSettings && (
         <AccountSettingsModal
@@ -1798,6 +1978,8 @@ export default function App() {
         onClose={() => setShowPlanPicker(false)}
         onPlanSelected={handlePlanSelected}
       />
+
+      {collabNoticeModal}
 
     </>
   );

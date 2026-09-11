@@ -89,7 +89,13 @@ function competitionOrderIds(compData, gymnasts) {
 // groups in the round's configured rotation order, orderIndex within each
 // group — with unassigned gymnasts last. Called on every Rounds & Groups save,
 // at any competition status.
+//
+// numberingMode 'imported' turns this into a no-op — numbers are then
+// club-supplied data (gaps, out-of-sequence, hundreds) that must survive every
+// save, rotation reorder and gymnast move. Guarding here rather than at the
+// callers means no save path can renumber by accident.
 export function numberByRunningOrder(compData, gymnasts) {
+  if ((compData?.numberingMode || "auto") === "imported") return gymnasts;
   const numById = {};
   competitionOrderIds(compData, gymnasts).forEach((id, i) => { numById[id] = String(i + 1); });
   return gymnasts.map((g) => (numById[g.id] ? { ...g, number: numById[g.id] } : g));

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { hashPin } from "../../lib/utils.js";
+import { numberByRunningOrder } from "../../lib/rotations.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 // ============================================================
@@ -9,8 +10,14 @@ import ConfirmModal from "../shared/ConfirmModal.jsx";
 // and the score lock. Writes through the setup draft setter, so
 // changes commit with Save & Update like the rest of setup.
 // ============================================================
-function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
+// restrictPins: collaborator sessions — score lock + score edit PIN are
+// organiser-only, so the controls go read-only and the handlers no-op.
+// gymnasts/setGymnasts: needed by the numbering-mode switch — going back to
+// 'auto' renumbers every gymnast immediately (through the setup draft, like
+// every other edit here).
+function CompConfigSections({ data, setData, scores = {}, eventStatus, restrictPins = false, gymnasts = [], setGymnasts }) {
   const [pendingScoringSwitch, setPendingScoringSwitch] = useState(null); // "nga" | "fig" | "simple"
+  const [pendingNumberingSwitch, setPendingNumberingSwitch] = useState(false); // imported → auto confirm
   const [pinModal, setPinModal] = useState(null); // { mode: "enable" | "change", value, confirm, error }
   const [pinSaving, setPinSaving] = useState(false);
 
@@ -42,7 +49,26 @@ function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
     setData((d) => ({ ...d, eScoreStart: isNaN(v) || v <= 0 ? 10 : v }));
   };
 
+  const numberingMode = data.numberingMode || "auto";
+  const handleNumberingSwitch = (mode) => {
+    if (mode === numberingMode) return;
+    // imported → auto discards the club's numbers and renumbers everyone from
+    // running order — destructive, so it goes through a confirm first.
+    if (mode === "auto") { setPendingNumberingSwitch(true); return; }
+    // auto → imported simply freezes the numbers as they currently stand.
+    setData((d) => ({ ...d, numberingMode: "imported" }));
+  };
+
+  const confirmNumberingSwitch = () => {
+    setData((d) => ({ ...d, numberingMode: "auto" }));
+    // Renumber with the new mode already applied — numberByRunningOrder is a
+    // no-op while the comp data still says 'imported'.
+    if (setGymnasts) setGymnasts((prev) => numberByRunningOrder({ ...data, numberingMode: "auto" }, prev));
+    setPendingNumberingSwitch(false);
+  };
+
   const handleScoreLockToggle = () => {
+    if (restrictPins) return;
     if (scoreLockOn) {
       setData((d) => ({ ...d, scoreLockEnabled: false }));
     } else if (data.scoreEditPin) {
@@ -54,6 +80,7 @@ function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
   };
 
   const savePinModal = async () => {
+    if (restrictPins) { setPinModal(null); return; }
     const val = (pinModal.value || "").trim();
     if (!/^\d{4,8}$/.test(val)) {
       setPinModal((m) => ({ ...m, error: "The score edit PIN must be 4–8 digits." }));
@@ -251,6 +278,35 @@ function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
         </div>
       </div>
 
+      {/* ── Gymnast Numbering ── */}
+      <div className="card" id="config-numbering">
+        <div className="card-title">Gymnast Numbering</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginBottom: 12, fontFamily: "var(--font-display)" }}>
+          Where gymnast numbers come from. Running order itself is unaffected — this only controls the number shown against each gymnast.
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {[
+            {
+              value: "auto",
+              title: "Automatic (running order)",
+              desc: "Numbers gymnasts 1, 2, 3… in competition running order and keeps them in sync — every rotations save renumbers to match the current order.",
+            },
+            {
+              value: "imported",
+              title: "Imported (club programme)",
+              desc: "Keeps the numbers supplied by the club exactly as entered or imported — gaps and out-of-sequence numbers included. GymComp never rewrites them, whatever changes to rotations or running order.",
+            },
+          ].map((m) => optionCard({
+            key: m.value,
+            active: numberingMode === m.value,
+            locked: false,
+            title: m.title,
+            desc: m.desc,
+            onClick: () => handleNumberingSwitch(m.value),
+          }))}
+        </div>
+      </div>
+
       {/* ── Score Lock ── */}
       <div className="card" id="config-score-lock">
         <div className="card-title">Score Lock</div>
@@ -263,9 +319,10 @@ function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
               When on, a submitted score becomes read-only in score entry. Editing it requires the score edit PIN — separate from the judge access PIN — and the score locks again after each edit. Organisers signed in to the full app are never prompted.
             </div>
           </div>
-          {toggle(scoreLockOn, handleScoreLockToggle)}
+          {toggle(scoreLockOn, handleScoreLockToggle, restrictPins)}
         </div>
-        {scoreLockOn && (
+        {restrictPins && lockNote("Score lock and the score edit PIN can only be changed by the competition organiser.")}
+        {scoreLockOn && !restrictPins && (
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-display)" }}>
               Score edit PIN is {data.scoreEditPin ? "set" : "not set"}.
@@ -277,6 +334,15 @@ function CompConfigSections({ data, setData, scores = {}, eventStatus }) {
           </div>
         )}
       </div>
+
+      {/* ── Numbering mode switch confirm (auto renumbers everyone) ── */}
+      {pendingNumberingSwitch && (
+        <ConfirmModal
+          message="Switching to automatic numbering will renumber every gymnast from the competition running order. The numbers supplied by the club will be lost. Continue?"
+          onConfirm={confirmNumberingSwitch}
+          onCancel={() => setPendingNumberingSwitch(false)}
+        />
+      )}
 
       {/* ── Scoring mode switch confirm (NGA boundary wipes levels) ── */}
       {pendingScoringSwitch && (
