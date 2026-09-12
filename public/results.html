@@ -588,7 +588,8 @@
   // ── Score helpers (key format from the shared ranking module) ──
   const sk = (rid, gid, app) => window.GymCompRanking.gymnast_key(rid, gid, app);
   const getScore = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
-  const getScoringApparatus = () => (compData?.apparatus || []).filter(a => a !== "Rest");
+  // Results column order (Vault, Bars, Beam, Floor, Range) — not the comp's rotation order
+  const getScoringApparatus = () => window.GymCompRanking.resultsApparatusOrder((compData?.apparatus || []).filter(a => a !== "Rest"));
   const getTotal = (rid, gid) => getScoringApparatus().reduce((s, a) => s + getScore(rid, gid, a), 0);
 
   // Dual-vault per-vault finals (display only). Flag-driven — never reads vaultMode.

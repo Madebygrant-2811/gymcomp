@@ -926,7 +926,8 @@
   const subKey = (rid, gid, app, sub) => `${sk(rid, gid, app)}__${sub}`;
   const sv = (rid, gid, app, sub) => parseFloat(scores[subKey(rid, gid, app, sub)]) || 0;
   const getTotal = (rid, gid, app) => parseFloat(scores[sk(rid, gid, app)]) || 0;
-  const getScoringApparatus = () => (compData?.apparatus || []).filter(a => a !== "Rest");
+  // Results column order (Vault, Bars, Beam, Floor, Range) — not the comp's rotation order
+  const getScoringApparatus = () => window.GymCompRanking.resultsApparatusOrder((compData?.apparatus || []).filter(a => a !== "Rest"));
   const getOverall = (rid, gid) => getScoringApparatus().reduce((s, a) => s + getTotal(rid, gid, a), 0);
 
   const judgeCount = (app) =>
