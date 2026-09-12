@@ -106,6 +106,14 @@ export function scoresToFlat(rows) {
   return flat;
 }
 
+// A judge's entered value, or null when the slot was left empty. Keeps an
+// absent judge distinct from a judge who recorded a genuine 0.
+const parseJudgeValue = (raw) => {
+  if (raw == null || raw === "") return null;
+  const n = parseFloat(raw);
+  return isNaN(n) ? null : n;
+};
+
 // Convert flat scores object → scores table rows (for upserting)
 export function flatToScoreRows(flat, compId, submittedBy) {
   // Collect unique base keys (roundId__gymnastId__apparatus)
@@ -133,12 +141,12 @@ export function flatToScoreRows(flat, compId, submittedBy) {
         for (let i = 1; ; i++) {
           const ek = `${bk}__${prefix}e${i}`;
           if (!(ek in flat)) break;
-          eArr.push(parseFloat(flat[ek]) || 0);
+          eArr.push(parseJudgeValue(flat[ek])); // null = judge slot left empty
         }
         const bon = parseFloat(flat[`${bk}__${prefix}bon`]) || 0;
         const pen = parseFloat(flat[`${bk}__${prefix}pen`]) || 0;
         const fin = parseFloat(flat[`${bk}__${prefix}fin`]) || 0;
-        if (d > 0 || eArr.length > 0 || fin > 0) {
+        if (d > 0 || eArr.some(v => v != null) || fin > 0) {
           eScoresObj[prefix] = { d, e: eArr, bon, pen, final: fin };
         }
       }
@@ -163,12 +171,13 @@ export function flatToScoreRows(flat, compId, submittedBy) {
     const bonus = parseFloat(flat[`${bk}__bon`]) || 0;
     const penalty = parseFloat(flat[`${bk}__pen`]) || 0;
 
-    // Collect e-scores
+    // Collect e-scores. An empty slot (judge absent) is stored as null, never
+    // 0 — a 0 deduction would read back as a perfect E score and be averaged in.
     const eScores = [];
     for (let i = 1; ; i++) {
       const eKey = `${bk}__e${i}`;
       if (!(eKey in flat)) break;
-      eScores.push(parseFloat(flat[eKey]) || 0);
+      eScores.push(parseJudgeValue(flat[eKey]));
     }
 
     // Skip rows where final_score is 0 and no d_score exists (no real data)
