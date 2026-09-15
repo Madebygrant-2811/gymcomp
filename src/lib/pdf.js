@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import { gymnast_key, denseRank, getEScoreStart } from "./scoring.js";
-import { NGA_FALL_PENALTY } from "./constants.js";
+import { NGA_FALL_PENALTY, sortApparatusForDisplay } from "./constants.js";
 import { getContrastTextColor } from "./utils.js";
 import { roundGroups, roundRunningOrderCompare, runningOrderCompare } from "./rotations.js";
 import { buildRankGroups as sharedRankGroups } from "../../public/shared/ranking.js";
@@ -199,7 +199,6 @@ export function printDocument(htmlContent, filename = "gymcomp-document.pdf", op
 export function buildAgendaHTML(compData, gymnasts, compId) {
   const colour = "#000dff";
   const rounds = compData.rounds || [];
-  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
   const levelName = (id) => (compData.levels || []).find(l => l.id === id)?.name || id || "—";
 
   // Group gymnasts by round then group
@@ -365,7 +364,9 @@ export function buildAgendaHTML(compData, gymnasts, compId) {
 // Build judge sheets
 export function buildJudgeSheetsHTML(compData, gymnasts) {
   const colour = "#000dff";
-  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Sheets in canonical display order (Vault, Bars, Beam, Floor, Range), not
+  // the stored rotation order. Presentation only — scores stay keyed by name.
+  const apparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   const rounds = compData.rounds || [];
   // Simple mode gets a single Score column; FIG and NGA keep the D/E layout.
   const fig = compData.scoringMode !== "simple";
@@ -669,7 +670,8 @@ export function buildOrganiserViewHTML(compData, gymnasts, scores, { scope = "ro
 }
 
 export function buildResultsHTML(compData, gymnasts, scores) {
-  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Score columns in canonical display order — presentation only
+  const apparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   const rounds = compData.rounds || [];
   const rankingMode = compData.rankingMode || "standard";
 
@@ -882,7 +884,10 @@ ${body}
 }
 
 export function exportResultsXLSX(compData, gymnasts, scores) {
-  const apparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Results workbook (not the Rounds & Groups schedule XLSX, which must keep
+  // rotation order for its import round-trip): score columns and Raw Scores
+  // rows in canonical display order — presentation only
+  const apparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   // Keyed on the gymnast's own round (identical for per-round groups; correct
   // for levels ranked across rounds)
   const getScore = (g, app) => {

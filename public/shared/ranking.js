@@ -13,12 +13,15 @@ export function gymnast_key(roundId, gymnastId, apparatus) {
 }
 
 // ── Results display order ───────────────────────────────────
-// Column order for ranking tables: WAG Vault, Bars, Beam, Floor, Range; MAG
+// Canonical apparatus DISPLAY order: WAG Vault, Bars, Beam, Floor, Range; MAG
 // Olympic order. Independent of the competition's stored apparatus order
-// (which seeds rotation cycles). Unrecognised apparatus keep their relative
-// position after the known ones; Rest is always last.
-const RESULTS_ORDER_WAG = ["Vault", "Bars", "Beam", "Floor", "Range"];
-const RESULTS_ORDER_MAG = ["Floor", "Pommel Horse", "Rings", "Vault", "Parallel Bars", "Horizontal Bar"];
+// (compData.apparatus, which seeds rotation cycles and is never reordered).
+// Unrecognised apparatus keep their relative position after the known ones;
+// Rest is always last. This is the single implementation — src/lib/constants.js
+// re-exports it (as sortApparatusForDisplay) so the Vite bundle and the
+// standalone results/coach pages share one definition.
+export const RESULTS_ORDER_WAG = ["Vault", "Bars", "Beam", "Floor", "Range"];
+export const RESULTS_ORDER_MAG = ["Floor", "Pommel Horse", "Rings", "Vault", "Parallel Bars", "Horizontal Bar"];
 function resultsApparatusRank(name) {
   if (name === "Rest") return 999;
   const m = /^(.*?)\s*\((WAG|MAG)\)\s*$/.exec(name || "");

@@ -1,3 +1,4 @@
+import { resultsApparatusOrder, RESULTS_ORDER_WAG, RESULTS_ORDER_MAG } from "../../public/shared/ranking.js";
 
 export const EVENT_STATUSES = [
   { value: "draft",     label: "Draft",     color: "var(--muted)" },
@@ -26,6 +27,22 @@ const apparatusRank = (a) => {
   return i === -1 ? 900 : i;
 };
 export const sortApparatus = (list = []) => [...list].sort((a, b) => apparatusRank(a) - apparatusRank(b));
+
+// Canonical apparatus DISPLAY order — presentation only, used by the PDF
+// exports (and the public results/coach pages). WAG: Vault, Bars, Beam,
+// Floor, Range; MAG: Olympic order; Rest always last. Note this differs from
+// sortApparatus above, which sets the STORED order (compData.apparatus) that
+// seeds rotation cycles — the stored order is never touched by this helper.
+// Matches on the stored form ("Vault (WAG)"); anything not in the canonical
+// list is kept, after the known apparatus, in its existing relative order.
+// The implementation lives in the shared ranking module so the standalone
+// pages use the identical definition.
+export const APPARATUS_DISPLAY_ORDER = [
+  ...RESULTS_ORDER_WAG.map(a => `${a} (WAG)`),
+  ...RESULTS_ORDER_MAG.map(a => `${a} (MAG)`),
+  "Rest",
+];
+export const sortApparatusForDisplay = (list = []) => resultsApparatusOrder(list);
 
 // Migrate old bare apparatus names (e.g. "Beam") → new format ("Beam (WAG)")
 export const APPARATUS_MIGRATE = {};

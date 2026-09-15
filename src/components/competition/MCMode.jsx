@@ -2,12 +2,19 @@ import { useState, useMemo } from "react";
 import { gymnast_key, denseRank } from "../../lib/scoring.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
+import { sortApparatusForDisplay } from "../../lib/constants.js";
 
 function MCMode({ compData, gymnasts, scores }) {
   const [activeRound, setActiveRound] = useState(compData.rounds[0]?.id || "");
   const [view, setView] = useState("overall"); // "overall" | "apparatus"
-  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Apparatus buttons in canonical display order so the ceremony runs in the
+  // same order as the results PDF. Presentation only — rotation order in
+  // compData.apparatus is untouched and scores stay keyed by name.
+  const scoringApparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   const rankingMode = compData.rankingMode || "standard";
+  // Deliberate: the default per-apparatus selection is the first apparatus in
+  // DISPLAY order (Vault for WAG), not the rotation's starting apparatus. The
+  // view opens on Overall, so this only matters once a button is pressed.
   const [activeApparatus, setActiveApparatus] = useState(scoringApparatus[0] || "");
   const [fullscreen, setFullscreen] = useState(false);
   const [currentIdx, setCurrentIdx] = useState(0);

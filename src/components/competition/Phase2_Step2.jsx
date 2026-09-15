@@ -3,6 +3,7 @@ import { denseRank, gymnast_key } from "../../lib/scoring.js";
 import { roundRunningOrderCompare } from "../../lib/rotations.js";
 import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
 import { printDocument, buildOrganiserViewHTML } from "../../lib/pdf.js";
+import { sortApparatusForDisplay } from "../../lib/constants.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
 
 // Organiser-view regrouping dimensions (session-only; never touches compData)
@@ -26,7 +27,10 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   const [organiserDim, setOrganiserDim] = useState("level");
   const [organiserScope, setOrganiserScope] = useState("round"); // "round" | "all"
   const [cutLine, setCutLine] = useState("");
-  const scoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Canonical display order (matches the results PDF / XLSX and public pages).
+  // Presentation only — compData.apparatus keeps rotation order; scores are
+  // keyed by apparatus name so ranking and totals are unchanged.
+  const scoringApparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   // Ranking mode is configured on the Competition Configuration page
   const rankingMode = compData.rankingMode || "standard";
 

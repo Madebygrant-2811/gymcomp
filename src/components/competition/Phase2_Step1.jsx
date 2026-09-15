@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { gymnast_key, combineVaults, calculateNGAScore, isDualVault, getEScoreStart } from "../../lib/scoring.js";
 import { hashPin } from "../../lib/utils.js";
-import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE } from "../../lib/constants.js";
+import { NGA_MAX_SV, NGA_FALL_PENALTY, NGA_COURTESY_SCORE, sortApparatusForDisplay } from "../../lib/constants.js";
 import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import { roundGroups, isValidGroup, nextOrderIndex, runningOrderCompare } from "../../lib/rotations.js";
@@ -39,7 +39,11 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
   const fig = !isNGA && !isSimple;
   // FIG execution baseline: E = eStart − deduction (configurable per comp)
   const eStart = getEScoreStart(compData);
-  const allScoringApparatus = (compData.apparatus || []).filter(a => a !== "Rest");
+  // Columns in canonical display order (Vault, Bars, Beam, Floor, Range) so
+  // the screen matches the judge sheets and results PDF. Presentation only:
+  // compData.apparatus (rotation order) is untouched and scores stay keyed by
+  // apparatus name. The judge lock filters by name, so it is unaffected.
+  const allScoringApparatus = sortApparatusForDisplay((compData.apparatus || []).filter(a => a !== "Rest"));
   const isLockedJudge = pinRole === "judge" && lockedApparatus;
   const scoringApparatus = isLockedJudge ? allScoringApparatus.filter(a => a === lockedApparatus) : allScoringApparatus;
 
@@ -217,7 +221,6 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     }));
   };
 
-  // ── Sheet received tracker (per group × apparatus) ──────
   // ── Group gymnasts ───────────────────────────────────────
   const roundGymnasts = useMemo(() => gymnasts.filter(g => g.round === activeRound), [gymnasts, activeRound]);
   const filteredGymnasts = useMemo(() => searchQuery.trim()
@@ -1039,6 +1042,10 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                                       fontFamily: "var(--font-display)",
                                     }}
                                     onClick={() => {
+                                      // A gymnast-level flag stored against ONE apparatus key. Deliberately
+                                      // the first apparatus in DISPLAY order (Vault for WAG), not the
+                                      // rotation's starting apparatus — hasQuery checks every apparatus,
+                                      // so which key carries the flag is presentation-only.
                                       const firstApp = scoringApparatus[0];
                                       if (hasQuery) resolveQuery(g.id, firstApp);
                                       else openQueryModal(g.id, firstApp);
