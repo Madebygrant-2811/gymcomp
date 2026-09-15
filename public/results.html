@@ -700,8 +700,11 @@
       crossRoundPlacement: "first",
     });
   }
-  const R = window.GymCompRanking;
-  const spanLabelOf = (roundIds) => R.roundSpanLabel(compData.rounds || [], roundIds);
+  // The shared ranking module is loaded by a deferred module script, so it
+  // must be read at CALL time (inside these functions) — never captured at
+  // parse time, when window.GymCompRanking is still undefined.
+  const R = () => window.GymCompRanking;
+  const spanLabelOf = (roundIds) => R().roundSpanLabel(compData.rounds || [], roundIds);
   const matchesFilters = (rg) => {
     if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
     if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
@@ -710,9 +713,9 @@
   // Groups for this round (display-guarded, filtered) with pointers to pooled
   // groups whose table sits under an earlier round, in level order.
   function rankEntriesFor(rid) {
-    const groups = buildRankGroups(rid).filter(rg => R.groupInRound(rg, rid) && matchesFilters(rg));
-    const pointers = R.crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: rid, rounds: compData.rounds || [] }).filter(matchesFilters);
-    return R.interleaveRankEntries(groups, pointers, compData.levels || []);
+    const groups = buildRankGroups(rid).filter(rg => R().groupInRound(rg, rid) && matchesFilters(rg));
+    const pointers = R().crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: rid, rounds: compData.rounds || [] }).filter(matchesFilters);
+    return R().interleaveRankEntries(groups, pointers, compData.levels || []);
   }
   function titleRowHtml(levelName, ageLabel, spanned) {
     return `<div class="level-title-row">
