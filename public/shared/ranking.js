@@ -93,6 +93,127 @@ export function roundRunningOrderCompare(compData, roundId) {
   };
 }
 
+// ── Cross-round ranking groups ──────────────────────────────
+// The cross-round unit is the RANKING GROUP — the level, or the level + age
+// band when the level ranks by level+age — never the level alone. Stored on
+// the level object:
+//   rankBy "level":      rankScope: "round" (default) | "competition"
+//   rankBy "level+age":  rankScopeByAge: { [age]: "competition" } — bands
+//                        absent from the map rank within their round
+//   legacy:              rankScope "competition" on a level+age level with no
+//                        rankScopeByAge — read as "every band whose gymnasts
+//                        span more than one round", which is exactly what
+//                        migrateCrossRoundScope expands it to.
+// Whatever the setting says, a group is cross-round ONLY if its gymnasts
+// actually occupy more than one round (derived from their own round values),
+// and it is only ever emitted under rounds where it has gymnasts.
+const rankGroupAgeOf = (levelObj, g) =>
+  (levelObj?.rankBy || "level") === "level+age" ? (g.age || "") : "";
+export const rankGroupKey = (levelObj, g) => `${g.level || ""}|||${rankGroupAgeOf(levelObj, g)}`;
+
+export function isFlaggedCrossRound(levelObj, age) {
+  if (!levelObj) return false;
+  if ((levelObj.rankBy || "level") === "level+age") {
+    if (levelObj.rankScopeByAge && typeof levelObj.rankScopeByAge === "object") {
+      return levelObj.rankScopeByAge[age] === "competition";
+    }
+    return levelObj.rankScope === "competition"; // legacy level-wide flag
+  }
+  return levelObj.rankScope === "competition";
+}
+
+// Every ranking group present in the gymnast list with the rounds it occupies:
+// [{ levelId, levelName, rankBy, age, rounds, spans, crossRound }], rounds in
+// configured order when `rounds` is given. `crossRound` is the effective
+// state: flagged AND actually spanning more than one round.
+export function rankGroupSpans(gymnasts, levels = [], rounds = null) {
+  const order = rounds ? new Map(rounds.map((r, i) => [r.id, i])) : null;
+  const map = {};
+  (gymnasts || []).forEach((g) => {
+    if (!g.round) return;
+    const levelObj = levels.find((l) => l.id === g.level);
+    const key = rankGroupKey(levelObj, g);
+    if (!map[key]) {
+      map[key] = { levelId: g.level || "", levelName: levelObj?.name || "Unknown", rankBy: levelObj?.rankBy || "level", age: rankGroupAgeOf(levelObj, g), rounds: new Set(), levelObj };
+    }
+    map[key].rounds.add(g.round);
+  });
+  return Object.values(map).map(({ levelObj, ...e }) => {
+    const rids = [...e.rounds];
+    if (order) rids.sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
+    const spans = rids.length > 1;
+    return { ...e, rounds: rids, spans, crossRound: spans && isFlaggedCrossRound(levelObj, e.age) };
+  });
+}
+
+// Display guard: a rank group belongs on a round's surface only if it has
+// gymnasts in that round (roundIds is derived from the gymnasts themselves).
+export const groupInRound = (rg, roundId) => !roundId || (rg?.roundIds || []).includes(roundId);
+
+// ── Pooled-group placement ──────────────────────────────────
+// A pooled (cross-round) group has ONE standings table and one set of medals.
+// Every surface places it exactly once, under the first round it occupies in
+// the competition's configured round order (buildRankGroups with
+// crossRoundPlacement "first"); each later round it occupies carries a
+// one-line pointer to that table instead of a repeat.
+
+// Label for the rounds a pooled group spans, in the organiser's own round
+// names: "Rounds 1–2" when the names are "Round N" and consecutive,
+// "Rounds 1 & 3" when numbered but not consecutive, else the names joined.
+export function roundSpanLabel(rounds, roundIds) {
+  const names = (roundIds || []).map((id) => (rounds || []).find((r) => r.id === id)?.name || "").filter(Boolean);
+  if (names.length < 2) return names[0] || "";
+  const nums = names.map((n) => { const m = /^\s*round\s+(\d+)\s*$/i.exec(n); return m ? parseInt(m[1], 10) : null; });
+  if (nums.every((n) => n != null)) {
+    const consecutive = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+    return consecutive ? `Rounds ${nums[0]}–${nums[nums.length - 1]}` : `Rounds ${nums.join(" & ")}`;
+  }
+  return names.join(" & ");
+}
+
+// Pointer entries for a round: pooled groups that occupy `roundId` but whose
+// table sits under an earlier round. Shaped like a rank group (levelName,
+// ageLabel, roundIds, key) plus pointer:true, homeRoundId/Name, spanLabel.
+export function crossRoundPointers(gymnasts, { levels = [], roundId, rounds = [], ageFallback = "Age not set" } = {}) {
+  if (!roundId) return [];
+  return rankGroupSpans(gymnasts, levels, rounds)
+    .filter((s) => s.crossRound && s.rounds.includes(roundId) && s.rounds[0] !== roundId)
+    .map((s) => {
+      const ageLabel = s.rankBy === "level+age" ? (s.age || ageFallback) : "";
+      return {
+        pointer: true,
+        key: `${s.levelName}|||${ageLabel}`,
+        levelName: s.levelName,
+        ageLabel,
+        roundIds: s.rounds,
+        homeRoundId: s.rounds[0],
+        homeRoundName: rounds.find((r) => r.id === s.rounds[0])?.name || "",
+        spanLabel: roundSpanLabel(rounds, s.rounds),
+      };
+    });
+}
+
+// One list for a round: its rank groups (already in surface order) with the
+// pointers slotted in where each group's table would have sat — after the
+// last group of the same level, else before the first group of a later level.
+export function interleaveRankEntries(groups, pointers, levels = []) {
+  if (!pointers || !pointers.length) return groups;
+  const order = levels.map((l) => l.name);
+  const li = (n) => { const i = order.indexOf(n); return i === -1 ? 999 : i; };
+  const out = groups.map((g, i) => ({ entry: g, level: li(g.levelName), seq: i }));
+  pointers.forEach((p) => {
+    const lvl = li(p.levelName);
+    let seq = -0.5;
+    out.forEach((o) => { if (!o.entry.pointer && o.level === lvl) seq = o.seq + 0.5; });
+    if (seq === -0.5) {
+      const later = out.filter((o) => !o.entry.pointer && o.level > lvl);
+      seq = later.length ? Math.min(...later.map((o) => o.seq)) - 0.5 : groups.length + 0.5;
+    }
+    out.push({ entry: p, level: lvl, seq });
+  });
+  return out.sort((a, b) => a.level - b.level || a.seq - b.seq).map((o) => o.entry);
+}
+
 // ── Rank groups ─────────────────────────────────────────────
 // Groups a gymnast list along an explicit dimension:
 //   "rankBy"    — by level, sub-split by age where that level's rankBy is
@@ -117,9 +238,9 @@ export function roundRunningOrderCompare(compData, roundId) {
 //   sortGymnasts — comparator applied within each group, or null to keep the
 //                  input order
 //   roundId      — when set, the pool is that round's gymnasts PLUS every
-//                  gymnast (any round) whose level has rankScope
-//                  "competition": a level split across rounds ranks as one
-//                  group. Levels default to rankScope "round".
+//                  gymnast (any round) whose RANKING GROUP (level, or
+//                  level + age band) is cross-round — see the section above.
+//                  Groups default to ranking within their round.
 //   rounds       — the competition's rounds array, for round ordering.
 //   crossRoundPlacement — with roundId set: "every" (default) emits a
 //                  cross-round group under every round it spans (screens);
@@ -136,32 +257,29 @@ export function buildRankGroups(gymnasts, {
   rounds = null,
   crossRoundPlacement = "every",
 } = {}) {
+  // Effective cross-round groups: flagged AND genuinely spanning rounds.
+  const levelById = new Map(levels.map((l) => [l.id, l]));
+  const keyOf = (g) => rankGroupKey(levelById.get(g.level), g);
+  const crossRoundKeys = new Set();
+  const groupRounds = {};   // group key → rounds it occupies (from the gymnasts)
+  rankGroupSpans(gymnasts, levels, rounds).forEach((s) => {
+    const key = `${s.levelId}|||${s.age}`;
+    groupRounds[key] = s.rounds;
+    if (s.crossRound) crossRoundKeys.add(key);
+  });
+
   let pool = gymnasts;
   if (roundId != null) {
-    const isCrossRound = (g) =>
-      levels.find((l) => l.id === g.level)?.rankScope === "competition";
-    // Rounds each cross-round level actually spans — the combined group only
-    // appears under those rounds, never under uninvolved ones.
-    const levelRounds = {};
-    gymnasts.forEach((g) => {
-      if (!g.round || !isCrossRound(g)) return;
-      (levelRounds[g.level] = levelRounds[g.level] || new Set()).add(g.round);
-    });
-    // First round (in configured order) containing each cross-round level
-    const firstRoundOf = {};
-    if (crossRoundPlacement === "first" && rounds) {
-      const order = new Map(rounds.map((r, i) => [r.id, i]));
-      Object.entries(levelRounds).forEach(([lid, rids]) => {
-        firstRoundOf[lid] = [...rids].sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999))[0];
-      });
-    }
+    // First round (in configured order) containing each cross-round group —
+    // rankGroupSpans already ordered the rounds when `rounds` was given.
     pool = gymnasts.filter((g) => {
       if (!g.round) return false;
-      if (isCrossRound(g)) {
-        if (!levelRounds[g.level]?.has(roundId)) return false;
-        return crossRoundPlacement === "first" && rounds
-          ? firstRoundOf[g.level] === roundId
-          : true;
+      const key = keyOf(g);
+      if (crossRoundKeys.has(key)) {
+        const rids = groupRounds[key] || [];
+        // Only under rounds the group actually occupies — never an uninvolved one
+        if (!rids.includes(roundId)) return false;
+        return crossRoundPlacement === "first" && rounds ? rids[0] === roundId : true;
       }
       return g.round === roundId;
     });
@@ -207,12 +325,10 @@ export function buildRankGroups(gymnasts, {
   }
 
   return entries.map(([key, val]) => {
-    // Mark groups holding a competition-scoped (cross-round) level, and note
-    // the rounds they span (configured order when `rounds` is given), so
-    // surfaces can badge them.
-    const crossRound = val.gymnasts.some(
-      (g) => levels.find((l) => l.id === g.level)?.rankScope === "competition"
-    );
+    // Mark groups that are effectively cross-round (flagged AND spanning
+    // rounds), and note the rounds they span (configured order when `rounds`
+    // is given), so surfaces can badge them.
+    const crossRound = val.gymnasts.some((g) => crossRoundKeys.has(keyOf(g)));
     let roundIds = [...new Set(val.gymnasts.map((g) => g.round).filter(Boolean))];
     if (rounds) {
       const order = new Map(rounds.map((r, i) => [r.id, i]));

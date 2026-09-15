@@ -95,6 +95,41 @@ export function migrateCompData(cd) {
   return migrated;
 }
 
+// Cross-round ranking used to be a level-wide flag (rankScope "competition").
+// The unit is now the ranking group — for a level ranked by level+age, each
+// age band. Expand a legacy flag on such a level to exactly those bands whose
+// gymnasts occupy more than one round (a band confined to one round was
+// ranked within it before too, so nothing about the ranking changes), and
+// drop the level-wide flag. Levels ranked by level alone keep rankScope as
+// their group IS the level. Needs the gymnasts, so it runs where both are
+// loaded; skipped (left legacy — the shared builder reads it identically)
+// when there are no gymnasts to derive bands from.
+export function migrateCrossRoundScope(cd, gymnasts) {
+  if (!cd || !Array.isArray(cd.levels) || !(gymnasts || []).length) return cd;
+  let changed = false;
+  const levels = cd.levels.map(l => {
+    if ((l.rankBy || "level") !== "level+age") return l;
+    if (l.rankScope !== "competition") return l;
+    const rest = { ...l };
+    delete rest.rankScope;
+    if (l.rankScopeByAge && typeof l.rankScopeByAge === "object") {
+      changed = true; // band map already present — legacy flag is just stale
+      return rest;
+    }
+    const byAge = {};
+    gymnasts.forEach(g => {
+      if (g.level !== l.id || !g.round) return;
+      const a = g.age || "";
+      (byAge[a] = byAge[a] || new Set()).add(g.round);
+    });
+    const rankScopeByAge = {};
+    Object.entries(byAge).forEach(([a, rounds]) => { if (rounds.size > 1) rankScopeByAge[a] = "competition"; });
+    changed = true;
+    return { ...rest, rankScopeByAge };
+  });
+  return changed ? { ...cd, levels } : cd;
+}
+
 export function migrateScoreKeys(sc) {
   if (!sc) return sc;
   const migrated = {};

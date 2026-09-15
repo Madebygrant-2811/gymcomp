@@ -689,12 +689,44 @@
   }
 
   // ── Build level groups (shared implementation, converged defaults) ──
+  // A pooled (cross-round) group appears ONCE, under the first round it
+  // occupies; later rounds carry a one-line pointer — same placement as the
+  // results PDF and XLSX.
   function buildRankGroups(rid) {
     return window.GymCompRanking.buildRankGroups(gymnasts, {
       levels: (compData.levels || []),
       roundId: rid,
       rounds: (compData.rounds || []),
+      crossRoundPlacement: "first",
     });
+  }
+  const R = window.GymCompRanking;
+  const spanLabelOf = (roundIds) => R.roundSpanLabel(compData.rounds || [], roundIds);
+  const matchesFilters = (rg) => {
+    if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
+    if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
+    return true;
+  };
+  // Groups for this round (display-guarded, filtered) with pointers to pooled
+  // groups whose table sits under an earlier round, in level order.
+  function rankEntriesFor(rid) {
+    const groups = buildRankGroups(rid).filter(rg => R.groupInRound(rg, rid) && matchesFilters(rg));
+    const pointers = R.crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: rid, rounds: compData.rounds || [] }).filter(matchesFilters);
+    return R.interleaveRankEntries(groups, pointers, compData.levels || []);
+  }
+  function titleRowHtml(levelName, ageLabel, spanned) {
+    return `<div class="level-title-row">
+      <span class="level-name">${escHtml(levelName)}</span>
+      ${ageLabel ? `<span class="age-pill" style="background:${ageColor(ageLabel)};border-color:transparent">${escHtml(ageLabel)}</span>` : ""}
+      ${spanned ? `<span class="age-pill">${escHtml(spanned)}</span>` : ""}
+    </div>
+    <div class="level-divider"></div>`;
+  }
+  function pointerCardHtml(p) {
+    return `<div class="level-card">
+      ${titleRowHtml(p.levelName, p.ageLabel, p.spanLabel)}
+      <div class="empty-msg">Ranked across ${escHtml(p.spanLabel)} — standings are shown under ${escHtml(p.homeRoundName)}.</div>
+    </div>`;
   }
 
   // ── Medal style (matches PDF exactly) ──
@@ -760,25 +792,14 @@
 
   // ── Apparatus view ──
   function renderApparatusView(rid) {
-    const allGroups = buildRankGroups(rid);
-    const groups = allGroups.filter(rg => {
-      if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
-      if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
-      return true;
-    });
+    const entries = rankEntriesFor(rid);
     const apparatus = getScoringApparatus();
-    if (!groups.length) return `<div class="empty-msg">No results to display yet.</div>`;
+    if (!entries.length) return `<div class="empty-msg">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
-      const crossPill = crossRound
-        ? `<span class="age-pill">Ranked across ${escHtml((roundIds || []).map(r => ((compData.rounds || []).find(x => x.id === r) || {}).name || "").filter(Boolean).join(" & "))}</span>`
-        : "";
-      const titleRow = `<div class="level-title-row">
-        <span class="level-name">${escHtml(levelName)}</span>
-        ${ageLabel ? `<span class="age-pill" style="background:${ageColor(ageLabel)};border-color:transparent">${escHtml(ageLabel)}</span>` : ""}
-        ${crossPill}
-      </div>
-      <div class="level-divider"></div>`;
+    return entries.map((entry) => {
+      if (entry.pointer) return pointerCardHtml(entry);
+      const { levelName, ageLabel, crossRound, roundIds, gymnasts: glist } = entry;
+      const titleRow = titleRowHtml(levelName, ageLabel, crossRound ? spanLabelOf(roundIds) : "");
 
       const appSections = apparatus.map(app => {
         const withScores = glist.map(g => ({ ...g, score: getScore(g.round, g.id, app) }));
@@ -838,25 +859,14 @@
 
   // ── Overall view ──
   function renderOverallView(rid) {
-    const allGroups = buildRankGroups(rid);
-    const groups = allGroups.filter(rg => {
-      if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
-      if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
-      return true;
-    });
+    const entries = rankEntriesFor(rid);
     const apparatus = getScoringApparatus();
-    if (!groups.length) return `<div class="empty-msg">No results to display yet.</div>`;
+    if (!entries.length) return `<div class="empty-msg">No results to display yet.</div>`;
 
-    return groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
-      const crossPill = crossRound
-        ? `<span class="age-pill">Ranked across ${escHtml((roundIds || []).map(r => ((compData.rounds || []).find(x => x.id === r) || {}).name || "").filter(Boolean).join(" & "))}</span>`
-        : "";
-      const titleRow = `<div class="level-title-row">
-        <span class="level-name">${escHtml(levelName)}</span>
-        ${ageLabel ? `<span class="age-pill" style="background:${ageColor(ageLabel)};border-color:transparent">${escHtml(ageLabel)}</span>` : ""}
-        ${crossPill}
-      </div>
-      <div class="level-divider"></div>`;
+    return entries.map((entry) => {
+      if (entry.pointer) return pointerCardHtml(entry);
+      const { levelName, ageLabel, crossRound, roundIds, gymnasts: glist } = entry;
+      const titleRow = titleRowHtml(levelName, ageLabel, crossRound ? spanLabelOf(roundIds) : "");
 
       const withTotals = glist.map(g => ({ ...g, total: getTotal(g.round, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");

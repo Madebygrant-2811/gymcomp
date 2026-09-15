@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { denseRank, gymnast_key } from "../../lib/scoring.js";
 import { roundRunningOrderCompare } from "../../lib/rotations.js";
-import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
+import { buildRankGroups as sharedRankGroups, groupInRound, crossRoundPointers, interleaveRankEntries, roundSpanLabel } from "../../../public/shared/ranking.js";
 import { printDocument, buildOrganiserViewHTML } from "../../lib/pdf.js";
 import { sortApparatusForDisplay } from "../../lib/constants.js";
 import ConfirmModal from "../shared/ConfirmModal.jsx";
@@ -108,11 +108,15 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
   // gymnasts sorted by running order within each group). Passing the full list
   // with roundId lets a competition-scoped level pool across its rounds — the
   // combined group shows under every round tab it spans, badged below.
+  // A pooled (cross-round) group appears ONCE, under the first round it
+  // occupies; later rounds get a one-line pointer — matching the results PDF
+  // and XLSX so screen and export agree.
   const buildRankGroups = () =>
     sharedRankGroups(gymnasts, {
       levels: compData.levels || [],
       roundId: activeRound,
       rounds: compData.rounds,
+      crossRoundPlacement: "first",
       sortGymnasts: roundRunningOrderCompare(compData, activeRound),
     });
 
@@ -159,11 +163,62 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
       "gymcomp-organiser-view.pdf"
     );
   };
-  const rankGroups = allRankGroups.filter(rg => {
+  const matchesFilters = (rg) => {
     if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
     if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
     return true;
+  };
+  const rankGroups = allRankGroups.filter(rg => {
+    // Display guard: never show a group under a round it has no gymnasts in
+    if (!groupInRound(rg, activeRound)) return false;
+    return matchesFilters(rg);
   });
+  // Pooled groups occupying this round whose table sits under an earlier round
+  const pointers = useMemo(
+    () => crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: activeRound, rounds: compData.rounds || [] }),
+    [gymnasts, compData, activeRound]
+  ).filter(matchesFilters);
+  const rankEntries = interleaveRankEntries(rankGroups, pointers, compData.levels || []);
+  const spanPill = (rg) => rg.crossRound || rg.pointer ? (
+    <span style={{ fontSize: 12, fontWeight: 600, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--text-primary)", padding: "3px 10px", borderRadius: 99, fontFamily: "var(--font-display)" }}>
+      {roundSpanLabel(compData.rounds, rg.roundIds)}
+    </span>
+  ) : null;
+  const resultsFilters = (
+    <>
+      <div style={{ flex: 1 }} />
+      <div className="results-filters">
+        <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
+          style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
+          <option value="all">All Levels</option>
+          {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+        <select className="select" value={showAgeFilter ? ageFilter : "all"} onChange={e => setAgeFilter(e.target.value)}
+          disabled={!showAgeFilter}
+          style={{ width: "auto", minWidth: 90, fontSize: 12, padding: "6px 32px 6px 14px", opacity: showAgeFilter ? 1 : 0.45, cursor: showAgeFilter ? "pointer" : "not-allowed" }}>
+          <option value="all">All Ages</option>
+          {uniqueAges.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        {(levelFilter !== "all" || ageFilter !== "all") && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setLevelFilter("all"); setAgeFilter("all"); }}
+            style={{ fontSize: 11 }}>Clear</button>
+        )}
+      </div>
+    </>
+  );
+  // One-line pointer in place of a repeated standings table
+  const pointerCard = (p, idx) => (
+    <div key={`ptr-${p.key}`} className="results-level-card">
+      <div className="results-level-header">
+        {p.levelName}{p.ageLabel ? <span>{p.ageLabel}</span> : null}
+        {spanPill(p)}
+        {idx === 0 && resultsFilters}
+      </div>
+      <div style={{ padding: "10px 16px", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-display)" }}>
+        Ranked across {p.spanLabel} — standings are shown under {p.homeRoundName}.
+      </div>
+    </div>
+  );
 
   // ── Hide-on-scroll topbar ──
   const [topbarHidden, setTopbarHidden] = useState(false);
@@ -225,37 +280,15 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
           Structure: Level (& Age) card → Apparatus sub-sections → ranked table */}
       {view === "apparatus" && (
         <div>
-          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
-            const groupLabel = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+          {rankEntries.map((entry, idx) => {
+            if (entry.pointer) return pointerCard(entry, idx);
+            const { key, levelName, ageLabel, gymnasts: glist } = entry;
             return (
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
-                  {rankGroups.find(r => r.key === key)?.crossRound && (
-                    <span style={{ fontSize: 12, fontWeight: 600, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--text-primary)", padding: "3px 10px", borderRadius: 99 }}>
-                      Ranked across {(rankGroups.find(r => r.key === key)?.roundIds || []).map(roundNameOf).join(" & ")}
-                    </span>
-                  )}
-                  {idx === 0 && <>
-                    <div style={{ flex: 1 }} />
-                    <div className="results-filters">
-                      <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
-                        style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
-                        <option value="all">All Levels</option>
-                        {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                      <select className="select" value={showAgeFilter ? ageFilter : "all"} onChange={e => setAgeFilter(e.target.value)}
-                        disabled={!showAgeFilter}
-                        style={{ width: "auto", minWidth: 90, fontSize: 12, padding: "6px 32px 6px 14px", opacity: showAgeFilter ? 1 : 0.45, cursor: showAgeFilter ? "pointer" : "not-allowed" }}>
-                        <option value="all">All Ages</option>
-                        {uniqueAges.map(a => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                      {(levelFilter !== "all" || ageFilter !== "all") && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => { setLevelFilter("all"); setAgeFilter("all"); }}
-                          style={{ fontSize: 11 }}>Clear</button>
-                      )}
-                    </div>
-                  </>}
+                  {spanPill(entry)}
+                  {idx === 0 && resultsFilters}
                 </div>
                 {scoringApparatus.map(apparatus => {
                   const withScores = glist.map(g => ({ ...g, score: getScore(g, apparatus) }));
@@ -305,7 +338,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
               </div>
             );
           })}
-          {rankGroups.length === 0 && <div className="empty">No results to display yet</div>}
+          {rankEntries.length === 0 && <div className="empty">No results to display yet</div>}
         </div>
       )}
 
@@ -313,7 +346,9 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
           Structure: Level (& Age) card → cumulative ranked table */}
       {view === "overall" && (
         <div>
-          {rankGroups.map(({ key, levelName, ageLabel, gymnasts: glist }, idx) => {
+          {rankEntries.map((entry, idx) => {
+            if (entry.pointer) return pointerCard(entry, idx);
+            const { key, levelName, ageLabel, gymnasts: glist } = entry;
             const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
             const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
             const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
@@ -321,31 +356,8 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
               <div key={key} className="results-level-card">
                 <div className="results-level-header">
                   {levelName}{ageLabel ? <span>{ageLabel}</span> : null}
-                  {rankGroups.find(r => r.key === key)?.crossRound && (
-                    <span style={{ fontSize: 12, fontWeight: 600, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--text-primary)", padding: "3px 10px", borderRadius: 99 }}>
-                      Ranked across {(rankGroups.find(r => r.key === key)?.roundIds || []).map(roundNameOf).join(" & ")}
-                    </span>
-                  )}
-                  {idx === 0 && <>
-                    <div style={{ flex: 1 }} />
-                    <div className="results-filters">
-                      <select className="select" value={levelFilter} onChange={e => { setLevelFilter(e.target.value); setAgeFilter("all"); }}
-                        style={{ width: "auto", minWidth: 120, fontSize: 12, padding: "6px 32px 6px 14px" }}>
-                        <option value="all">All Levels</option>
-                        {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                      <select className="select" value={showAgeFilter ? ageFilter : "all"} onChange={e => setAgeFilter(e.target.value)}
-                        disabled={!showAgeFilter}
-                        style={{ width: "auto", minWidth: 90, fontSize: 12, padding: "6px 32px 6px 14px", opacity: showAgeFilter ? 1 : 0.45, cursor: showAgeFilter ? "pointer" : "not-allowed" }}>
-                        <option value="all">All Ages</option>
-                        {uniqueAges.map(a => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                      {(levelFilter !== "all" || ageFilter !== "all") && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => { setLevelFilter("all"); setAgeFilter("all"); }}
-                          style={{ fontSize: 11 }}>Clear</button>
-                      )}
-                    </div>
-                  </>}
+                  {spanPill(entry)}
+                  {idx === 0 && resultsFilters}
                 </div>
                 <div className="table-wrap">
                   <table>
@@ -388,7 +400,7 @@ function Phase2_Step2({ compData, gymnasts, scores, onComplete }) {
               </div>
             );
           })}
-          {rankGroups.length === 0 && <div className="empty">No results to display yet</div>}
+          {rankEntries.length === 0 && <div className="empty">No results to display yet</div>}
         </div>
       )}
 

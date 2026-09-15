@@ -4,6 +4,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { supabase, touchLastActive } from "./lib/supabase.js";
 import { generateId, generateClubCode, hashPin, isHashed, getContrastTextColor } from "./lib/utils.js";
 import { scoresToFlat, flatToScoreRows, gymnast_key } from "./lib/scoring.js";
+import { migrateCrossRoundScope } from "./lib/migrate.js";
 import { events, syncQueue } from "./lib/storage.js";
 import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
 import { printDocument, buildResultsHTML, exportResultsXLSX } from "./lib/pdf.js";
@@ -925,8 +926,11 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      {
+        const gs = migrateGymnasts(structuredClone(snapshot.gymnasts || []));
+        setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }), gs));
+        setGymnasts(gs);
+      }
     } else {
       // No local snapshot — try to fetch from Supabase (e.g. archived events with stripped snapshots)
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
@@ -934,8 +938,11 @@ export default function App() {
         const d = row.data;
         const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
-        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        {
+          const gs = migrateGymnasts(structuredClone(d.gymnasts || []));
+          setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }), gs));
+          setGymnasts(gs);
+        }
       } else {
         // Truly new — start fresh setup
         setCompPin(null);
@@ -987,16 +994,22 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      {
+        const gs = migrateGymnasts(structuredClone(snapshot.gymnasts || []));
+        setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }), gs));
+        setGymnasts(gs);
+      }
     } else {
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
         const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
-        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        {
+          const gs = migrateGymnasts(structuredClone(d.gymnasts || []));
+          setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }), gs));
+          setGymnasts(gs);
+        }
       } else {
         setCompPin(null);
         setCompDataRaw({ name:"", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] });
@@ -1041,16 +1054,22 @@ export default function App() {
       const rawPin = snapshot.compData?.pin || snapshot.pin || null;
       setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
       const consentGiven = ev.status !== "draft";
-      setCompDataRaw(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }));
-      setGymnasts(migrateGymnasts(structuredClone(snapshot.gymnasts || [])));
+      {
+        const gs = migrateGymnasts(structuredClone(snapshot.gymnasts || []));
+        setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(snapshot.compData || {}), dataConsentConfirmed: consentGiven }), gs));
+        setGymnasts(gs);
+      }
     } else {
       const { data: row } = await supabase.from("competitions").select("*").eq("id", ev.compId).maybeSingle();
       if (row?.data) {
         const d = row.data;
         const rawPin = d.compData?.pin || d.pin || null;
         setCompPin(rawPin && !isHashed(rawPin) ? await hashPin(rawPin) : rawPin);
-        setCompDataRaw(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }));
-        setGymnasts(migrateGymnasts(structuredClone(d.gymnasts || [])));
+        {
+          const gs = migrateGymnasts(structuredClone(d.gymnasts || []));
+          setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...structuredClone(d.compData || {}), dataConsentConfirmed: true }), gs));
+          setGymnasts(gs);
+        }
       }
     }
     // Scores from table only, with silent blob migration
@@ -1170,7 +1189,7 @@ export default function App() {
     } else {
       baseData = { name:"Copy", location:"", date:"", holder:"", organiserName:"", venue:"", allowSubmissions:true, dataConsentConfirmed:false, clubs:[], rounds:[], apparatus:[], levels:[], judges:[] };
     }
-    setCompDataRaw(migrateCompData(baseData));
+    setCompDataRaw(migrateCrossRoundScope(migrateCompData(baseData), newGymnasts));
     setGymnasts(newGymnasts);
     setScores({});
     setPhase(1); setStep(1);
@@ -1401,8 +1420,11 @@ export default function App() {
       // organiser open would, and mirror its consent handling.
       const cd = structuredClone(savedData.compData || {});
       const rowStatus = rowMeta?.status || "active";
-      setCompDataRaw(migrateCompData({ ...cd, dataConsentConfirmed: rowStatus !== "draft" ? true : !!cd.dataConsentConfirmed }));
-      setGymnasts(migrateGymnasts(structuredClone(savedData.gymnasts || [])));
+      {
+        const gs = migrateGymnasts(structuredClone(savedData.gymnasts || []));
+        setCompDataRaw(migrateCrossRoundScope(migrateCompData({ ...cd, dataConsentConfirmed: rowStatus !== "draft" ? true : !!cd.dataConsentConfirmed }), gs));
+        setGymnasts(gs);
+      }
       let ownerSub = null;
       if (rowMeta?.ownerId) {
         try {

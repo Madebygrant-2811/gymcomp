@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { generateId, isFutureOrToday, todayStr, getContrastTextColor, svgToPng } from "../../lib/utils.js";
 import { UK_LEVELS, APPARATUS_GROUPS, NGA_LEVELS, sortApparatus } from "../../lib/constants.js";
 import { supabase } from "../../lib/supabase.js";
+import { rankGroupSpans } from "../../../public/shared/ranking.js";
 
 import AddressLookup from "../shared/AddressLookup.jsx";
 import CompConfigSections from "./CompConfigSections.jsx";
@@ -99,21 +100,62 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
   const updateLevelRank = (id, rankBy) =>
     setData(d => ({ ...d, levels: d.levels.map(l => l.id === id ? { ...l, rankBy } : l) }));
 
-  // Ranking scope: "round" (default) ranks within each round; "competition"
-  // pools the level across every round it appears in — for a level split
-  // across rounds that must rank as one group.
+  // Ranking scope is set per RANKING GROUP — the level, or each level + age
+  // band when the level ranks by level+age — and only offered for groups
+  // whose gymnasts actually span more than one round (derived from their own
+  // round values). "competition" pools the group across those rounds; the
+  // default ranks each round separately, and stays available as an explicit
+  // override for a group that spans rounds.
+  const groupSpans = rankGroupSpans(gymnasts, data.levels || [], data.rounds || []);
   const updateLevelScope = (id, rankScope) =>
     setData(d => ({ ...d, levels: d.levels.map(l => l.id === id ? { ...l, rankScope } : l) }));
+  const updateBandScope = (id, age, rankScope) =>
+    setData(d => ({ ...d, levels: d.levels.map(l => {
+      if (l.id !== id) return l;
+      const next = { ...(l.rankScopeByAge || {}) };
+      if (rankScope === "competition") next[age] = "competition"; else delete next[age];
+      // The per-band map supersedes any legacy level-wide flag
+      const rest = { ...l };
+      delete rest.rankScope;
+      return { ...rest, rankScopeByAge: next };
+    }) }));
 
-  const rankScopeSelect = (l) => (
-    <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12 }}
-      value={l?.rankScope || "round"}
+  const scopeSelect = (value, onChange) => (
+    <select className="select" style={{ width: "auto", padding: "4px 32px 4px 12px", fontSize: 12, fontFamily: "var(--font-display)" }}
+      value={value}
       onClick={e => e.stopPropagation()}
-      onChange={e => { e.stopPropagation(); updateLevelScope(l?.id, e.target.value); }}>
+      onChange={e => { e.stopPropagation(); onChange(e.target.value); }}>
       <option value="round">Within round</option>
       <option value="competition">Across rounds</option>
     </select>
   );
+
+  const rankScopeControl = (l) => {
+    if (!l) return null;
+    const spanning = groupSpans.filter(s => s.levelId === l.id && s.spans);
+    if (!spanning.length) {
+      // Every group under this level sits in one round — nothing to choose
+      return (
+        <span title="The across-rounds option appears once a ranking group's gymnasts are placed in more than one round"
+          style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+          Within round
+        </span>
+      );
+    }
+    if ((l.rankBy || "level") !== "level+age") {
+      return scopeSelect(l.rankScope === "competition" ? "competition" : "round", v => updateLevelScope(l.id, v));
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+        {spanning.map(s => (
+          <div key={s.age} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>{s.age || "No age"}</span>
+            {scopeSelect(s.crossRound ? "competition" : "round", v => updateBandScope(l.id, s.age, v))}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const doRemove = () => {
     const { type, id } = pendingRemove;
@@ -319,7 +361,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                         <option value="level+age">Level + Age</option>
                       </select>
                       <span style={{ fontSize: 12, color: "var(--muted)" }}>Ranks:</span>
-                      {rankScopeSelect(data.levels.find(l => l.name === name))}
+                      {rankScopeControl(data.levels.find(l => l.name === name))}
                     </div>
                   )}
                 </label>
@@ -365,7 +407,7 @@ function Step1_CompDetails({ data, setData, onNext, onSaveExit, syncStatus, onSa
                   <option value="level+age">Level + Age</option>
                 </select>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>Ranks:</span>
-                {rankScopeSelect(l)}
+                {rankScopeControl(l)}
               </div>
               <button className="btn-icon" onClick={() => setPendingRemove({ type: "level", id: l.id, msg: `Remove level "${l.name}"? Gymnasts assigned will lose their level.` })}>×</button>
             </div>

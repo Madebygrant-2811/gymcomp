@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { gymnast_key, denseRank } from "../../lib/scoring.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
-import { buildRankGroups as sharedRankGroups } from "../../../public/shared/ranking.js";
+import { buildRankGroups as sharedRankGroups, groupInRound } from "../../../public/shared/ranking.js";
 import { sortApparatusForDisplay } from "../../lib/constants.js";
 
 function MCMode({ compData, gymnasts, scores }) {
@@ -39,7 +39,7 @@ function MCMode({ compData, gymnasts, scores }) {
       roundId: activeRound,
       rounds: compData.rounds,
       crossRoundPlacement: "first",
-    });
+    }).filter(rg => groupInRound(rg, activeRound)); // display guard
 
   const rankGroups = useMemo(buildRankGroups, [gymnasts, compData, activeRound]);
 

@@ -1203,17 +1203,26 @@
 
   function renderOverallView(round) {
     const rid = round.id;
-    const allGroups = buildRankGroups(rid);
-    const groups = allGroups.filter(rg => {
+    const matchesFilters = (rg) => {
       if (levelFilter !== "all" && rg.levelName !== levelFilter) return false;
       if (ageFilter !== "all" && rg.ageLabel !== ageFilter) return false;
-      return rg.gymnasts.length > 0;
+      return true;
+    };
+    const groups = buildRankGroups(rid).filter(rg => {
+      // Display guard: never show a group under a round it has no gymnasts in
+      if (!window.GymCompRanking.groupInRound(rg, rid)) return false;
+      return matchesFilters(rg) && rg.gymnasts.length > 0;
     });
+    // Pooled groups occupying this round whose table sits under an earlier round
+    const pointers = crossRoundPointersFor(rid).filter(matchesFilters);
+    const entries = window.GymCompRanking.interleaveRankEntries(groups, pointers, compData.levels || []);
 
     const apparatus = getScoringApparatus();
-    if (!groups.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
+    if (!entries.length) return `${buildFilterHtml()}<div style="color:var(--muted);font-size:13px;padding:20px 0">No results to display.</div>`;
 
-    return buildFilterHtml() + groups.map(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
+    return buildFilterHtml() + entries.map((entry) => {
+      if (entry.pointer) return pointerCardHtml(entry);
+      const { levelName, ageLabel, crossRound, roundIds, gymnasts: glist } = entry;
       const withTotals = glist.map(g => ({ ...g, total: getOverall(g.round, g.id) }));
       const ranked = standardRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total");
       // Unscored gymnasts in running order, then explicit DNS / WD
@@ -1485,20 +1494,35 @@
     return i >= 0 ? AGE_PILL_COLORS[i % AGE_PILL_COLORS.length] : "var(--surface)";
   }
 
-  // Pill shown on a level ranked across rounds
+  // Pill on a pooled (cross-round) group: the rounds it spans, e.g. "Rounds 1–2"
   function crossRoundPill(crossRound, roundIds) {
     if (!crossRound) return "";
-    const names = (roundIds || []).map(r => ((compData.rounds || []).find(x => x.id === r) || {}).name || "").filter(Boolean).join(" & ");
-    return ` <span style="font-size:14px;font-weight:600;color:var(--text);background:transparent;border:1px solid var(--text);padding:4px 12px;border-radius:99px">Ranked across ${escHtml(names)}</span>`;
+    const label = window.GymCompRanking.roundSpanLabel(compData.rounds || [], roundIds);
+    return ` <span style="font-size:14px;font-weight:600;color:var(--text);background:transparent;border:1px solid var(--text);padding:4px 12px;border-radius:99px">${escHtml(label)}</span>`;
   }
 
-  // Build level groups (shared implementation, converged defaults)
-  function buildRankGroups(rid) {
+  // Build level groups (shared implementation, converged defaults). Standings
+  // (Overall) place a pooled group ONCE under its first round ("first") —
+  // later rounds get a pointer; the My Club listing keeps every round's own
+  // gymnasts ("every", then filtered to the round below).
+  function buildRankGroups(rid, placement = "first") {
     return window.GymCompRanking.buildRankGroups(gymnasts, {
       levels: (compData.levels || []),
       roundId: rid,
       rounds: (compData.rounds || []),
+      crossRoundPlacement: placement,
     });
+  }
+  function crossRoundPointersFor(rid) {
+    return window.GymCompRanking.crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: rid, rounds: compData.rounds || [] });
+  }
+  function pointerCardHtml(p) {
+    return `
+      <div class="level-card">
+        <div class="level-card-header">${escHtml(p.levelName)}${p.ageLabel ? ` <span style="font-size:14px;font-weight:600;color:var(--text);background:${ageColor(p.ageLabel)};padding:4px 12px;border-radius:99px">${escHtml(p.ageLabel)}</span>` : ""}${crossRoundPill(true, p.roundIds)}</div>
+        <div class="level-card-body" style="color:var(--muted);font-size:13px;font-family:var(--font-display)">Ranked across ${escHtml(p.spanLabel)} — standings are shown under ${escHtml(p.homeRoundName)}.</div>
+      </div>
+    `;
   }
 
   function buildRoundContent(round) {
@@ -1509,11 +1533,15 @@
       return `<div style="color:var(--muted);font-size:13px;padding:20px 0">No gymnasts in this round.</div>`;
     }
 
-    const allGroups = buildRankGroups(rid);
+    // Listing, not standings: every round shows the gymnasts who actually
+    // compete in it, so a pooled group is pooled for the badge only and its
+    // members are filtered back to this round.
+    const allGroups = buildRankGroups(rid, "every");
 
-    // In "myclub" view, filter to authed club only
-    const groups = allGroups.map(rg => {
-      let filtered = rg.gymnasts;
+    // In "myclub" view, filter to authed club only. Display guard first: never
+    // show a group under a round it has no gymnasts in.
+    const groups = allGroups.filter(rg => window.GymCompRanking.groupInRound(rg, rid)).map(rg => {
+      let filtered = rg.gymnasts.filter(g => g.round === rid);
       if (activeView === "myclub" && authedClubName) {
         filtered = filtered.filter(g => (g.club || "") === authedClubName);
       } else if (clubFilter !== "all") {

@@ -5,7 +5,7 @@ import { gymnast_key, denseRank, getEScoreStart } from "./scoring.js";
 import { NGA_FALL_PENALTY, sortApparatusForDisplay } from "./constants.js";
 import { getContrastTextColor } from "./utils.js";
 import { roundGroups, roundRunningOrderCompare, runningOrderCompare } from "./rotations.js";
-import { buildRankGroups as sharedRankGroups } from "../../public/shared/ranking.js";
+import { buildRankGroups as sharedRankGroups, groupInRound, crossRoundPointers, interleaveRankEntries, roundSpanLabel } from "../../public/shared/ranking.js";
 
 const escHtml = (s) => {
   if (s == null) return "";
@@ -742,11 +742,21 @@ export function buildResultsHTML(compData, gymnasts, scores) {
     body += `<div class="round-page">`;
     body += `<div class="round-heading">${escHtml(round.name)} — Overall</div>`;
 
-    const rankGroups = buildRankGroups(round.id);
-    if (!rankGroups.length) {
+    // Display guard: never print a group under a round it has no gymnasts in.
+    // A pooled group prints ONCE under its first round; later rounds it
+    // occupies get a one-line pointer to that table.
+    const rankGroups = buildRankGroups(round.id).filter(rg => groupInRound(rg, round.id));
+    const pointers = crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: round.id, rounds });
+    const entries = interleaveRankEntries(rankGroups, pointers, compData.levels || []);
+    if (!entries.length) {
       body += `<div class="empty-msg">No gymnasts in this round.</div>`;
     } else {
-      rankGroups.forEach(({ levelName, ageLabel, gymnasts: glist }) => {
+      entries.forEach((entry) => {
+        if (entry.pointer) {
+          body += `<div class="pointer-line"><strong>${escHtml(entry.levelName)}${entry.ageLabel ? " " + escHtml(entry.ageLabel) : ""} · ${escHtml(entry.spanLabel)}</strong> — standings are listed under ${escHtml(entry.homeRoundName)}</div>`;
+          return;
+        }
+        const { levelName, ageLabel, crossRound, roundIds, gymnasts: glist } = entry;
         const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
         const ranked = denseRank(withTotals.filter(g => g.total > 0 && !g.dns && !g.withdrawn), "total", rankingMode);
         const dns = withTotals.filter(g => g.total === 0 || g.dns || g.withdrawn);
@@ -755,11 +765,7 @@ export function buildResultsHTML(compData, gymnasts, scores) {
         body += `<div class="level-title-row">`;
         body += `<span class="level-name">${escHtml(levelName)}</span>`;
         if (ageLabel) body += `<span class="age-pill">${escHtml(ageLabel)}</span>`;
-        const grpMeta = rankGroups.find(r => r.levelName === levelName && r.ageLabel === ageLabel);
-        if (grpMeta?.crossRound) {
-          const names = (grpMeta.roundIds || []).map(rid => rounds.find(r => r.id === rid)?.name || "").filter(Boolean).join(" & ");
-          body += `<span class="age-pill">Ranked across ${escHtml(names)}</span>`;
-        }
+        if (crossRound) body += `<span class="age-pill">${escHtml(roundSpanLabel(rounds, roundIds))}</span>`;
         body += `</div>`;
         body += `<div class="level-divider"></div>`;
 
@@ -875,6 +881,8 @@ export function buildResultsHTML(compData, gymnasts, scores) {
   .g-club { font-size: 9px; color: #8a8a8a; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .no-score { color: #ccc; }
   .empty-msg { font-size: 10px; color: #999; padding: 12px 0; }
+  .pointer-line { font-size: 9.5px; color: #666; padding: 6px 14px; margin-bottom: 18px; border-left: 2px solid #dadada; }
+  .pointer-line strong { color: #111; font-weight: 600; }
 
   @media print { body { padding: 10px; } }
 </style>
@@ -919,19 +927,25 @@ export function exportResultsXLSX(compData, gymnasts, scores) {
       roundId: round.id,
       rounds: compData.rounds,
       crossRoundPlacement: "first",
-    });
+    }).filter(rg => groupInRound(rg, round.id)); // display guard
 
     resultsRows.push([`${round.name}  ·  ${round.start} – ${round.end}`]);
     const appHeaders = apparatus;
     const header = ["Position", "#", "Gymnast", "Club", "Age Category", ...appHeaders, "Total"];
     resultsRows.push(header);
 
-    rankGroups.forEach(({ levelName, ageLabel, crossRound, roundIds, gymnasts: glist }) => {
-      let label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
-      if (crossRound) {
-        const names = (roundIds || []).map(rid => (compData.rounds || []).find(r => r.id === rid)?.name || "").filter(Boolean).join(" & ");
-        label += ` (ranked across ${names})`;
+    // Pooled groups: table once under the first round, a one-line pointer in
+    // later rounds (same placement as the PDF and the screens).
+    const pointers = crossRoundPointers(gymnasts, { levels: compData.levels || [], roundId: round.id, rounds: compData.rounds || [] });
+    interleaveRankEntries(rankGroups, pointers, compData.levels || []).forEach((entry) => {
+      const { levelName, ageLabel, crossRound, roundIds, gymnasts: glist } = entry;
+      if (entry.pointer) {
+        resultsRows.push([`${ageLabel ? `${levelName} — ${ageLabel}` : levelName} · ${entry.spanLabel} — standings listed under ${entry.homeRoundName}`]);
+        resultsRows.push([]);
+        return;
       }
+      let label = ageLabel ? `${levelName} — ${ageLabel}` : levelName;
+      if (crossRound) label += ` · ${roundSpanLabel(compData.rounds || [], roundIds)}`;
       resultsRows.push([label]);
 
       const withTotals = glist.map(g => ({ ...g, total: getTotal(g) }));
