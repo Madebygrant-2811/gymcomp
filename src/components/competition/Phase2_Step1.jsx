@@ -7,7 +7,10 @@ import { round2dp } from "../../lib/utils.js";
 import { getApparatusIcon } from "../../lib/pdf.js";
 import { roundGroups, isValidGroup, nextOrderIndex, runningOrderCompare } from "../../lib/rotations.js";
 
-function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, setGymnasts, onMoveScoreCleanup, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp }) {
+function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onSharePublic, onShareCoach, isOnline, pendingSyncCount, syncStatus, onRetrySync, onScoreCommit, onScoreDelete, newScoreKeys, setGymnasts, onMoveScoreCleanup, pinRole, lockedApparatus, onExit, activeRound: activeRoundProp, setActiveRound: setActiveRoundProp, unsavedScores = {}, onRetryUnsaved }) {
+  // Scores whose database write failed — keyed by base key. The value on
+  // screen is NOT stored anywhere; each is marked in its cell until it saves.
+  const unsavedCount = Object.keys(unsavedScores).length;
   const [localRound, setLocalRound] = useState(compData.rounds[0]?.id || "");
   const activeRound = activeRoundProp !== undefined ? activeRoundProp : localRound;
   const setActiveRound = setActiveRoundProp || setLocalRound;
@@ -424,13 +427,16 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
       // ranking / realtime / public views all work off final_score unchanged.
       const n = parseFloat(modalFields.fin);
       const val = !isNaN(n) && n > 0 ? String(parseFloat(n.toFixed(3))) : "";
-      setScores(s => ({ ...s, [baseKey(gid, app)]: val }));
       if (val === "") {
         // A base-key-only zero row is skipped by flatToScoreRows, so clearing
-        // must delete the stored row rather than upsert it.
+        // must delete the stored row rather than upsert it. The local value is
+        // only removed once the database confirms the delete (App does that);
+        // on failure it stays, marked "delete not saved".
         if (onScoreDelete) onScoreDelete(activeRound, gid, app);
-      } else if (onScoreCommit) {
-        onScoreCommit(activeRound, gid, app, { [baseKey(gid, app)]: val });
+        else removeScoreLocally(gid, app);
+      } else {
+        setScores(s => ({ ...s, [baseKey(gid, app)]: val }));
+        if (onScoreCommit) onScoreCommit(activeRound, gid, app, { [baseKey(gid, app)]: val });
       }
     } else if (dual) {
       // Dual vault submit
@@ -554,24 +560,25 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     setScoreModal(null);
   };
 
-  const deleteScore = (gid, app) => {
+  // Local-only removal of every key for one score. Used only when there is no
+  // database delete handler; otherwise App removes the keys once the delete
+  // is confirmed, so a blocked delete never looks like it worked.
+  const removeScoreLocally = (gid, app) => {
     setScores(s => {
       const next = { ...s };
-      delete next[baseKey(gid, app)];
-      for (const sub of ["dv","bon","pen"]) delete next[subKey(gid, app, sub)];
-      const n = judgeCount(app);
-      for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `e${i}`)];
-      // Clean up dual vault keys
-      delete next[subKey(gid, app, "dualVault")];
-      for (const prefix of ["v1", "v2"]) {
-        for (const sub of ["dv","bon","pen","fin"]) delete next[subKey(gid, app, `${prefix}${sub}`)];
-        for (let i = 1; i <= Math.max(n, 1); i++) delete next[subKey(gid, app, `${prefix}e${i}`)];
+      const bk = baseKey(gid, app);
+      for (const key of Object.keys(next)) {
+        if (key === bk || key.startsWith(bk + "__")) delete next[key];
       }
       return next;
     });
-    if (onScoreDelete) onScoreDelete(activeRound, gid, app);
+  };
+
+  const deleteScore = (gid, app) => {
     setScoreModal(null);
     setDeleteConfirm(null);
+    if (onScoreDelete) onScoreDelete(activeRound, gid, app); // App: delete, confirm, then remove locally
+    else removeScoreLocally(gid, app);
   };
 
   // ── Move-to-round helpers ────────────────────────────────
@@ -652,24 +659,35 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
     applyMove(payload);
   };
 
-  const applyMove = (payload, clearVaultScores = null) => {
+  const applyMove = async (payload, clearVaultScores = null) => {
     const g = gymnasts.find(x => x.id === payload.gid);
     if (!g) { setVaultGuard(null); setMoveModal(null); return; }
 
-    // Dual-vault flip confirmed — clear the affected vault scores locally and
-    // in the scores table before re-levelling.
+    // Dual-vault flip confirmed — clear the affected vault scores in the
+    // scores table BEFORE re-levelling. Each delete is confirmed by App (which
+    // removes the local keys on success); if any is blocked the move is not
+    // applied, so a score can never survive in the database under a level
+    // whose vault format no longer matches it.
     if (clearVaultScores && clearVaultScores.length > 0) {
-      setScores(s => {
-        const next = { ...s };
-        for (const { rid, app } of clearVaultScores) {
-          const prefix = `${rid}__${g.id}__${app}`;
-          for (const k of Object.keys(next)) {
-            if (k === prefix || k.startsWith(prefix + "__")) delete next[k];
-          }
+      if (onScoreDelete) {
+        setVaultGuard(v => (v ? { ...v, busy: true, error: "" } : v));
+        const results = await Promise.all(clearVaultScores.map(({ rid, app }) => onScoreDelete(rid, g.id, app, { mark: false })));
+        if (results.some(ok => ok === false)) {
+          setVaultGuard(v => (v ? { ...v, busy: false, error: "The vault score could not be cleared in the database (offline, or the delete was blocked). The move has not been applied — try again when connected." } : v));
+          return;
         }
-        return next;
-      });
-      if (onScoreDelete) clearVaultScores.forEach(({ rid, app }) => onScoreDelete(rid, g.id, app));
+      } else {
+        setScores(s => {
+          const next = { ...s };
+          for (const { rid, app } of clearVaultScores) {
+            const prefix = `${rid}__${g.id}__${app}`;
+            for (const k of Object.keys(next)) {
+              if (k === prefix || k.startsWith(prefix + "__")) delete next[k];
+            }
+          }
+          return next;
+        });
+      }
     }
 
     if (payload.movingRound) {
@@ -804,7 +822,14 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
         </div>
         <div className="setup-topbar-right">
           {isOnline === false && (
-            <span className="setup-topbar-sync" style={{ color: "#fbbf24" }}>Offline — saved locally</span>
+            <span className="setup-topbar-sync" style={{ color: "var(--warn)", fontFamily: "var(--font-display)" }}>Offline — scores cannot be saved</span>
+          )}
+          {unsavedCount > 0 && (
+            <button className="setup-topbar-sync" onClick={onRetryUnsaved} disabled={isOnline === false}
+              title={isOnline === false ? "Will retry when the connection returns" : "Retry saving every unsaved score"}
+              style={{ background: "var(--danger)", border: "none", borderRadius: 48, padding: "3px 10px", cursor: isOnline === false ? "default" : "pointer", color: "var(--text-alternate)", fontFamily: "var(--font-display)", fontWeight: 700 }}>
+              {unsavedCount} not saved{isOnline === false ? "" : " — retry"}
+            </button>
           )}
           {isOnline !== false && pendingSyncCount > 0 && syncStatus === "pending" && (
             <button className="setup-topbar-sync" onClick={onRetrySync}
@@ -1004,8 +1029,19 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                               const queried = isQueried(g.id, a);
                               const flashBk = baseKey(g.id, a);
                               const isFlashing = newScoreKeys && newScoreKeys.has(flashBk);
+                              // Failed write for this cell: "save" = the score shown is not in
+                              // the database; "delete" = the database still holds a score this
+                              // device removed. Stays until it saves or is re-entered.
+                              const unsaved = unsavedScores[flashBk];
+                              const unsavedTag = (label) => (
+                                <span title="This change has not reached the database. Retry, or re-enter the score."
+                                  style={{ display: "block", marginTop: 2, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--danger)", fontFamily: "var(--font-display)", whiteSpace: "nowrap" }}>
+                                  \u26a0 {label}
+                                </span>
+                              );
                               return (
-                                <td key={a} className={isFlashing ? "score-flash" : ""}>
+                                <td key={a} className={isFlashing ? "score-flash" : ""}
+                                  style={unsaved ? { boxShadow: "inset 0 0 0 2px var(--danger)", borderRadius: 6 } : undefined}>
                                   {dimmed ? (
                                     <span style={{ color: "var(--muted)" }}>\u2014</span>
                                   ) : appScore > 0 ? (
@@ -1016,9 +1052,15 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                                         {appScore.toFixed(3)}
                                       </span>
                                       {renderVaultFinals(g.id, a, appScore)}
+                                      {unsaved?.kind === "save" && unsavedTag("Not saved")}
+                                      {/* The score is still shown because the database still holds it */}
+                                      {unsaved?.kind === "delete" && unsavedTag("Delete not saved")}
                                     </div>
                                   ) : (
-                                    <button className="si-add-btn" onClick={() => openScoreModal(g.id, a, false)}>+ Add</button>
+                                    <div className="si-score-cell">
+                                      <button className="si-add-btn" onClick={() => openScoreModal(g.id, a, false)}>+ Add</button>
+                                      {unsaved?.kind === "delete" && unsavedTag("Delete not saved")}
+                                    </div>
                                   )}
                                 </td>
                               );
@@ -1552,11 +1594,14 @@ function Phase2_Step1({ compData, gymnasts, scores, setScores, setStep, onShareP
                 Moving {g?.name || "this gymnast"} to {targetName} switches their vault between single and dual-vault formats,
                 so the existing vault score cannot be kept. It will be cleared and will need re-entering.
               </div>
+              {vaultGuard.error && (
+                <div className="field-error" style={{ marginBottom: 12, fontFamily: "var(--font-display)", lineHeight: 1.5 }}>{vaultGuard.error}</div>
+              )}
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn btn-ghost" style={{ fontFamily: "var(--font-display)" }} onClick={() => setVaultGuard(null)}>Cancel</button>
-                <button className="btn btn-danger" style={{ fontFamily: "var(--font-display)" }}
+                <button className="btn btn-danger" style={{ fontFamily: "var(--font-display)", opacity: vaultGuard.busy ? 0.6 : 1 }} disabled={!!vaultGuard.busy}
                   onClick={() => applyMove(vaultGuard.payload, vaultGuard.vaultScores)}>
-                  Clear vault score & continue
+                  {vaultGuard.busy ? "Clearing…" : "Clear vault score & continue"}
                 </button>
               </div>
             </div>

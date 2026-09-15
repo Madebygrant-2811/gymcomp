@@ -188,8 +188,25 @@ export default function App() {
     clubs: [], rounds: [], apparatus: [], levels: [], judges: [], ageRanges: []
   });
   const [gymnasts, setGymnasts] = useState([]);
+  const gymnastsRef = useRef([]); // for realtime handlers that must not go stale
+  useEffect(() => { gymnastsRef.current = gymnasts; }, [gymnasts]);
   const [scores, setScores] = useState({});
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
+  // Scores whose write to the scores table FAILED (offline, timeout, error).
+  // Keyed by base key (roundId__gymnastId__apparatus) → { kind: "save"|"delete",
+  // roundId, gymnastId, apparatus, flatSubset?, failedAt }. A score lives in
+  // React state only — nothing here is persisted — so an entry means the value
+  // on screen is NOT in the database and will be lost on reload. Cleared when
+  // the same key later saves, or when the user knowingly discards.
+  const [unsavedScores, setUnsavedScores] = useState({});
+  const unsavedScoresRef = useRef({});
+  useEffect(() => { unsavedScoresRef.current = unsavedScores; }, [unsavedScores]);
+  const unsavedCount = Object.keys(unsavedScores).length;
+  // Confirm-before-discard for actions that replace score state (open another
+  // competition, new competition, exit a PIN session). { message, proceed }
+  const [discardScoresPrompt, setDiscardScoresPrompt] = useState(null);
+  // Notices about unsaved scores overwritten by another device (realtime)
+  const [scoreNotices, setScoreNotices] = useState([]);
   const effectiveActiveRound = activeRound ?? compData?.rounds?.[0]?.id ?? "";
 
   // ── Draft buffer for Setup — isolates edits until explicit save ──
@@ -216,6 +233,9 @@ export default function App() {
 
   const inSandbox = typeof window !== "undefined" &&
     (window.location.href.includes("claudeusercontent") || window.location.href.includes("claude.ai"));
+  // Sessions that write scores: judges/scorekeepers always, anyone on the
+  // competition (score entry) phase. Drives the offline banner wording.
+  const sessionEntersScores = pinRole === "judge" || pinRole === "scorekeeper" || phase === 2;
 
   // ── Auth initialisation ──────────────────────────────────────────────────
   const loadUserProfile = async (user) => {
@@ -318,8 +338,11 @@ export default function App() {
         ...(extraFields || {}),
       };
       try {
-        const { error } = await supabase.from("competitions").update(patch).eq("id", compId);
+        // Anon-key update: a row-security filter returns no error and 0 rows,
+        // so the count is checked too.
+        const { error, count } = await supabase.from("competitions").update(patch, { count: "exact" }).eq("id", compId);
         if (error) throw new Error(error.message);
+        if (count === 0) throw new Error("update affected 0 rows — blocked by row security or competition missing");
         setSyncStatus("saved");
       } catch (e) {
         console.error("Collaborator sync failed:", e.message);
@@ -412,10 +435,19 @@ export default function App() {
         if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
           const row = payload.new;
           const flat = scoresToFlat([row]);
+          const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
+          // The database is the truth: if this device had an UNSAVED value for
+          // the same score, it is now replaced — say so rather than silently
+          // swapping what the judge typed.
+          if (unsavedScoresRef.current[bk]) {
+            const name = gymnastsRef.current.find(g => g.id === row.gymnast_id)?.name || "a gymnast";
+            const app = (row.apparatus || "").replace(/\s*\([A-Z]+\)\s*$/, "");
+            setUnsavedScores(prev => { const n = { ...prev }; delete n[bk]; return n; });
+            setScoreNotices(prev => [...prev, `Your unsaved ${app} score for ${name} was replaced by a value saved from another device.`]);
+          }
           // Merge into scores state directly (NOT via setScoresWithSync to avoid re-pushing)
           setScores(prev => ({ ...prev, ...flat }));
           // Flash animation — add base key, remove after 2s
-          const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
           setNewScoreKeys(prev => new Set(prev).add(bk));
           const t = setTimeout(() => { setNewScoreKeys(prev => { const n = new Set(prev); n.delete(bk); return n; }); flashTimers.delete(t); }, 2000);
           flashTimers.add(t);
@@ -509,42 +541,151 @@ export default function App() {
     setScores(updater);
   }, []);
 
-  // ── Score table push (fire-and-forget) ──────────────────────────────────
+  // ── Unsaved-score bookkeeping ────────────────────────────────────────────
+  const markScoreUnsaved = useCallback((bk, entry) => {
+    setUnsavedScores(prev => ({ ...prev, [bk]: { ...entry, failedAt: Date.now() } }));
+  }, []);
+  const clearScoreUnsaved = useCallback((bk) => {
+    setUnsavedScores(prev => {
+      if (!(bk in prev)) return prev;
+      const next = { ...prev };
+      delete next[bk];
+      return next;
+    });
+  }, []);
+
+  // ── Score table push ────────────────────────────────────────────────────
+  // A failed write is a failure the judge must see: the score stays on screen
+  // but is NOT in the database, so it is marked unsaved (and can be retried).
+  // The row count is checked as well as the error: a write filtered by row
+  // security returns no error and touches nothing.
   const pushScoreToTable = useCallback(async (roundId, gymnastId, apparatus, flatSubset) => {
-    if (inSandbox) return;
+    if (inSandbox) return true;
+    const bk = `${roundId}__${gymnastId}__${apparatus}`;
     try {
       const submittedBy = currentUser
         ? `organiser:${currentUser.id}`
         : pinRole === "collaborator" ? "collaborator" : "judge";
       const rows = flatToScoreRows(flatSubset, compId, submittedBy);
-      if (!rows.length) return;
-      const { error } = await supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus" });
-      if (error) console.error("[pushScoreToTable]", error.message);
+      if (!rows.length) return true;
+      const { error, count } = await supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus", count: "exact" });
+      if (error) throw new Error(error.message);
+      if (count != null && count < rows.length) throw new Error(`upsert affected ${count} of ${rows.length} rows`);
+      clearScoreUnsaved(bk);
+      return true;
     } catch (e) {
       console.error("[pushScoreToTable]", e.message);
+      markScoreUnsaved(bk, { kind: "save", roundId, gymnastId, apparatus, flatSubset });
+      return false;
     }
-  }, [compId, currentUser, inSandbox, pinRole]);
+  }, [compId, currentUser, inSandbox, pinRole, clearScoreUnsaved, markScoreUnsaved]);
 
-  const deleteScoreFromTable = useCallback(async (roundId, gymnastId, apparatus) => {
-    if (inSandbox) return;
+  // Drop every local key for one score (base key + all sub keys)
+  const removeScoreLocally = useCallback((bk) => {
+    setScores(prev => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (key === bk || key.startsWith(bk + "__")) delete next[key];
+      }
+      return next;
+    });
+  }, []);
+
+  // Delete a score row and, ONLY once the database confirms it, remove it from
+  // local state. Resolves true on success, false on failure. A delete filtered
+  // by row security returns no error and 0 rows — so 0 rows is checked against
+  // the table: if the row is still there the delete was blocked and the score
+  // is marked "delete not saved" (mark: false skips the marker for callers
+  // that handle the failure themselves).
+  const deleteScoreFromTable = useCallback(async (roundId, gymnastId, apparatus, { mark = true } = {}) => {
+    const bk = `${roundId}__${gymnastId}__${apparatus}`;
+    if (inSandbox) { removeScoreLocally(bk); return true; }
+    const match = (q) => q.eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId).eq("apparatus", apparatus);
     try {
-      const { error } = await supabase.from("scores").delete().eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId).eq("apparatus", apparatus);
-      if (error) console.error("[deleteScoreFromTable]", error.message);
+      const { error, count } = await match(supabase.from("scores").delete({ count: "exact" }));
+      if (error) throw new Error(error.message);
+      if (count === 0) {
+        // Nothing deleted: fine if there was nothing to delete (never saved, or
+        // already removed elsewhere); a failure if the row still exists.
+        const { data: still, error: selErr } = await match(supabase.from("scores").select("id")).limit(1);
+        if (selErr) throw new Error(selErr.message);
+        if (still && still.length > 0) throw new Error("delete affected 0 rows but the score still exists — blocked by row security");
+      }
+      removeScoreLocally(bk);
+      clearScoreUnsaved(bk);
+      return true;
     } catch (e) {
       console.error("[deleteScoreFromTable]", e.message);
+      if (mark) markScoreUnsaved(bk, { kind: "delete", roundId, gymnastId, apparatus });
+      return false;
     }
-  }, [compId, inSandbox]);
+  }, [compId, inSandbox, removeScoreLocally, clearScoreUnsaved, markScoreUnsaved]);
+
+  // Re-attempt every unsaved write with the payload captured at failure time.
+  // In-memory only (a persistent score queue is a separate change) — a retry
+  // that fails simply leaves the score marked unsaved.
+  const retryUnsavedScores = useCallback(async () => {
+    const entries = Object.values(unsavedScoresRef.current);
+    for (const u of entries) {
+      if (u.kind === "delete") await deleteScoreFromTable(u.roundId, u.gymnastId, u.apparatus);
+      else await pushScoreToTable(u.roundId, u.gymnastId, u.apparatus, u.flatSubset || {});
+    }
+  }, [deleteScoreFromTable, pushScoreToTable]);
+
+  // Retry automatically when the connection comes back
+  useEffect(() => {
+    const onOnline = () => { if (Object.keys(unsavedScoresRef.current).length > 0) retryUnsavedScores(); };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [retryUnsavedScores]);
+
+  // Warn before browser close / refresh while any score is unsaved — the
+  // scores exist only in this page's memory.
+  useEffect(() => {
+    if (unsavedCount === 0) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [unsavedCount]);
+
+  // Human-readable list of what would be lost, for the discard prompts
+  const describeUnsaved = useCallback(() => {
+    const list = Object.values(unsavedScoresRef.current);
+    const nameOf = (id) => gymnastsRef.current.find(g => g.id === id)?.name || "Unknown gymnast";
+    const shortApp = (a) => (a || "").replace(/\s*\([A-Z]+\)\s*$/, "");
+    const lines = list.slice(0, 6).map(u => `${nameOf(u.gymnastId)} · ${shortApp(u.apparatus)}${u.kind === "delete" ? " (deletion)" : ""}`);
+    if (list.length > 6) lines.push(`…and ${list.length - 6} more`);
+    return lines;
+  }, []);
+
+  // Run `proceed` now if nothing is unsaved; otherwise ask first. Confirming
+  // clears the markers (the user has been told) and then proceeds.
+  const guardUnsavedScores = useCallback((proceed, actionLabel) => {
+    if (Object.keys(unsavedScoresRef.current).length === 0) { proceed(); return; }
+    setDiscardScoresPrompt({ actionLabel, lines: describeUnsaved(), proceed });
+  }, [describeUnsaved]);
 
   // Remove all leftover (empty/zero) score rows for one gymnast under one round —
   // used after a "move to round" so the old round leaves no orphaned rows behind.
   // Scoped to comp_id + round_id + gymnast_id only; never touches other gymnasts.
+  // Zero rows is the normal case here (the move is blocked if any positive
+  // score exists), so it only counts as a failure when rows are still present
+  // afterwards — i.e. the delete was filtered. Resolves true/false.
   const clearRoundScoresForGymnast = useCallback(async (roundId, gymnastId) => {
-    if (inSandbox) return;
+    if (inSandbox) return true;
+    const match = (q) => q.eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId);
     try {
-      const { error } = await supabase.from("scores").delete().eq("comp_id", compId).eq("round_id", roundId).eq("gymnast_id", gymnastId);
-      if (error) console.error("[clearRoundScoresForGymnast]", error.message);
+      const { error, count } = await match(supabase.from("scores").delete({ count: "exact" }));
+      if (error) throw new Error(error.message);
+      if (count === 0) {
+        const { data: still, error: selErr } = await match(supabase.from("scores").select("id")).limit(1);
+        if (selErr) throw new Error(selErr.message);
+        if (still && still.length > 0) throw new Error("delete affected 0 rows but leftover score rows still exist — blocked by row security");
+      }
+      return true;
     } catch (e) {
       console.error("[clearRoundScoresForGymnast]", e.message);
+      return false;
     }
   }, [compId, inSandbox]);
 
@@ -648,7 +789,8 @@ export default function App() {
   };
 
   // ---- New competition flow ----
-  const handleNew = () => {
+  const handleNew = () => guardUnsavedScores(doHandleNew, "start a new competition");
+  const doHandleNew = () => {
     const newCompId = generateId();
     setCompId(newCompId);
     setCompPin(null);
@@ -688,8 +830,11 @@ export default function App() {
     setScreen("active");
   };
 
-  // Open an existing event from the organiser dashboard
-  const handleOpenEvent = async (ev) => {
+  // Open an existing event from the organiser dashboard. Opening replaces
+  // score state from the scores table, so anything unsaved here would vanish —
+  // confirm first.
+  const handleOpenEvent = (ev) => guardUnsavedScores(() => doOpenEvent(ev), "open another competition");
+  const doOpenEvent = async (ev) => {
     const snapshot = ev.snapshot;
     setCompId(ev.compId);
     if (snapshot) {
@@ -847,7 +992,8 @@ export default function App() {
 
   // Duplicate an event as a new competition
   // mode: "setup" = config only, "full" = config + clubs + gymnasts
-  const handleDuplicateEvent = (ev, mode = "setup") => {
+  const handleDuplicateEvent = (ev, mode = "setup") => guardUnsavedScores(() => doDuplicateEvent(ev, mode), "duplicate a competition");
+  const doDuplicateEvent = (ev, mode = "setup") => {
     const snapshot = ev.snapshot;
     const newCompId = generateId();
     setCompId(newCompId);
@@ -965,7 +1111,8 @@ export default function App() {
   };
 
   // Navigate back to org dashboard
-  const goBackToDashboard = () => {
+  const goBackToDashboard = () => guardUnsavedScores(doGoBackToDashboard, "leave this competition");
+  const doGoBackToDashboard = () => {
     // If in setup with unsaved changes, prompt before discarding
     if (inSetupMode && isDirty) {
       discardCallbackRef.current = () => {
@@ -1223,10 +1370,14 @@ export default function App() {
 
   // ---- Collaborator session exit + live revocation ----
   const exitCollabSession = useCallback((message) => {
+    // A forced exit (revocation) cannot be cancelled, but the collaborator is
+    // still told what was lost.
+    const lost = Object.keys(unsavedScoresRef.current).length;
+    setUnsavedScores({});
     setPinRole(null);
     setLockedApparatus(null);
     setCollabSession(null);
-    if (message) setCollabNotice(message);
+    if (message) setCollabNotice(lost > 0 ? `${message} ${lost} score${lost !== 1 ? "s" : ""} entered on this device had not been saved and ${lost !== 1 ? "were" : "was"} lost.` : message);
     setScreen("auth-login");
   }, []);
 
@@ -1618,8 +1769,43 @@ export default function App() {
           padding: "8px 16px", background: "#f59e0b", color: "#fff", fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
         }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 1l14 14"/><path d="M4.7 4.7A7 7 0 001 8M7 7a4 4 0 00-3 1.5M8 11a1 1 0 100 .01M11 3.5A7 7 0 0115 8M13 5.5"/></svg>
-          You're offline — scores are saved locally and will sync when reconnected
-          {pendingSyncCount > 0 && <span style={{ background: "rgba(0,0,0,0.2)", borderRadius: 48, padding: "2px 10px", fontSize: 11 }}>{pendingSyncCount} pending</span>}
+          {sessionEntersScores
+            // Scores go straight to the scores table — there is no local
+            // store and no queue, so never promise one.
+            ? "You're offline — scores cannot be saved while offline. Anything entered now is not stored and will be lost if this page reloads."
+            : "You're offline — setup changes are saved locally and will sync when reconnected"}
+          {sessionEntersScores && unsavedCount > 0 && <span style={{ background: "var(--danger)", borderRadius: 48, padding: "2px 10px", fontSize: 11, whiteSpace: "nowrap" }}>{unsavedCount} score{unsavedCount !== 1 ? "s" : ""} not saved</span>}
+          {!sessionEntersScores && pendingSyncCount > 0 && <span style={{ background: "rgba(0,0,0,0.2)", borderRadius: 48, padding: "2px 10px", fontSize: 11 }}>{pendingSyncCount} pending</span>}
+        </div>
+      )}
+
+      {/* Unsaved scores — prominent, persistent until every one saves or the
+          judge knowingly discards. Shown online too: a write can fail on a
+          timeout or server error with the connection nominally up. */}
+      {unsavedCount > 0 && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap",
+          padding: "8px 16px", background: "var(--danger)", color: "var(--text-alternate)", fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 600
+        }}>
+          <span>{unsavedCount} score{unsavedCount !== 1 ? "s" : ""} not saved to the database — {isOnline ? "each is marked in the score table" : "they will be lost if this page reloads"}</span>
+          <button onClick={retryUnsavedScores} disabled={!isOnline}
+            style={{ background: "rgba(255,255,255,0.25)", border: "none", borderRadius: 48, padding: "3px 12px", color: "var(--text-alternate)", fontFamily: "var(--font-display)", fontSize: 11, fontWeight: 600, cursor: isOnline ? "pointer" : "default", opacity: isOnline ? 1 : 0.5 }}>
+            {isOnline ? "Retry now" : "Retry when online"}
+          </button>
+        </div>
+      )}
+
+      {/* Notices: an unsaved score overwritten by another device's saved value */}
+      {scoreNotices.length > 0 && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 100, display: "flex", flexDirection: "column", gap: 4,
+          padding: "8px 16px", background: "var(--warn)", color: "var(--text-alternate)", fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 600
+        }}>
+          {scoreNotices.map((n, i) => <div key={i}>{n}</div>)}
+          <button onClick={() => setScoreNotices([])}
+            style={{ alignSelf: "center", background: "rgba(255,255,255,0.25)", border: "none", borderRadius: 48, padding: "3px 12px", color: "var(--text-alternate)", fontFamily: "var(--font-display)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -1801,7 +1987,8 @@ export default function App() {
             pinRole={pinRole} lockedApparatus={lockedApparatus}
             activeRound={!canOrganise ? effectiveActiveRound : undefined}
             setActiveRound={!canOrganise ? setActiveRound : undefined}
-            onExit={!canOrganise ? () => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); } : undefined} />
+            unsavedScores={unsavedScores} onRetryUnsaved={retryUnsavedScores}
+            onExit={!canOrganise ? () => guardUnsavedScores(() => { setPinRole(null); setLockedApparatus(null); setScreen("auth-login"); }, "exit") : undefined} />
         </div>
         </ErrorBoundary>
       ) : step === 2 ? (
@@ -1839,7 +2026,7 @@ export default function App() {
             onDashboard={handleGoToDashboard}
             onSettings={isCollaborator ? undefined : () => setShowAccountSettings(true)}
             onLogout={isCollaborator ? undefined : handleLogout}
-            onExit={isCollaborator ? () => exitCollabSession() : undefined}
+            onExit={isCollaborator ? () => guardUnsavedScores(() => exitCollabSession(), "exit") : undefined}
             gymnastsCount={gymnasts.length}
             judgesCount={(compData.judges || []).length}
             eventStatus={eventStatus}
@@ -1908,6 +2095,26 @@ export default function App() {
         <ConfirmModal message={setupWarn} confirmLabel="Yes, continue" isDanger={false}
           onConfirm={confirmSetupChange}
           onCancel={() => { setSetupWarn(null); setPendingChange(null); }} />
+      )}
+
+      {discardScoresPrompt && (
+        <ConfirmModal
+          icon="⚠️"
+          isDanger={true}
+          message={
+            <span style={{ fontFamily: "var(--font-display)" }}>
+              {discardScoresPrompt.lines.length} score{discardScoresPrompt.lines.length !== 1 ? "s" : ""} on this device {discardScoresPrompt.lines.length !== 1 ? "have" : "has"} not been saved to the database.
+              If you {discardScoresPrompt.actionLabel} now {discardScoresPrompt.lines.length !== 1 ? "they" : "it"} will be lost and must be re-entered.
+              <span style={{ display: "block", marginTop: 12, textAlign: "left", fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
+                {discardScoresPrompt.lines.map((l, i) => <span key={i} style={{ display: "block" }}>• {l}</span>)}
+              </span>
+            </span>
+          }
+          confirmLabel="Discard and continue"
+          cancelLabel="Go back"
+          onConfirm={() => { const p = discardScoresPrompt; setDiscardScoresPrompt(null); setUnsavedScores({}); p.proceed(); }}
+          onCancel={() => setDiscardScoresPrompt(null)}
+        />
       )}
 
       {showDiscardModal && (
