@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 // ── lib imports ──
 import { supabase, touchLastActive } from "./lib/supabase.js";
 import { generateId, generateClubCode, hashPin, isHashed, getContrastTextColor } from "./lib/utils.js";
-import { scoresToFlat, flatToScoreRows } from "./lib/scoring.js";
+import { scoresToFlat, flatToScoreRows, gymnast_key } from "./lib/scoring.js";
 import { events, syncQueue } from "./lib/storage.js";
 import { migrateCompData, migrateScoreKeys, migrateGymnasts } from "./lib/migrate.js";
 import { printDocument, buildResultsHTML, exportResultsXLSX } from "./lib/pdf.js";
@@ -191,6 +191,8 @@ export default function App() {
   const gymnastsRef = useRef([]); // for realtime handlers that must not go stale
   useEffect(() => { gymnastsRef.current = gymnasts; }, [gymnasts]);
   const [scores, setScores] = useState({});
+  const scoresRef = useRef({}); // current scores for realtime handlers (no stale closure)
+  useEffect(() => { scoresRef.current = scores; }, [scores]);
   const [newScoreKeys, setNewScoreKeys] = useState(new Set());
   // Scores whose write to the scores table FAILED (offline, timeout, error).
   // Keyed by base key (roundId__gymnastId__apparatus) → { kind: "save"|"delete",
@@ -207,6 +209,30 @@ export default function App() {
   const [discardScoresPrompt, setDiscardScoresPrompt] = useState(null);
   // Notices about unsaved scores overwritten by another device (realtime)
   const [scoreNotices, setScoreNotices] = useState([]);
+  // scores-table row id → base key. Realtime DELETE events on an RLS-enabled
+  // table carry ONLY the primary key in the old record (even with REPLICA
+  // IDENTITY FULL — Supabase strips the rest because RLS cannot be evaluated
+  // against a deleted row), so this map is the only way to know which score a
+  // delete refers to. Filled from every table load, every INSERT/UPDATE event
+  // and our own upserts.
+  const scoreRowIdsRef = useRef({});
+  const rememberRowIds = useCallback((rows) => {
+    for (const r of rows || []) {
+      if (r?.id) scoreRowIdsRef.current[r.id] = gymnast_key(r.round_id, r.gymnast_id, r.apparatus);
+    }
+  }, []);
+
+  // Drop every local key for one score (base key + all sub keys). Used by the
+  // confirmed-delete path and by realtime DELETE events from other devices.
+  const removeScoreLocally = useCallback((bk) => {
+    setScores(prev => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (key === bk || key.startsWith(bk + "__")) delete next[key];
+      }
+      return next;
+    });
+  }, []);
   const effectiveActiveRound = activeRound ?? compData?.rounds?.[0]?.id ?? "";
 
   // ── Draft buffer for Setup — isolates edits until explicit save ──
@@ -430,43 +456,109 @@ export default function App() {
     if (phase !== 2 && phase !== "dashboard") return;
 
     const flashTimers = new Set();
-    const channel = supabase.channel(`scores:${compId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "scores", filter: `comp_id=eq.${compId}` }, (payload) => {
-        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
-          const row = payload.new;
-          const flat = scoresToFlat([row]);
-          const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
-          // The database is the truth: if this device had an UNSAVED value for
-          // the same score, it is now replaced — say so rather than silently
-          // swapping what the judge typed.
-          if (unsavedScoresRef.current[bk]) {
-            const name = gymnastsRef.current.find(g => g.id === row.gymnast_id)?.name || "a gymnast";
-            const app = (row.apparatus || "").replace(/\s*\([A-Z]+\)\s*$/, "");
-            setUnsavedScores(prev => { const n = { ...prev }; delete n[bk]; return n; });
-            setScoreNotices(prev => [...prev, `Your unsaved ${app} score for ${name} was replaced by a value saved from another device.`]);
-          }
-          // Merge into scores state directly (NOT via setScoresWithSync to avoid re-pushing)
-          setScores(prev => ({ ...prev, ...flat }));
-          // Flash animation — add base key, remove after 2s
-          setNewScoreKeys(prev => new Set(prev).add(bk));
-          const t = setTimeout(() => { setNewScoreKeys(prev => { const n = new Set(prev); n.delete(bk); return n; }); flashTimers.delete(t); }, 2000);
-          flashTimers.add(t);
-        } else if (payload.eventType === "DELETE") {
-          const row = payload.old;
-          if (row) {
-            const bk = `${row.round_id}__${row.gymnast_id}__${row.apparatus}`;
-            setScores(prev => {
-              const next = { ...prev };
-              // Remove all keys starting with this base key
-              for (const key of Object.keys(next)) {
-                if (key === bk || key.startsWith(bk + "__")) delete next[key];
-              }
-              return next;
-            });
-          }
-        }
-      })
-      .subscribe();
+
+    // INSERT / UPDATE: merge the new row into state
+    const onUpsert = (payload) => {
+      const row = payload.new;
+      const bk = gymnast_key(row.round_id, row.gymnast_id, row.apparatus);
+      console.debug("[scores realtime]", payload.eventType, bk); // verbose level — hidden unless enabled
+      rememberRowIds([row]);
+      const flat = scoresToFlat([row]);
+      // The database is the truth: if this device had an UNSAVED value for
+      // the same score, it is now replaced — say so rather than silently
+      // swapping what the judge typed.
+      if (unsavedScoresRef.current[bk]) {
+        const name = gymnastsRef.current.find(g => g.id === row.gymnast_id)?.name || "a gymnast";
+        const app = (row.apparatus || "").replace(/\s*\([A-Z]+\)\s*$/, "");
+        setUnsavedScores(prev => { const n = { ...prev }; delete n[bk]; return n; });
+        setScoreNotices(prev => [...prev, `Your unsaved ${app} score for ${name} was replaced by a value saved from another device.`]);
+      }
+      // Merge into scores state directly (NOT via setScoresWithSync to avoid re-pushing)
+      setScores(prev => ({ ...prev, ...flat }));
+      // Flash animation — add base key, remove after 2s
+      setNewScoreKeys(prev => new Set(prev).add(bk));
+      const t = setTimeout(() => { setNewScoreKeys(prev => { const n = new Set(prev); n.delete(bk); return n; }); flashTimers.delete(t); }, 2000);
+      flashTimers.add(t);
+    };
+
+    // Remove one score locally in response to a remote delete, honouring the
+    // unsaved-score markers.
+    const applyRemoteDelete = (bk) => {
+      const unsaved = unsavedScoresRef.current[bk];
+      if (unsaved?.kind === "save") {
+        // This device holds a value for the score that never reached the
+        // database. The row someone else deleted was the old one; the
+        // local value is still unsaved, so keep both it and its marker.
+        return;
+      }
+      if (unsaved?.kind === "delete") {
+        // Our own blocked delete has now been done elsewhere — resolved.
+        setUnsavedScores(prev => { const n = { ...prev }; delete n[bk]; return n; });
+      }
+      removeScoreLocally(bk);
+    };
+
+    // DELETE: the server matches the comp_id filter against the full old row
+    // (REPLICA IDENTITY FULL) and delivers the event — verified live — but
+    // because RLS is enabled on scores, the old record it sends contains ONLY
+    // the primary key. So the score is identified through the id → key map;
+    // if the id is unknown (a row this client never saw), reconcile against
+    // the table instead of guessing.
+    const onDelete = async (payload) => {
+      const id = payload.old?.id;
+      if (!id) {
+        console.warn("[scores realtime] DELETE without a primary key in old record", payload.old);
+        return;
+      }
+      const bk = scoreRowIdsRef.current[id];
+      if (bk) {
+        console.debug("[scores realtime] DELETE", bk);
+        delete scoreRowIdsRef.current[id];
+        applyRemoteDelete(bk);
+        return;
+      }
+      console.debug("[scores realtime] DELETE for unknown row id — reconciling from table", id);
+      try {
+        const { data: rows, error } = await supabase.from("scores").select("id,round_id,gymnast_id,apparatus").eq("comp_id", compId);
+        if (error) throw new Error(error.message);
+        rememberRowIds(rows);
+        const present = new Set((rows || []).map(r => gymnast_key(r.round_id, r.gymnast_id, r.apparatus)));
+        // Base keys are exactly three segments; sub keys hang off them
+        const localBase = new Set(Object.keys(scoresRef.current).map(k => k.split("__").slice(0, 3).join("__")));
+        for (const lb of localBase) if (!present.has(lb)) applyRemoteDelete(lb);
+      } catch (e) {
+        console.warn("[scores realtime] reconcile after DELETE failed:", e.message);
+      }
+    };
+
+    // ── TEMPORARY DIAGNOSTIC LOGGING ── remove once the DELETE event has been
+    // observed directly. Logs every event exactly as received, before any
+    // handler runs, and the full channel configuration on subscribe.
+    const bindings = [
+      { event: "INSERT", schema: "public", table: "scores", filter: `comp_id=eq.${compId}`, handler: onUpsert },
+      { event: "UPDATE", schema: "public", table: "scores", filter: `comp_id=eq.${compId}`, handler: onUpsert },
+      { event: "DELETE", schema: "public", table: "scores", filter: `comp_id=eq.${compId}`, handler: onDelete },
+    ];
+    const logRaw = (payload) => {
+      let raw;
+      try { raw = JSON.stringify(payload, null, 2); } catch { raw = String(payload); }
+      console.log(`[scores realtime RAW] ${payload?.eventType} at ${new Date().toISOString()}\n${raw}`);
+    };
+    const channelName = `scores:${compId}`;
+    let channel = supabase.channel(channelName);
+    for (const b of bindings) {
+      const { handler, ...config } = b;
+      channel = channel.on("postgres_changes", config, (payload) => { logRaw(payload); handler(payload); });
+    }
+    channel = channel.subscribe((status, err) => {
+      if (status === "SUBSCRIBED") {
+        console.log(`[scores realtime] SUBSCRIBED channel "${channelName}" with bindings:\n${JSON.stringify(bindings.map(({ event, schema, table, filter }) => ({ event, schema, table, filter })), null, 2)}`);
+      } else {
+        console.log(`[scores realtime] channel "${channelName}" status: ${status}${err ? " — " + err.message : ""}`);
+      }
+      // Surfaced so a dead channel is diagnosable from the console
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") console.warn("[scores realtime] channel", status, err?.message || "");
+    });
 
     return () => {
       supabase.removeChannel(channel);
@@ -568,9 +660,12 @@ export default function App() {
         : pinRole === "collaborator" ? "collaborator" : "judge";
       const rows = flatToScoreRows(flatSubset, compId, submittedBy);
       if (!rows.length) return true;
-      const { error, count } = await supabase.from("scores").upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus", count: "exact" });
+      const { data: saved, error, count } = await supabase.from("scores")
+        .upsert(rows, { onConflict: "comp_id,round_id,gymnast_id,apparatus", count: "exact" })
+        .select("id,round_id,gymnast_id,apparatus");
       if (error) throw new Error(error.message);
       if (count != null && count < rows.length) throw new Error(`upsert affected ${count} of ${rows.length} rows`);
+      rememberRowIds(saved); // so a later DELETE event (id only) can be matched
       clearScoreUnsaved(bk);
       return true;
     } catch (e) {
@@ -578,18 +673,7 @@ export default function App() {
       markScoreUnsaved(bk, { kind: "save", roundId, gymnastId, apparatus, flatSubset });
       return false;
     }
-  }, [compId, currentUser, inSandbox, pinRole, clearScoreUnsaved, markScoreUnsaved]);
-
-  // Drop every local key for one score (base key + all sub keys)
-  const removeScoreLocally = useCallback((bk) => {
-    setScores(prev => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        if (key === bk || key.startsWith(bk + "__")) delete next[key];
-      }
-      return next;
-    });
-  }, []);
+  }, [compId, currentUser, inSandbox, pinRole, clearScoreUnsaved, markScoreUnsaved, rememberRowIds]);
 
   // Delete a score row and, ONLY once the database confirms it, remove it from
   // local state. Resolves true on success, false on failure. A delete filtered
@@ -868,6 +952,7 @@ export default function App() {
     // Scores come exclusively from the scores table
     const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
+      rememberRowIds(tableRows);
       setScores(scoresToFlat(tableRows));
     } else {
       // Check blob for legacy scores and silently migrate
@@ -927,6 +1012,7 @@ export default function App() {
     // Scores from table only, with silent blob migration
     const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
+      rememberRowIds(tableRows);
       setScores(scoresToFlat(tableRows));
     } else {
       const blobScores = migrateScoreKeys(structuredClone(snapshot?.scores || {}));
@@ -970,6 +1056,7 @@ export default function App() {
     // Scores from table only, with silent blob migration
     const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", ev.compId);
     if (tableRows && tableRows.length > 0) {
+      rememberRowIds(tableRows);
       setScores(scoresToFlat(tableRows));
     } else {
       const blobScores = migrateScoreKeys(structuredClone(snapshot?.scores || {}));
@@ -1346,6 +1433,7 @@ export default function App() {
     // Scores exclusively from table
     const { data: tableRows } = await supabase.from("scores").select("*").eq("comp_id", id);
     if (tableRows && tableRows.length > 0) {
+      rememberRowIds(tableRows);
       setScores(scoresToFlat(tableRows));
     } else {
       // Fallback: migrate blob scores silently (judge path — anon key)
