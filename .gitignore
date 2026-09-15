@@ -27,4 +27,4 @@ dist-ssr
 .netlify
 
 *.save
-*.save.*
+*.save.*bundle-stats.yml
